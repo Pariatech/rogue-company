@@ -1,0 +1,6 @@
+(ql:quickload :cffi :silent t)
+(pushnew #p"/opt/homebrew/lib/" cffi:*foreign-library-directories* :test #'equal)
+(push (truename ".") asdf:*central-registry*)
+(ql:quickload :rogue-company)
+(rogue-company:main)
+(uiop:quit 0)
