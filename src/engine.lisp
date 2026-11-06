@@ -68,6 +68,7 @@ d'appels, met le jeu en pause et renvoie NIL."
   (eq (getf *last-error* :where) :draw))
 
 (defun run-frame ()
+  (run-pending-jobs :max 8)
   (let ((dt (next-dt)))
     (when dt
       (guarded :update
