@@ -4,6 +4,8 @@
 (defparameter *window-height* 600)
 (defparameter *fixed-dt* (/ 1.0 60)
   "Pas de temps utilisé en mode pas à pas.")
+(defparameter *captures-directory*
+  (asdf:system-relative-pathname :rogue-company "captures/"))
 (defparameter *max-dt* 0.1
   "Plafond du pas de temps, pour éviter les sauts après un ralentissement.")
 
@@ -11,8 +13,6 @@
 (defvar *frame* 0 "Numéro de l'image courante.")
 (defvar *paused* nil
   "NIL si le jeu tourne, :USER si mis en pause à la demande, :ERROR après une erreur.")
-(defvar *step-frames* 0
-  "Nombre d'images à simuler pendant la pause, avec un pas fixe.")
 (defvar *last-error* nil
   "Dernière erreur capturée : plist (:where :message :backtrace :frame).")
 
@@ -26,8 +26,7 @@
               :backtrace (with-output-to-string (s)
                            (sb-debug:print-backtrace :count 25 :stream s))
               :frame *frame*)
-        *paused* :error
-        *step-frames* 0)
+        *paused* :error)
   (format *error-output* "~&[~a] ~a~%" where (getf *last-error* :message)))
 
 (defmacro guarded (where &body body)
@@ -46,9 +45,19 @@ d'appels, met le jeu en pause et renvoie NIL."
   (when (eq *paused* :error)
     (setf *paused* nil)))
 
+(defun one-line (text)
+  "Remplace chaque suite d'espaces et de sauts de ligne de TEXT par une espace."
+  (with-output-to-string (out)
+    (loop with space = nil
+          for char across (string-trim '(#\Space #\Tab #\Newline) text)
+          do (if (member char '(#\Space #\Tab #\Newline))
+                 (setf space t)
+                 (progn (when space (write-char #\Space out) (setf space nil))
+                        (write-char char out))))))
+
 (defun draw-error-overlay ()
   (when *last-error*
-    (let ((message (getf *last-error* :message)))
+    (let ((message (one-line (getf *last-error* :message))))
       (raylib:draw-rectangle 0 0 *window-width* 90 '(40 0 0 220))
       (raylib:draw-text (format nil "Erreur dans ~(~a~), image ~d : jeu en pause"
                                 (getf *last-error* :where) (getf *last-error* :frame))
@@ -60,9 +69,40 @@ d'appels, met le jeu en pause et renvoie NIL."
 ;;; Boucle
 
 (defun next-dt ()
-  "Renvoie le pas de temps de l'image, ou NIL si update ne doit pas tourner."
-  (cond ((not *paused*) (min (raylib:get-frame-time) *max-dt*))
-        ((plusp *step-frames*) (decf *step-frames*) *fixed-dt*)))
+  "Renvoie le pas de temps de l'image, ou NIL si le jeu est en pause."
+  (unless *paused*
+    (min (raylib:get-frame-time) *max-dt*)))
+
+(defun run-update (dt)
+  "Exécute une mise à jour. Renvoie NIL si elle a échoué."
+  (prog1 (guarded :update (update *state* dt) t)
+    (advance-input)))
+
+(defun step-frames (count)
+  "Met le jeu en pause et simule COUNT mises à jour avec un pas fixe, sans
+attendre l'affichage. S'arrête à la première erreur. Renvoie le nombre
+d'images simulées."
+  (unless *paused* (setf *paused* :user))
+  (loop for done from 0 below count
+        do (unless (run-update *fixed-dt*)
+             (return done))
+           (incf *frame*)
+        finally (return count)))
+
+(defun capture-screen ()
+  "Enregistre l'image en cours de dessin dans *CAPTURES-DIRECTORY* et renvoie
+le chemin absolu. À appeler pendant WITH-DRAWING, depuis le thread principal."
+  (let ((path (merge-pathnames (format nil "capture-~d-~d.png" (get-universal-time) *frame*)
+                               *captures-directory*)))
+    (ensure-directories-exist path)
+    ;; Vide le lot de dessin pour que le tampon contienne toute l'image.
+    (rlgl:draw-render-batch-active)
+    (let ((image (raylib:load-image-from-screen)))
+      (unwind-protect
+           (unless (raylib:export-image image (namestring path))
+             (error "Échec de l'export de ~a" path))
+        (raylib:unload-image image)))
+    (namestring path)))
 
 (defun draw-error-p ()
   (eq (getf *last-error* :where) :draw))
@@ -70,15 +110,13 @@ d'appels, met le jeu en pause et renvoie NIL."
 (defun run-frame ()
   (run-pending-jobs :max 8)
   (let ((dt (next-dt)))
-    (when dt
-      (guarded :update
-        (update *state* dt))
-      (advance-input)))
+    (when dt (run-update dt)))
   (raylib:with-drawing
     (if (draw-error-p)
         (raylib:clear-background :black)
         (guarded :draw (draw *state*)))
-    (draw-error-overlay))
+    (draw-error-overlay)
+    (run-pending-jobs :max 1 :queue *drawing-jobs*))
   (incf *frame*))
 
 (defun main ()

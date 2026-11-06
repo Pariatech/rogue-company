@@ -9,7 +9,10 @@
 (defparameter *job-run-timeout* 2
   "Secondes accordées à une tâche sur le thread principal avant interruption.")
 
-(defvar *jobs* (sb-concurrency:make-mailbox :name "jobs"))
+(defvar *jobs* (sb-concurrency:make-mailbox :name "jobs")
+  "Tâches exécutées en début d'image.")
+(defvar *drawing-jobs* (sb-concurrency:make-mailbox :name "drawing-jobs")
+  "Tâches exécutées à la fin du dessin, avant la présentation de l'image.")
 
 (defstruct (job (:constructor make-job (function)))
   function
@@ -25,14 +28,14 @@
              (when (job-error-backtrace c)
                (format s "~%~%Pile d'appels :~%~a" (job-error-backtrace c))))))
 
-(defun call-in-main-thread (function &key (wait *job-wait-timeout*))
+(defun call-in-main-thread (function &key (wait *job-wait-timeout*) (queue *jobs*))
   "Exécute FUNCTION sur le thread principal et renvoie ses valeurs.
 Signale JOB-ERROR si elle échoue, dépasse *JOB-RUN-TIMEOUT*, ou n'est pas
 traitée en WAIT secondes."
   (when (sb-thread:main-thread-p)
     (return-from call-in-main-thread (funcall function)))
   (let ((job (make-job function)))
-    (sb-concurrency:send-message *jobs* job)
+    (sb-concurrency:send-message queue job)
     (multiple-value-bind (reply ok)
         (sb-concurrency:receive-message (job-reply job) :timeout wait)
       (cond
@@ -64,10 +67,10 @@ traitée en WAIT secondes."
                         (error () (format nil "~s" (type-of c))))
                backtrace))))))
 
-(defun run-pending-jobs (&key (max 8))
+(defun run-pending-jobs (&key (max 8) (queue *jobs*))
   "Exécute au plus MAX tâches en attente. Appelé par le thread principal."
   (loop repeat max
-        for job = (sb-concurrency:receive-message-no-hang *jobs*)
+        for job = (sb-concurrency:receive-message-no-hang queue)
         while job
         unless (job-cancelled job)
           do (run-job job)))
