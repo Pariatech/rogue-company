@@ -2,4 +2,4 @@
 
 (defun draw ()
   (raylib:clear-background :raywhite)
-  (raylib:draw-rectangle 100 100 50 50 :red))
+  (raylib:draw-rectangle (+ 100 (mod *frame* 600)) 100 50 50 :red))

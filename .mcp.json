@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "rogue-company": {
+      "type": "http",
+      "url": "http://127.0.0.1:7777/mcp",
+      "headers": { "Authorization": "Bearer ${LISP_GAME_MCP_TOKEN}" }
+    }
+  }
+}
