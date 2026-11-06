@@ -7,6 +7,7 @@
   :pathname "src"
   :components ((:file "package")
                (:file "mcp-server")
+               (:file "input")
                (:file "engine")
                (:file "mcp-tools")
                (:file "game")))
