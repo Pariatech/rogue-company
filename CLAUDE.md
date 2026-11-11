@@ -15,6 +15,7 @@ Jeu en Common Lisp (SBCL, raylib) modifiable à chaud par MCP.
 - `src/input.lisp` : `key-down-p` combine le clavier réel et les touches simulées.
 - `src/mcp-server.lisp` : serveur MCP Hunchentoot (JSON-RPC sur HTTP).
 - `src/mcp-tools.lisp` : outils `game_*`, déclarés avec `define-mcp-tool`.
+- `src/bench.lisp` : banc d'essai de rendu (variantes `pro` et `rlgl`), utilisé par `game_benchmark` et `game_profile`. `engine.lisp` mesure chaque section de l'image (`timed`) et les octets alloués ; `*scene*` remplace `draw` pendant un banc d'essai.
 - `src/console.lisp` : console du jeu (touche `` ` ``, met le jeu en pause). Les messages partent dans une boîte d'envoi que le serveur expose en `GET /console/outbox`, avec les mêmes contrôles que `/mcp`.
 - `bridge/server.ts` : channel `game-console` (Bun, stdio, lancé par Claude Code). Il relève la boîte d'envoi toutes les 300 ms et transmet chaque message en notification `claude/channel`. À sens unique : il n'ouvre aucun port.
 - `mcp-lisp` n'est pas utilisé : il écoute sur 0.0.0.0, sans authentification, et expose un outil `shell`.
@@ -31,6 +32,7 @@ Jeu en Common Lisp (SBCL, raylib) modifiable à chaud par MCP.
 - Ne pas réinitialiser `*state*` sans le dire.
 - `defvar` pour tout état qui doit survivre à un rechargement ; `defparameter` seulement pour un réglage qui doit reprendre sa valeur du fichier.
 - Masquer les float traps uniquement autour de la boucle principale.
+- Dans le code chaud, n'appeler aucune fonction raylib qui prend ou renvoie une structure par valeur (`DrawTexturePro`, `Rectangle`, `Vector2`…) : CFFI cherche alors le symbole C à chaque appel (82 ms pour 10 000 sprites). Passer par `rlgl` et ses arguments scalaires, comme `draw-bench-rlgl`. Voir `docs/mesures.md`.
 - Ne pas nommer une fonction ou un accesseur d'après un symbole de `CL` (`speed`, `step`, etc.) : verrou de package SBCL.
 
 ## Vérifier un changement

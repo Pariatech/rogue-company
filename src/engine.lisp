@@ -15,6 +15,57 @@
   "NIL si le jeu tourne, :USER si mis en pause à la demande, :ERROR après une erreur.")
 (defvar *last-error* nil
   "Dernière erreur capturée : plist (:where :message :backtrace :frame).")
+(defvar *scene* nil
+  "Si non NIL, fonction sans argument dessinée à la place de DRAW, par exemple
+le banc d'essai de rendu.")
+
+;;; Mesure du temps par section
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defparameter *timing-sections* '(:jobs :console :update :draw :end-drawing)
+    "Sections mesurées à chaque image, dans l'ordre des lignes de *TIMINGS*. La
+dernière ligne de *TIMINGS* est l'image entière. Changer cette liste demande
+scripts/dev.sh restart, car *TIMINGS* garde ses dimensions."))
+
+(defvar *timings*
+  (make-array (list (1+ (length *timing-sections*)) 1200)
+              :element-type 'single-float :initial-element 0f0)
+  "Millisecondes par section (ligne) et par image (colonne, tampon circulaire).")
+(defvar *consed-per-frame*
+  (make-array 1200 :element-type '(unsigned-byte 62) :initial-element 0)
+  "Octets alloués par image, même tampon circulaire que *TIMINGS*.")
+(defvar *timing-frames* 0 "Images mesurées depuis le démarrage.")
+
+(declaim (inline timing-column))
+(defun timing-column ()
+  (mod *timing-frames* (array-dimension *timings* 1)))
+
+(defun elapsed-ms (start)
+  (/ (float (- (get-internal-real-time) start) 1f0)
+     (/ internal-time-units-per-second 1000f0)))
+
+(defun add-timing (row start)
+  (incf (aref *timings* row (timing-column)) (elapsed-ms start)))
+
+(defmacro timed ((section) &body body)
+  "Exécute BODY et ajoute sa durée à SECTION pour l'image en cours."
+  (let ((row (or (position section *timing-sections*)
+                 (error "Section inconnue : ~s (voir *timing-sections*)." section)))
+        (start (gensym "START")))
+    `(let ((,start (get-internal-real-time)))
+       (unwind-protect (progn ,@body)
+         (add-timing ,row ,start)))))
+
+(defun begin-frame-timing ()
+  (let ((column (timing-column)))
+    (dotimes (row (array-dimension *timings* 0))
+      (setf (aref *timings* row column) 0f0))))
+
+(defun end-frame-timing (start consed)
+  (let ((column (timing-column)))
+    (setf (aref *timings* (1- (array-dimension *timings* 0)) column) (elapsed-ms start)
+          (aref *consed-per-frame* column) (max 0 (- (sb-ext:get-bytes-consed) consed))))
+  (incf *timing-frames*))
 
 ;;; Erreurs
 
@@ -111,21 +162,31 @@ le chemin absolu. À appeler pendant WITH-DRAWING, depuis le thread principal."
   (eq (getf *last-error* :where) :console))
 
 (defun run-frame ()
-  (run-pending-jobs :max 8)
-  ;; La console tourne aussi en pause ; après une erreur de sa part, elle attend
-  ;; la correction pour ne pas la répéter à chaque image.
-  (unless (console-error-p)
-    (guarded :console (console-update)))
-  (let ((dt (next-dt)))
-    (when dt (run-update dt)))
-  (raylib:with-drawing
-    (if (draw-error-p)
-        (raylib:clear-background :black)
-        (guarded :draw (draw *state*)))
+  (let ((start (get-internal-real-time))
+        (consed (sb-ext:get-bytes-consed)))
+    (begin-frame-timing)
+    (timed (:jobs) (run-pending-jobs :max 8))
+    ;; La console tourne aussi en pause ; après une erreur de sa part, elle attend
+    ;; la correction pour ne pas la répéter à chaque image.
     (unless (console-error-p)
-      (guarded :console (console-draw)))
-    (draw-error-overlay)
-    (run-pending-jobs :max 1 :queue *drawing-jobs*))
+      (timed (:console) (guarded :console (console-update))))
+    (let ((dt (next-dt)))
+      (when dt (timed (:update) (run-update dt))))
+    ;; WITH-DRAWING n'est pas utilisé : END-DRAWING (envoi au GPU, échange des
+    ;; tampons, attente du rythme cible) est mesuré à part.
+    (raylib:begin-drawing)
+    (unwind-protect
+         (progn
+           (timed (:draw)
+             (cond ((draw-error-p) (raylib:clear-background :black))
+                   (*scene* (guarded :draw (funcall *scene*)))
+                   (t (guarded :draw (draw *state*)))))
+           (unless (console-error-p)
+             (timed (:console) (guarded :console (console-draw))))
+           (draw-error-overlay)
+           (timed (:jobs) (run-pending-jobs :max 1 :queue *drawing-jobs*)))
+      (timed (:end-drawing) (raylib:end-drawing)))
+    (end-frame-timing start consed))
   (incf *frame*))
 
 (defun main ()

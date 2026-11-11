@@ -350,6 +350,29 @@ l'état après l'action."
              ((string= action "step") (step-frames frames)))))
     (state-json)))
 
+;;; game_benchmark, game_profile (le travail est fait dans bench.lisp)
+
+(define-mcp-tool "game_benchmark"
+    ((variant "variant" "string" "pro (DrawTexturePro) ou rlgl (sommets envoyés par rlgl). pro par défaut." :enum ("pro" "rlgl"))
+     (count "count" "integer" "Nombre de sprites (10000 par défaut).")
+     (seconds "seconds" "number" "Durée de la mesure après une seconde de chauffe (5 par défaut)."))
+    "Banc d'essai de rendu : dessine COUNT sprites pivotés tirés d'un atlas, sans
+limite d'images par seconde, puis rend la main au jeu. Renvoie, par section de
+l'image (jobs, console, update, draw, end_drawing, frame), le temps moyen, le 99e
+centile et le maximum en ms, ainsi que les FPS et les octets alloués par image.
+La fenêtre doit être visible : macOS ralentit une fenêtre cachée."
+  (run-benchmark :variant (or variant "pro") :count (or count 10000) :seconds (or seconds 5)))
+
+(define-mcp-tool "game_profile"
+    ((seconds "seconds" "number" "Durée du profilage (5 par défaut).")
+     (variant "variant" "string" "Si donné, profile le banc d'essai de rendu avec cette variante." :enum ("pro" "rlgl"))
+     (count "count" "integer" "Sprites du banc d'essai (10000 par défaut).")
+     (max "max" "integer" "Nombre de fonctions listées (30 par défaut)."))
+    "Profile le thread principal avec sb-sprof (mode CPU) et renvoie les fonctions
+les plus coûteuses. Avec variant, profile le banc d'essai de rendu plutôt que le jeu."
+  (run-profile :seconds (or seconds 5) :variant variant :count (or count 10000)
+               :max (or max 30)))
+
 (define-mcp-tool "game_ping" ()
     "Vérifie que le jeu répond. Renvoie le numéro de l'image courante."
   (call-in-main-thread

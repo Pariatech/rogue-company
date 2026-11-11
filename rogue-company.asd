@@ -2,7 +2,7 @@
   :description "Jeu en Common Lisp (SBCL, raylib) modifiable à chaud par MCP."
   :author "Gabriel Pariat"
   :license "MIT"
-  :depends-on (#:cl-raylib #:hunchentoot #:yason #:sb-concurrency #:sb-md5)
+  :depends-on (#:cl-raylib #:hunchentoot #:yason #:sb-concurrency #:sb-md5 #:sb-sprof)
   :serial t
   :pathname "src"
   :in-order-to ((asdf:test-op (asdf:test-op #:rogue-company/tests)))
@@ -13,7 +13,8 @@
                (:file "engine")
                (:file "mcp-tools")
                (:file "console")
-               (:file "game")))
+               (:file "game")
+               (:file "bench")))
 
 (asdf:defsystem #:rogue-company/tests
   :depends-on (#:rogue-company #:fiveam)
