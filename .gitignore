@@ -1,2 +1,3 @@
 *.fasl
 captures/
+node_modules/

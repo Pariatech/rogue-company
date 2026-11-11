@@ -107,14 +107,23 @@ le chemin absolu. À appeler pendant WITH-DRAWING, depuis le thread principal."
 (defun draw-error-p ()
   (eq (getf *last-error* :where) :draw))
 
+(defun console-error-p ()
+  (eq (getf *last-error* :where) :console))
+
 (defun run-frame ()
   (run-pending-jobs :max 8)
+  ;; La console tourne aussi en pause ; après une erreur de sa part, elle attend
+  ;; la correction pour ne pas la répéter à chaque image.
+  (unless (console-error-p)
+    (guarded :console (console-update)))
   (let ((dt (next-dt)))
     (when dt (run-update dt)))
   (raylib:with-drawing
     (if (draw-error-p)
         (raylib:clear-background :black)
         (guarded :draw (draw *state*)))
+    (unless (console-error-p)
+      (guarded :console (console-draw)))
     (draw-error-overlay)
     (run-pending-jobs :max 1 :queue *drawing-jobs*))
   (incf *frame*))

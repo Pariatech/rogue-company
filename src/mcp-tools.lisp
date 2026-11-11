@@ -31,6 +31,7 @@
       "fps" (raylib:get-fps)
       "paused" (json-value *paused*)
       "state" (if (boundp '*state*) (object-slots *state*) :null)
+      "console" (console-snapshot)
       "simulated_keys" (let ((keys (ht)))
                          (maphash (lambda (key frames)
                                     (setf (gethash (string-downcase key) keys) frames))
@@ -265,31 +266,69 @@ absolu du PNG, à ouvrir ensuite avec l'outil de lecture de fichiers."
         key
         (error "Touche inconnue : ~a (exemples : right, space, a, enter)." name))))
 
+(defun simulate-key (key frames)
+  "Tient KEY enfoncée pendant FRAMES images. Renvoie vrai si le jeu est en pause."
+  (let ((paused (call-in-main-thread
+                 (lambda ()
+                   (setf (gethash key *simulated-keys*) frames)
+                   *paused*))))
+    (unless paused
+      ;; À 9 images/s (fenêtre cachée), 600 images prennent environ 70 s.
+      (loop with deadline = (+ (get-internal-real-time)
+                               (* (+ 5 (/ frames 8)) internal-time-units-per-second))
+            while (call-in-main-thread (lambda () (and (not *paused*)
+                                                       (gethash key *simulated-keys*))))
+            do (when (> (get-internal-real-time) deadline)
+                 (error "La touche n'a pas été consommée à temps : la fenêtre est-elle ralentie ?"))
+               (sleep 0.02)))
+    paused))
+
+(defun type-text (text)
+  "Ajoute TEXT à la saisie simulée et attend que la console l'ait lu. La console
+lit la saisie à chaque image, même en pause."
+  (simulate-text text)
+  (loop with deadline = (+ (get-internal-real-time) (* 10 internal-time-units-per-second))
+        until (sb-concurrency:queue-empty-p *simulated-chars*)
+        do (when (> (get-internal-real-time) deadline)
+             (error "Le texte n'a pas été lu à temps : la fenêtre est-elle ralentie ?"))
+           (sleep 0.02)))
+
 (define-mcp-tool "game_input"
-    ((key "key" "string" "Touche raylib : right, left, up, down, space, a, enter…" :required t)
-     (frames "frames" "integer" "Nombre d'images pendant lesquelles la touche reste enfoncée (1 par défaut)."))
-    "Simule une touche enfoncée pendant un nombre d'images, sans focus de fenêtre.
-Si le jeu tourne, attend que ces images soient passées puis renvoie l'état. Si le
-jeu est en pause, la touche reste en attente : utiliser game_control step."
-  (let ((key (parse-key key))
-        (frames (or frames 1)))
-    (unless (and (integerp frames) (<= 1 frames 600))
-      (error "frames doit être un entier entre 1 et 600."))
-    (let ((paused (call-in-main-thread
-                   (lambda ()
-                     (setf (gethash key *simulated-keys*) frames)
-                     *paused*))))
-      (unless paused
-        ;; À 9 images/s (fenêtre cachée), 600 images prennent environ 70 s.
-        (loop with deadline = (+ (get-internal-real-time)
-                                 (* (+ 5 (/ frames 8)) internal-time-units-per-second))
-              while (call-in-main-thread (lambda () (and (not *paused*)
-                                                         (gethash key *simulated-keys*))))
-              do (when (> (get-internal-real-time) deadline)
-                   (error "La touche n'a pas été consommée à temps : la fenêtre est-elle ralentie ?"))
-                 (sleep 0.02)))
-      (format nil "~:[~;Jeu en pause : touche en attente, utiliser game_control step.~%~]~a"
-              paused (state-json)))))
+    ((key "key" "string" "Touche raylib à tenir enfoncée : right, left, up, down, space, a, enter…")
+     (frames "frames" "integer" "Nombre d'images pendant lesquelles la touche reste enfoncée (1 par défaut).")
+     (text "text" "string" "Texte saisi, pour la console du jeu : ` l'ouvre ou la ferme, un saut de ligne envoie le message."))
+    "Simule une touche enfoncée pendant un nombre d'images, ou une saisie de texte,
+sans focus de fenêtre. Pour une touche : si le jeu tourne, attend que ces images
+soient passées puis renvoie l'état ; si le jeu est en pause, la touche reste en
+attente (utiliser game_control step). Le texte est lu même en pause."
+  (when (and key text)
+    (error "Donner key ou text, pas les deux."))
+  (cond
+    (text
+     (unless (stringp text) (error "text doit être une chaîne."))
+     (type-text text)
+     (state-json))
+    (key
+     (let ((key (parse-key key))
+           (frames (or frames 1)))
+       (unless (and (integerp frames) (<= 1 frames 600))
+         (error "frames doit être un entier entre 1 et 600."))
+       (format nil "~:[~;Jeu en pause : touche en attente, utiliser game_control step.~%~]~a"
+               (simulate-key key frames) (state-json))))
+    (t (error "Donner key ou text."))))
+
+;;; game_console_reply
+
+(define-mcp-tool "game_console_reply"
+    ((chat-id "chat_id" "string" "Identifiant du message, repris de l'attribut chat_id de la balise <channel>." :required t)
+     (text "text" "string" "Réponse à afficher, en une ou deux phrases." :required t))
+    "Affiche une réponse dans la console du jeu, à un message reçu par le channel
+game-console. Rester bref : le détail va dans le terminal."
+  (unless (and (stringp text) (plusp (length (string-trim " " text))))
+    (error "text doit être une chaîne non vide."))
+  (let ((chat-id (if (stringp chat-id) chat-id (princ-to-string chat-id))))
+    (call-in-main-thread (lambda () (console-add-reply chat-id text)))
+    "Réponse affichée dans la console du jeu."))
 
 ;;; game_control
 

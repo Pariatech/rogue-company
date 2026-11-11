@@ -8,6 +8,8 @@
 (defparameter *mcp-port* 7777)
 (defparameter *mcp-address* "127.0.0.1")
 (defparameter *mcp-path* "/mcp")
+(defparameter *console-outbox-path* "/console/outbox"
+  "Messages de la console du jeu, relevés par le pont bridge/ (GET).")
 (defparameter *mcp-token-variable* "LISP_GAME_MCP_TOKEN")
 (defparameter *mcp-protocol-version* "2025-06-18")
 
@@ -151,9 +153,10 @@ BODY renvoie une chaîne, ou signale une erreur."
 
 (defmethod hunchentoot:acceptor-dispatch-request ((acceptor mcp-acceptor) request)
   (let ((origin (hunchentoot:header-in* :origin))
-        (host (hunchentoot:header-in* :host)))
+        (host (hunchentoot:header-in* :host))
+        (path (hunchentoot:script-name request)))
     (cond
-      ((string/= (hunchentoot:script-name request) *mcp-path*)
+      ((not (member path (list *mcp-path* *console-outbox-path*) :test #'string=))
        (reject 404 "Not found"))
       ((or (null host) (not (local-host-p host)))
        (reject 403 "Host refusé"))
@@ -162,6 +165,13 @@ BODY renvoie une chaîne, ou signale une erreur."
       ((not (authorized-p))
        (setf (hunchentoot:header-out :www-authenticate) "Bearer")
        (reject 401 "Jeton manquant ou invalide"))
+      ((string= path *console-outbox-path*)
+       (if (eq (hunchentoot:request-method request) :get)
+           (progn (setf (hunchentoot:content-type*) "application/json")
+                  ;; Une liste vide s'encoderait en null.
+                  (to-json (coerce (console-take-outbox) 'vector)))
+           (progn (setf (hunchentoot:header-out :allow) "GET")
+                  (reject 405 "Seul GET est accepté"))))
       ((not (eq (hunchentoot:request-method request) :post))
        (setf (hunchentoot:header-out :allow) "POST")
        (reject 405 "Seul POST est accepté"))

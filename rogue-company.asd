@@ -12,6 +12,7 @@
                (:file "input")
                (:file "engine")
                (:file "mcp-tools")
+               (:file "console")
                (:file "game")))
 
 (asdf:defsystem #:rogue-company/tests
