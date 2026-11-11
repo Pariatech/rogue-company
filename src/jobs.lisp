@@ -14,8 +14,9 @@
 (defvar *drawing-jobs* (sb-concurrency:make-mailbox :name "drawing-jobs")
   "Tâches exécutées à la fin du dessin, avant la présentation de l'image.")
 
-(defstruct (job (:constructor make-job (function)))
+(defstruct (job (:constructor make-job (function run-timeout)))
   function
+  (run-timeout *job-run-timeout*)
   (reply (sb-concurrency:make-mailbox :name "job-reply"))
   ;; Passe à T quand l'appelant abandonne, pour que la tâche ne soit pas exécutée.
   (cancelled nil))
@@ -28,13 +29,14 @@
              (when (job-error-backtrace c)
                (format s "~%~%Pile d'appels :~%~a" (job-error-backtrace c))))))
 
-(defun call-in-main-thread (function &key (wait *job-wait-timeout*) (queue *jobs*))
+(defun call-in-main-thread (function &key (wait *job-wait-timeout*) (queue *jobs*)
+                                           (run-timeout *job-run-timeout*))
   "Exécute FUNCTION sur le thread principal et renvoie ses valeurs.
-Signale JOB-ERROR si elle échoue, dépasse *JOB-RUN-TIMEOUT*, ou n'est pas
+Signale JOB-ERROR si elle échoue, dépasse RUN-TIMEOUT secondes, ou n'est pas
 traitée en WAIT secondes."
   (when (sb-thread:main-thread-p)
     (return-from call-in-main-thread (funcall function)))
-  (let ((job (make-job function)))
+  (let ((job (make-job function run-timeout)))
     (sb-concurrency:send-message queue job)
     (multiple-value-bind (reply ok)
         (sb-concurrency:receive-message (job-reply job) :timeout wait)
@@ -58,10 +60,10 @@ traitée en WAIT secondes."
                             (declare (ignore c))
                             (setf backtrace (with-output-to-string (s)
                                               (sb-debug:print-backtrace :count 25 :stream s))))))
-           (sb-ext:with-timeout *job-run-timeout*
+           (sb-ext:with-timeout (job-run-timeout job)
              (cons :ok (multiple-value-list (funcall (job-function job))))))
        (sb-ext:timeout ()
-         (list :error (format nil "Tâche interrompue après ~a s." *job-run-timeout*) nil))
+         (list :error (format nil "Tâche interrompue après ~a s." (job-run-timeout job)) nil))
        (serious-condition (c)
          (list :error (handler-case (princ-to-string c)
                         (error () (format nil "~s" (type-of c))))

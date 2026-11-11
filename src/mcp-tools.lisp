@@ -3,8 +3,6 @@
 ;;; Outils MCP. Ils s'exécutent sur les threads du serveur HTTP : tout accès à
 ;;; raylib ou à *STATE* passe par CALL-IN-MAIN-THREAD.
 
-(defparameter *game-source* (asdf:system-relative-pathname :rogue-company "src/game.lisp"))
-
 ;;; Sérialisation de l'état
 
 (defun json-value (value)
@@ -74,44 +72,175 @@ sa pile d'appels. Réservé à l'exploration : les changements durables vont dan
 
 ;;; game_reload
 
-(defun compile-game-source ()
-  "Compile src/game.lisp dans un fichier temporaire. Renvoie le fasl (ou NIL en
-cas d'échec) et la liste des messages du compilateur."
-  (let ((fasl (uiop:tmpize-pathname
-               (merge-pathnames "rogue-company-game.fasl" (uiop:temporary-directory))))
-        (messages '())
-        (log (make-string-output-stream)))
-    (multiple-value-bind (output warnings-p failure-p)
-        (handler-bind ((warning (lambda (w)
-                                  (push (format nil "~:[Avertissement~;Style~] : ~a"
-                                                (typep w 'style-warning) w)
-                                        messages))))
-          (let ((*package* (find-package '#:rogue-company))
-                (*standard-output* (make-broadcast-stream))
-                (*error-output* log))
-            (handler-case (compile-file *game-source* :output-file fasl)
-              (error (e)
-                (push (format nil "Erreur : ~a" e) messages)
-                (values nil t t)))))
-      (declare (ignore warnings-p))
-      ;; Les erreurs de lecture ne sont pas signalées : seul le journal les décrit.
-      (when (and failure-p (null messages))
-        (push (get-output-stream-string log) messages))
-      (values (and output (not failure-p) output)
-              (nreverse messages)))))
+(defparameter *infrastructure-files* '("package" "mcp-server" "jobs" "mcp-tools")
+  "Fichiers jamais rechargés à chaud : ils portent le serveur, la file de tâches
+et les outils en cours d'exécution. Les modifier demande scripts/dev.sh restart.")
+(defparameter *reload-run-timeout* 10
+  "Secondes accordées au chargement des fichiers sur le thread principal.")
 
-(define-mcp-tool "game_reload" ()
-    "Compile et charge src/game.lisp dans le jeu en cours, en conservant *state*.
-Si la compilation échoue (erreur ou avertissement), rien n'est chargé. Après un
-chargement réussi, la dernière erreur est effacée et le jeu reprend."
-  (multiple-value-bind (fasl messages) (compile-game-source)
-    (if (null fasl)
-        (error "Compilation en échec, rien n'a été chargé.~%~{~a~%~}" messages)
-        (unwind-protect
-             (progn
-               (call-in-main-thread (lambda () (load fasl) (clear-error)))
-               (format nil "Rechargé.~:[ Aucun avertissement.~;~%~:*~{~a~%~}~]" messages))
-          (delete-file fasl)))))
+(defun source-files ()
+  "Fichiers du système, dans l'ordre de chargement : liste de (nom . chemin)."
+  (mapcar (lambda (component)
+            (cons (asdf:component-name component) (asdf:component-pathname component)))
+          (asdf:component-children (asdf:find-system :rogue-company))))
+
+(defun file-digest (path)
+  (sb-md5:md5sum-file path))
+
+(defvar *loaded-digests*
+  (let ((table (make-hash-table :test #'equal)))
+    (loop for (name . path) in (source-files)
+          do (setf (gethash name table) (file-digest path)))
+    table)
+  "Nom du fichier -> empreinte MD5 du contenu chargé dans le jeu en cours.")
+
+(defvar *reload-lock* (sb-thread:make-mutex :name "game-reload")
+  "Empêche deux game_reload simultanés.")
+
+(defun plan-reload (names changed infrastructure)
+  "NAMES : fichiers dans l'ordre de chargement. CHANGED : fichiers modifiés.
+Renvoie trois listes, dans l'ordre de NAMES : les fichiers à recompiler (le premier
+modifié et tous ceux qui le suivent, hors infrastructure), les fichiers
+d'infrastructure sautés, et les fichiers d'infrastructure modifiés, qui bloquent
+tout rechargement."
+  (flet ((changed-p (name) (member name changed :test #'string=))
+         (infrastructure-p (name) (member name infrastructure :test #'string=)))
+    (let ((blocked (remove-if-not (lambda (name) (and (changed-p name) (infrastructure-p name)))
+                                  names))
+          (first (position-if #'changed-p names)))
+      (if (or blocked (null first))
+          (values '() '() blocked)
+          (let ((tail (nthcdr first names)))
+            (values (remove-if #'infrastructure-p tail)
+                    (remove-if-not #'infrastructure-p tail)
+                    '()))))))
+
+(defun normalize-file-name (name names)
+  "Accepte \"engine\", \"engine.lisp\" ou \"src/engine.lisp\"."
+  (let ((base (pathname-name (pathname name))))
+    (or (find base names :test #'string=)
+        (error "Fichier inconnu : ~a (fichiers : ~{~a~^, ~})." name names))))
+
+(defun parse-file-list (files)
+  "Accepte une liste JSON de noms, ou une chaîne : tableau JSON, ou noms séparés
+par des virgules ou des espaces. Certains clients envoient les tableaux en chaîne."
+  (flet ((check (list)
+           (if (every #'stringp list)
+               list
+               (error "files doit être une liste de noms de fichiers."))))
+    (cond ((listp files) (check files))
+          ((not (stringp files)) (check (list files)))
+          ((eql 0 (position #\[ (string-left-trim " " files)))
+           (check (coerce (yason:parse files) 'list)))
+          (t (loop with start = 0
+                   for end = (position-if (lambda (c) (find c ", ")) files :start start)
+                   for name = (subseq files start end)
+                   unless (string= name "") collect name
+                   while end
+                   do (setf start (1+ end)))))))
+
+(defun compile-sources (files)
+  "Compile FILES, liste de (nom . chemin), dans l'ordre et dans une seule unité
+de compilation. Renvoie la liste des fasls, ou NIL dès qu'un fichier échoue
+(erreur ou avertissement), et les messages du compilateur."
+  (let ((messages '())
+        (fasls '())
+        (current nil)
+        (ok t))
+    (flet ((note (format &rest args)
+             (push (format nil "~a : ~?" (or current "compilation") format args) messages)))
+      ;; Les avertissements reportés à la fin de l'unité de compilation ne passent
+      ;; pas par FAILURE-P : ce gestionnaire les compte aussi.
+      ;; Une redéfinition est le but même d'un rechargement : ces avertissements sont
+      ;; étouffés.
+      (handler-bind ((sb-kernel:redefinition-warning #'muffle-warning)
+                     (warning (lambda (w)
+                                (unless (typep w 'style-warning) (setf ok nil))
+                                (note "~:[Avertissement~;Style~] : ~a" (typep w 'style-warning) w))))
+        (let ((*package* (find-package '#:rogue-company))
+              (*standard-output* (make-broadcast-stream)))
+          (with-compilation-unit ()
+            (loop for (name . path) in files
+                  for fasl = (uiop:tmpize-pathname
+                              (merge-pathnames (format nil "rogue-company-~a.fasl" name)
+                                               (uiop:temporary-directory)))
+                  for log = (make-string-output-stream)
+                  do (setf current name)
+                     (multiple-value-bind (output warnings-p failure-p)
+                         (let ((*error-output* log))
+                           (handler-case (compile-file path :output-file fasl)
+                             (error (e)
+                               (note "Erreur : ~a" e)
+                               (values nil t t))))
+                       (declare (ignore warnings-p))
+                       (when output (push output fasls))
+                       (when failure-p
+                         ;; Les erreurs de lecture ne sont pas signalées : seul le journal les décrit.
+                         (unless (find-if (lambda (m) (search (format nil "~a :" name) m)) messages)
+                           (note "~a" (get-output-stream-string log)))
+                         (setf ok nil)
+                         (loop-finish)))))
+          (setf current nil)
+          (if ok
+              (values (nreverse fasls) (nreverse messages))
+              (progn (mapc #'uiop:delete-file-if-exists fasls)
+                     (values nil (nreverse messages)))))))))
+
+(defun reload-sources (requested)
+  "Recompile et recharge les fichiers modifiés depuis leur dernier chargement, ou
+REQUESTED s'il est fourni. Renvoie un compte rendu."
+  (let* ((files (source-files))
+         (names (mapcar #'car files))
+         (digests (loop for (name . path) in files
+                        collect (cons name (file-digest path))))
+         (changed (if requested
+                      (mapcar (lambda (name) (normalize-file-name name names)) requested)
+                      (loop for (name . digest) in digests
+                            unless (equalp digest (gethash name *loaded-digests*))
+                              collect name))))
+    (multiple-value-bind (to-reload skipped blocked)
+        (plan-reload names changed *infrastructure-files*)
+      (when blocked
+        (error "Rien n'a été rechargé : ~{~a~^, ~} ne se recharge pas à chaud.~%~
+Lancer scripts/dev.sh restart." blocked))
+      (when (null to-reload)
+        (return-from reload-sources "Rien à recharger : aucun fichier modifié."))
+      (multiple-value-bind (fasls messages)
+          (compile-sources (mapcar (lambda (name) (assoc name files :test #'string=)) to-reload))
+        (when (null fasls)
+          (error "Compilation en échec, rien n'a été chargé.~%~{~a~%~}" messages))
+        (let ((loaded '()))
+          (unwind-protect
+               (handler-case
+                   (call-in-main-thread
+                    (lambda ()
+                      (loop for name in to-reload
+                            for fasl in fasls
+                            do (load fasl)
+                               (setf (gethash name *loaded-digests*)
+                                     (cdr (assoc name digests :test #'string=)))
+                               (push name loaded))
+                      (clear-error))
+                    :run-timeout *reload-run-timeout*
+                    :wait (+ *job-wait-timeout* *reload-run-timeout*))
+                 (job-error (e)
+                   (error "Chargement interrompu. Chargés : ~:[aucun~;~:*~{~a~^, ~}~].~%~a"
+                          (reverse loaded) e)))
+            (mapc #'uiop:delete-file-if-exists fasls))
+          (format nil "Rechargés : ~{~a~^, ~}.~@[~%Sautés (infrastructure, redémarrer si une macro ~
+qu'ils utilisent a changé) : ~{~a~^, ~}.~]~:[~%Aucun avertissement.~;~%~:*~{~a~%~}~]"
+                  to-reload skipped messages))))))
+
+(define-mcp-tool "game_reload"
+    ((files "files" "array" "Fichiers à recompiler (\"engine\", \"game\"…). Par défaut : ceux modifiés depuis leur dernier chargement."))
+    "Recompile et recharge les fichiers de src/ modifiés depuis leur dernier
+chargement, ainsi que ceux qui les suivent dans le système, en conservant *state*.
+Tout est compilé avant de charger : en cas d'erreur ou d'avertissement, rien n'est
+chargé. package, mcp-server, jobs et mcp-tools ne se rechargent pas à chaud
+(scripts/dev.sh restart). Après un chargement réussi, la dernière erreur est
+effacée et le jeu reprend."
+  (sb-thread:with-mutex (*reload-lock*)
+    (reload-sources (parse-file-list files))))
 
 ;;; game_state, game_screenshot
 

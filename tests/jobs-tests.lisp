@@ -2,14 +2,14 @@
   (:use #:cl #:fiveam)
   (:import-from #:rogue-company
                 #:call-in-main-thread #:run-pending-jobs #:job-error
-                #:job-error-message #:*job-run-timeout*))
+                #:job-error-message))
 
 (in-package #:rogue-company/tests)
 
 (def-suite jobs :description "File de tâches vers le thread principal.")
 (in-suite jobs)
 
-(defun call-from-tool-thread (function &key (wait 5) (pump t))
+(defun call-from-tool-thread (function &key (wait 5) (pump t) (run-timeout 2))
   "Appelle CALL-IN-MAIN-THREAD depuis un autre thread, comme le ferait un outil
 MCP, pendant que le thread courant joue le rôle de la boucle de jeu si PUMP."
   (let* ((result nil)
@@ -18,7 +18,8 @@ MCP, pendant que le thread courant joue le rôle de la boucle de jeu si PUMP."
                     (setf result
                           (handler-case
                               (cons :ok (multiple-value-list
-                                         (call-in-main-thread function :wait wait)))
+                                         (call-in-main-thread function :wait wait
+                                                                     :run-timeout run-timeout)))
                             (job-error (e) (list :error (job-error-message e)))))))))
     (loop while (sb-thread:thread-alive-p thread)
           do (when pump (run-pending-jobs))
@@ -41,9 +42,8 @@ MCP, pendant que le thread courant joue le rôle de la boucle de jeu si PUMP."
     (is (search "boum" (second result)))))
 
 (test run-timeout
-  (let* ((*job-run-timeout* 0.2)
-         (start (get-internal-real-time))
-         (result (call-from-tool-thread (lambda () (loop)))))
+  (let* ((start (get-internal-real-time))
+         (result (call-from-tool-thread (lambda () (loop)) :run-timeout 0.2)))
     (is (eq :error (first result)))
     (is (search "interrompue" (second result)))
     (is (< (/ (- (get-internal-real-time) start) internal-time-units-per-second) 2))))

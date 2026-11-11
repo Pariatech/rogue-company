@@ -5,17 +5,19 @@ Jeu en Common Lisp (SBCL, raylib) modifiable à chaud par MCP.
 ## Démarrage
 - `scripts/dev.sh start|stop|restart|logs` gère le jeu dans la session tmux `rogue-company`.
 - Le jeu doit tourner avant d'utiliser les outils MCP. Sinon, reconnecter avec `/mcp`.
-- Tests de la file de tâches : `sbcl --non-interactive --load scripts/test.lisp`.
+- Tests (file de tâches, choix des fichiers rechargés) : `sbcl --non-interactive --load scripts/test.lisp`.
 
 ## Architecture
-- `src/game.lisp` : état (`game-state`), `update` et `draw`. C'est le seul fichier rechargé par `game_reload`.
+- `src/game.lisp` : état (`game-state`), `update` et `draw`.
 - `src/engine.lisp` : boucle, pause, erreurs gardées (`guarded`), pas à pas, capture d'écran.
 - `src/jobs.lisp` : file vers le thread principal (`call-in-main-thread`).
 - `src/input.lisp` : `key-down-p` combine le clavier réel et les touches simulées.
 - `src/mcp-server.lisp` : serveur MCP Hunchentoot (JSON-RPC sur HTTP).
 - `src/mcp-tools.lisp` : outils `game_*`, déclarés avec `define-mcp-tool`.
 - `mcp-lisp` n'est pas utilisé : il écoute sur 0.0.0.0, sans authentification, et expose un outil `shell`.
-- Un changement de `engine.lisp`, `input.lisp` ou `mcp-tools.lisp` demande `scripts/dev.sh restart`. En exploration seulement, on peut le charger à chaud avec `game_eval` et `(load (asdf:system-relative-pathname :rogue-company "src/…"))`.
+- `game_reload` recharge les fichiers de `src/` dont le contenu (MD5) a changé depuis leur dernier chargement, plus tous ceux qui les suivent dans `rogue-company.asd`. Le paramètre `files` force une liste (`["engine"]`). Tout est compilé avant d'être chargé.
+- Infrastructure : `package`, `mcp-server`, `jobs` et `mcp-tools` ne se rechargent jamais à chaud. Un changement de l'un d'eux, ou d'une macro qu'ils utilisent, demande `scripts/dev.sh restart`, qui réinitialise `*state*`.
+- Un nouveau fichier de `src/` s'ajoute dans `rogue-company.asd` après `mcp-tools` (avant, s'il fait partie de l'infrastructure), puis `scripts/dev.sh restart`.
 
 ## Règles de développement
 - Écrire tout changement durable dans `src/`, puis appeler `game_reload`.
@@ -24,11 +26,12 @@ Jeu en Common Lisp (SBCL, raylib) modifiable à chaud par MCP.
 - Lire le clavier avec `key-down-p`, jamais `raylib:is-key-down`, sinon `game_input` est sans effet.
 - Utiliser `defclass` pour l'état, jamais `defstruct` pour des données qui évoluent.
 - Ne pas réinitialiser `*state*` sans le dire.
+- `defvar` pour tout état qui doit survivre à un rechargement ; `defparameter` seulement pour un réglage qui doit reprendre sa valeur du fichier.
 - Masquer les float traps uniquement autour de la boucle principale.
 - Ne pas nommer une fonction ou un accesseur d'après un symbole de `CL` (`speed`, `step`, etc.) : verrou de package SBCL.
 
 ## Vérifier un changement
-1. Appeler `game_reload` et lire les avertissements. Un avertissement (pas un style-warning) bloque le chargement.
+1. Appeler `game_reload` et lire les avertissements. Un avertissement (pas un style-warning) bloque tout le chargement. Une macro modifiée est toutefois déjà définie à la compilation, même en cas d'échec.
 2. Pour la logique : `game_control` en pause, `game_input`, `game_control` step, puis `game_state`.
 3. Pour le visuel : `game_screenshot`, puis ouvrir le PNG avec l'outil de lecture.
 4. Corriger toute erreur signalée dans `last_error` de `game_state` avant de continuer. Un `game_reload` réussi efface l'erreur et relance le jeu.
