@@ -13,11 +13,7 @@ start() {
     echo "Déjà lancé (session tmux $SESSION)."
     return
   fi
-  if [ -z "${LISP_GAME_MCP_TOKEN:-}" ]; then
-    echo "LISP_GAME_MCP_TOKEN n'est pas défini. Exemple :" >&2
-    echo '  export LISP_GAME_MCP_TOKEN=$(openssl rand -hex 32)' >&2
-    exit 1
-  fi
+  . "$ROOT/scripts/token.sh"
   tmux new-session -d -s "$SESSION" -c "$ROOT" -x 200 -y 50 \
     -e "LISP_GAME_MCP_TOKEN=$LISP_GAME_MCP_TOKEN" \
     "sbcl --dynamic-space-size 4GB --load scripts/run.lisp"

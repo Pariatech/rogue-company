@@ -5,7 +5,7 @@ Jeu en Common Lisp (SBCL, raylib) modifiable à chaud par MCP.
 ## Démarrage
 - `scripts/dev.sh start|stop|restart|logs` gère le jeu dans la session tmux `rogue-company`.
 - Le jeu doit tourner avant d'utiliser les outils MCP. Sinon, reconnecter avec `/mcp`.
-- Pour recevoir les messages de la console du jeu : `claude --dangerously-load-development-channels server:game-console`. Le pont demande Bun (`cd bridge && bun install` après un clone).
+- `scripts/claude.sh [arguments de claude]` installe le pont au besoin, lance le jeu s'il ne tourne pas, attend le serveur MCP, puis ouvre Claude Code avec le channel de la console (`claude --dangerously-load-development-channels server:game-console`). Le pont demande Bun.
 - Tests (file de tâches, choix des fichiers rechargés) : `sbcl --non-interactive --load scripts/test.lisp`.
 
 ## Architecture
@@ -51,4 +51,5 @@ Jeu en Common Lisp (SBCL, raylib) modifiable à chaud par MCP.
 
 ## Sécurité
 - Le serveur écoute uniquement sur 127.0.0.1 et exige le jeton `LISP_GAME_MCP_TOKEN` (32 caractères minimum). Il refuse les en-têtes `Origin` et `Host` non locaux.
+- Sans `LISP_GAME_MCP_TOKEN` dans l'environnement, `scripts/token.sh` (utilisé par `dev.sh` et `claude.sh`) le lit dans `.mcp-token`, créé au premier usage en mode 600 et ignoré par git.
 - Ne jamais versionner le jeton ni affaiblir ces contrôles.
