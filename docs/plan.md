@@ -73,8 +73,8 @@ CFFI doit trouver les bibliothèques de Homebrew. Le script de démarrage ajoute
 Chaque système vit dans son propre fichier, pour que Claude Code puisse recharger et tester un système sans toucher aux autres. `src/game.lisp` contient le scénario de test en cours d'exploration.
 
 ```text
-lisp-game/
-├── lisp-game.asd
+rogue-company/
+├── rogue-company.asd
 ├── CLAUDE.md             # règles de travail pour Claude Code
 ├── .mcp.json             # serveur du jeu (HTTP) et pont de console (stdio)
 ├── .gitignore            # exclut *.fasl et captures/
