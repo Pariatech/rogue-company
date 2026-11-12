@@ -16,21 +16,12 @@
     (keyword (string-downcase value))
     (t (prin1-to-string value))))
 
-(defun object-slots (object)
-  (let ((slots (ht)))
-    (dolist (slot (sb-mop:class-slots (class-of object)) slots)
-      (let ((name (sb-mop:slot-definition-name slot)))
-        (setf (gethash (string-downcase name) slots)
-              (if (slot-boundp object name)
-                  (json-value (slot-value object name))
-                  "<non liée>"))))))
-
 (defun state-snapshot ()
   "Résumé de l'état du jeu. À appeler sur le thread principal."
   (ht "frame" *frame*
       "fps" (raylib:get-fps)
       "paused" (json-value *paused*)
-      "state" (if (boundp '*state*) (object-slots *state*) :null)
+      "state" (if (boundp '*state*) (game-snapshot *state*) :null)
       "console" (console-snapshot)
       "simulated_keys" (let ((keys (ht)))
                          (maphash (lambda (key frames)
@@ -367,11 +358,13 @@ La fenêtre doit être visible : macOS ralentit une fenêtre cachée."
     ((seconds "seconds" "number" "Durée du profilage (5 par défaut).")
      (variant "variant" "string" "Si donné, profile le banc d'essai de rendu avec cette variante." :enum ("pro" "rlgl"))
      (count "count" "integer" "Sprites du banc d'essai (10000 par défaut).")
-     (max "max" "integer" "Nombre de fonctions listées (30 par défaut)."))
-    "Profile le thread principal avec sb-sprof (mode CPU) et renvoie les fonctions
-les plus coûteuses. Avec variant, profile le banc d'essai de rendu plutôt que le jeu."
+     (max "max" "integer" "Nombre de fonctions listées (30 par défaut).")
+     (mode "mode" "string" "cpu (temps, par défaut) ou alloc (allocations, par zones de 64 ko)." :enum ("cpu" "alloc")))
+    "Profile le thread principal avec sb-sprof et renvoie les fonctions les plus
+coûteuses : en temps (mode cpu) ou en mémoire allouée (mode alloc). Avec variant,
+profile le banc d'essai de rendu plutôt que le jeu."
   (run-profile :seconds (or seconds 5) :variant variant :count (or count 10000)
-               :max (or max 30)))
+               :max (or max 30) :mode (or mode "cpu")))
 
 (define-mcp-tool "game_ping" ()
     "Vérifie que le jeu répond. Renvoie le numéro de l'image courante."

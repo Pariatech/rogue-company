@@ -19,6 +19,7 @@
                (:file "scene")
                (:file "main-menu")
                (:file "battle")
+               (:file "battle-scene")
                (:file "game")
                (:file "bench")))
 
@@ -29,10 +30,12 @@
   :components ((:file "jobs-tests")
                (:file "reload-tests")
                (:file "rng-tests")
-               (:file "fixed-clock-tests"))
+               (:file "fixed-clock-tests")
+               (:file "battle-tests")
+               (:file "text-tests"))
   :perform (asdf:test-op (o c)
              (when (member nil (mapcar (lambda (suite)
                                        (uiop:symbol-call :fiveam :run!
                                                          (uiop:find-symbol* suite :rogue-company/tests)))
-                                     '(:jobs :reload :rng :fixed-clock)))
+                                     '(:jobs :reload :rng :fixed-clock :battle :text)))
                (error "Des tests ont échoué."))))

@@ -17,4 +17,7 @@
 (defun draw (state)
   (scene-draw (current-scene state)))
 
+(defmethod game-snapshot ((state game-state))
+  (ht "scene" (scene-snapshot (current-scene state))))
+
 (defvar *state* (make-game-state))

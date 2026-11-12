@@ -50,3 +50,12 @@ Résultat : 0 octet par appel pour chacune de ces fonctions, et aucune zone de 6
 | `pro` | 72,9 ms | 79,4 ms | 75,1 ms | 13,4 | 67 sur 67 (5,6 Mo) |
 
 **Mesurer les allocations :** `get-bytes-consed` compte tous les threads, serveur MCP compris, et n'avance que par zones de 64 ko. `game_benchmark` donne donc la médiane et le nombre d'images qui allouent : une médiane à 0 indique une boucle sans allocation. Les compteurs par thread de SBCL (`thread-tot-bytes-alloc-*`) ne bougent pas en cours d'exécution et ne servent pas ici. Pour attribuer une allocation, utiliser `sb-sprof` en mode `:alloc` sur le thread principal.
+
+## Texte de l'affichage de bataille (2026-11-12)
+
+Le premier affichage « Tick 1234   x2 » de la scène de bataille allouait environ 77 ko/s à ×2 (profil `game_profile`, mode `alloc`) :
+
+- **`format` avec `~,2f`** pour la vitesse : environ 1,3 ko par reconstruction, 60 fois par seconde. Le tick s'écrit désormais avec `write-integer-into` dans une chaîne préallouée, et le texte de la vitesse n'est reconstruit que quand elle change.
+- **`cffi:lisp-string-to-foreign` alloue 33 octets pour une `simple-base-string`**, le type que renvoie `format` quand le texte est en ASCII. `draw.lisp` encode maintenant lui-même l'UTF-8 dans le tampon C (`encode-utf8-into`), sans allocation pour aucun type de chaîne.
+
+Résultat : aucune zone de 64 ko remplie par le thread principal en 8 s de bataille à ×2.

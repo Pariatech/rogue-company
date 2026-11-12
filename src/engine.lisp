@@ -15,6 +15,10 @@
   "NIL si le jeu tourne, :USER si mis en pause à la demande, :ERROR après une erreur.")
 (defvar *last-error* nil
   "Dernière erreur capturée : plist (:where :message :backtrace :frame).")
+(defgeneric game-snapshot (state)
+  (:documentation "Résumé de *STATE* pour game_state. game.lisp le spécialise.")
+  (:method (state) (prin1-to-string state)))
+
 (defvar *draw-override* nil
   "Si non NIL, fonction sans argument dessinée à la place de DRAW, par exemple
 le banc d'essai de rendu.")

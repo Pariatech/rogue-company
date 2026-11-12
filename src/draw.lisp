@@ -11,7 +11,7 @@
 ;;; une structure de cette taille passe dans un registre entier, comme un uint32
 ;;; dont l'octet de poids faible est le rouge. Ces liaisons déclarent donc la
 ;;; couleur en :uint32 et passent par la table de liens de SBCL, comme les
-;;; fonctions rlgl. DRAW-TEXT écrit le texte dans un tampon C préalloué.
+;;; fonctions rlgl. DRAW-TEXT écrit le texte en UTF-8 dans un tampon C préalloué.
 ;;; Voir docs/mesures.md.
 
 (defun color-value (color)
@@ -60,14 +60,41 @@ appel. Thread principal uniquement, comme tout dessin.")
   (or *text-buffer*
       (setf *text-buffer* (cffi:foreign-alloc :uint8 :count *text-buffer-size*))))
 
+(defun encode-utf8-into (string pointer)
+  "Écrit STRING en UTF-8 à POINTER, suivi d'un octet nul. POINTER doit avoir
+au moins 4 × (LENGTH STRING) + 1 octets. N'alloue pour aucun type de chaîne,
+contrairement à cffi:lisp-string-to-foreign sur une simple-base-string (celles
+que renvoie FORMAT quand le texte est en ASCII)."
+  (let ((i 0))
+    (declare (type fixnum i))
+    (flet ((put (octet)
+             (setf (cffi:mem-aref pointer :uint8 i) octet)
+             (incf i)))
+      (loop for char across string
+            for code = (char-code char)
+            do (cond ((< code #x80) (put code))
+                     ((< code #x800)
+                      (put (logior #xC0 (ash code -6)))
+                      (put (logior #x80 (logand code #x3F))))
+                     ((< code #x10000)
+                      (put (logior #xE0 (ash code -12)))
+                      (put (logior #x80 (logand (ash code -6) #x3F)))
+                      (put (logior #x80 (logand code #x3F))))
+                     (t
+                      (put (logior #xF0 (ash code -18)))
+                      (put (logior #x80 (logand (ash code -12) #x3F)))
+                      (put (logior #x80 (logand (ash code -6) #x3F)))
+                      (put (logior #x80 (logand code #x3F))))))
+      (put 0))
+    pointer))
+
 (defmacro with-c-text ((pointer text) &body body)
   "Exécute BODY avec POINTER sur TEXT en chaîne C UTF-8. Un caractère prend au
 plus 4 octets : au-delà du tampon, une chaîne C temporaire (allocation, mais rare)."
   (let ((string (gensym "TEXT")))
     `(let ((,string ,text))
        (if (< (* 4 (length ,string)) *text-buffer-size*)
-           (let ((,pointer (text-buffer)))
-             (cffi:lisp-string-to-foreign ,string ,pointer *text-buffer-size*)
+           (let ((,pointer (encode-utf8-into ,string (text-buffer))))
              ,@body)
            (cffi:with-foreign-string (,pointer ,string)
              ,@body)))))
@@ -80,6 +107,31 @@ plus 4 octets : au-delà du tampon, une chaîne C temporaire (allocation, mais r
   "Largeur de TEXT en pixels, avec la police par défaut."
   (with-c-text (pointer text)
     (%measure-text pointer size)))
+
+(defun make-text-buffer (&optional (size 32))
+  "Chaîne réutilisable pour WRITE-INTEGER-INTO."
+  (make-array size :element-type 'character :fill-pointer 0))
+
+(defun write-integer-into (integer buffer)
+  "Remplace le contenu de BUFFER par l'écriture décimale de INTEGER (un fixnum),
+sans allouer, et renvoie BUFFER."
+  (declare (type fixnum integer))
+  (setf (fill-pointer buffer) 0)
+  (when (minusp integer)
+    (vector-push #\- buffer)
+    (setf integer (- integer)))
+  (let ((start (fill-pointer buffer)))
+    (loop do (multiple-value-bind (rest digit) (floor integer 10)
+               (vector-push (code-char (+ 48 digit)) buffer)
+               (setf integer rest))
+          while (plusp integer))
+    ;; Les chiffres sont venus à l'envers.
+    (let ((end (1- (fill-pointer buffer))))
+      (loop for i from start
+            for j downfrom end
+            while (< i j)
+            do (rotatef (char buffer i) (char buffer j)))))
+  buffer)
 
 (defun draw-text-centered (text center-x y size color)
   (draw-text text (- center-x (floor (measure-text text size) 2)) y size color))

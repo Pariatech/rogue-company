@@ -25,6 +25,11 @@
   (:documentation "Appelé quand la scène cesse d'être la scène courante.")
   (:method ((scene scene))))
 
+(defgeneric scene-snapshot (scene)
+  (:documentation "Résumé de la scène pour game_state : table de hachage JSON.")
+  (:method ((scene scene))
+    (ht "type" (string-downcase (class-name (class-of scene))))))
+
 (defclass game-state ()
   ;; L'initform sert aussi quand une instance existante gagne ce slot au
   ;; rechargement de la classe.

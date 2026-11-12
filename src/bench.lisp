@@ -260,15 +260,19 @@ chauffe, puis rend la main au jeu."
                             "La console ouverte alloue à chaque image : la fermer pour mesurer les allocations."
                             :null))))))))))
 
-(defun run-profile (&key (seconds 5) variant (count 10000) (max 30))
-  "Profile le jeu pendant SECONDS secondes avec sb-sprof (mode CPU, thread
-principal). Avec VARIANT, profile le banc d'essai de rendu."
+(defun run-profile (&key (seconds 5) variant (count 10000) (max 30) (mode "cpu"))
+  "Profile le thread principal pendant SECONDS secondes avec sb-sprof, en temps
+(MODE \"cpu\") ou en allocations (\"alloc\"). Avec VARIANT, profile le banc
+d'essai de rendu."
+  (unless (member mode '("cpu" "alloc") :test #'equal)
+    (error "mode doit valoir cpu ou alloc."))
   (when variant (check-bench-args variant count seconds))
   (unless (and (realp seconds) (<= 0.5 seconds 30))
     (error "seconds doit être compris entre 0,5 et 30."))
   (flet ((profile ()
            (sb-sprof:reset)
-           (sb-sprof:start-profiling :mode :cpu :sample-interval 0.001
+           (sb-sprof:start-profiling :mode (if (equal mode "alloc") :alloc :cpu)
+                                     :sample-interval 0.001
                                      :threads (list (sb-thread:main-thread)))
            (unwind-protect (sleep seconds)
              (sb-sprof:stop-profiling))
