@@ -253,21 +253,22 @@ liste de (couleur . texte)."
   "Dessine la console ouverte, ou la dernière réponse si elle est fermée."
   (let ((console *console*)
         (size *console-font-size*))
-    (multiple-value-bind (top input-y rows line-height width input-lines)
-        (console-geometry console)
+    ;; Console fermée sans réponse affichée : rien à calculer, rien à allouer.
     (cond
       ((console-open-p console)
+       (multiple-value-bind (top input-y rows line-height width input-lines)
+           (console-geometry console)
        (let* ((all (console-lines console width size))
               (total (length all))
               ;; L'historique a pu raccourcir depuis le dernier défilement.
               (scroll (min (console-scroll console) (max 0 (- total rows))))
               (start (max 0 (- total rows scroll)))
               (lines (subseq all start (min total (+ start rows)))))
-         (raylib:draw-rectangle 0 top *window-width* *console-height* '(10 10 20 255))
-         (raylib:draw-line 0 top *window-width* top :darkgray)
+         (draw-rectangle 0 top *window-width* *console-height* '(10 10 20 255))
+         (draw-line 0 top *window-width* top :darkgray)
          (loop for (color . line) in lines
                for y from (+ top 8) by line-height
-               do (raylib:draw-text line 10 y size color))
+               do (draw-text line 10 y size color))
          (when (> total rows)
            ;; Barre de défilement à droite de l'historique.
            (let* ((track-top (+ top 8))
@@ -275,8 +276,8 @@ liste de (couleur . texte)."
                   (thumb (max 12 (floor (* track rows) total)))
                   (thumb-y (+ track-top (floor (* (- track thumb) start)
                                                 (max 1 (- total rows))))))
-             (raylib:draw-rectangle (- *window-width* 6) track-top 3 track '(40 40 55 255))
-             (raylib:draw-rectangle (- *window-width* 6) thumb-y 3 thumb :gray)))
+             (draw-rectangle (- *window-width* 6) track-top 3 track '(40 40 55 255))
+             (draw-rectangle (- *window-width* 6) thumb-y 3 thumb :gray)))
          (let* ((status (if (plusp scroll)
                             (format nil "[+~d lignes plus bas, Fin pour revenir]" scroll)
                             ""))
@@ -284,17 +285,19 @@ liste de (couleur . texte)."
            (loop for (line . more) on input-lines
                  for y from input-y by line-height
                  ;; Le curseur clignote : retirer le _ final une demi-seconde sur deux.
-                 do (raylib:draw-text (if (or more blink) line (subseq line 0 (1- (length line))))
+                 do (draw-text (if (or more blink) line (subseq line 0 (1- (length line))))
                                       10 y size :white))
-           (raylib:draw-text status (- *window-width* (raylib:measure-text status 14) 10)
-                             (+ top 4) 14 :gray))))
+           (draw-text status (- *window-width* (raylib:measure-text status 14) 10)
+                             (+ top 4) 14 :gray)))))
       ((console-banner console)
-       (let* ((lines (wrap-text (concatenate 'string "Claude : " (car (console-banner console)))
+       (let* ((line-height (+ size 4))
+              (width (- *window-width* 20))
+              (lines (wrap-text (concatenate 'string "Claude : " (car (console-banner console)))
                                 width size))
               (lines (subseq lines 0 (min 3 (length lines))))
               (height (+ 12 (* line-height (length lines))))
               (top (- *window-height* height)))
-         (raylib:draw-rectangle 0 top *window-width* height '(10 10 20 255))
+         (draw-rectangle 0 top *window-width* height '(10 10 20 255))
          (loop for line in lines
                for y from (+ top 6) by line-height
-               do (raylib:draw-text line 10 y size :skyblue))))))))
+               do (draw-text line 10 y size :skyblue)))))))

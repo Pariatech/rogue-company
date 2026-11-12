@@ -23,7 +23,7 @@
     (incf (y state) (* dy (move-speed state) dt))))
 
 (defun draw (state)
-  (raylib:clear-background :black)
-  (raylib:draw-rectangle (round (x state)) (round (y state))
+  (clear-background :black)
+  (draw-rectangle (round (x state)) (round (y state))
                          (size state) (size state) :blue)
-  (raylib:draw-text "Fleches : deplacer le carre" 10 (- *window-height* 30) 20 :darkgray))
+  (draw-text "Fleches : deplacer le carre" 10 (- *window-height* 30) 20 :darkgray))

@@ -10,6 +10,7 @@
                (:file "mcp-server")
                (:file "jobs")
                (:file "input")
+               (:file "draw")
                (:file "engine")
                (:file "mcp-tools")
                (:file "console")

@@ -157,7 +157,7 @@ vers le haut, pour que la rotation se voie."
     (rlgl:set-texture 0)))
 
 (defun draw-bench ()
-  (raylib:clear-background :black)
+  (clear-background :black)
   (let ((bench *bench*))
     (when bench
       (if (string= (bench-variant bench) "rlgl")
@@ -207,9 +207,14 @@ dernières images du tampon. Thread principal."
                          "max_ms" (round-to (aref values (1- frames)))))))
     (let ((consed (sort (map 'vector (lambda (column) (aref *consed-per-frame* column)) columns)
                         #'<)))
+      ;; get-bytes-consed compte tous les threads, serveur MCP compris, et par
+      ;; zones de 64 ko : une médiane à 0 indique une boucle sans allocation.
       (values result frames
               (ht "mean" (round (reduce #'+ consed) frames)
-                  "max" (aref consed (1- frames)))))))
+                  "median" (percentile consed 0.5)
+                  "max" (aref consed (1- frames))
+                  "frames_allocating" (count-if #'plusp consed)
+                  "note" "Compteur global (threads du serveur compris), par zones de 64 ko.")))))
 
 (defun round-to (value &optional (digits 3))
   (let ((scale (expt 10 digits)))

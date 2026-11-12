@@ -25,6 +25,28 @@ Les deux variantes produisent la même image (captures comparées avec 300 sprit
 
 Conséquence pour la suite : **éviter, dans le code chaud, toute fonction raylib qui prend ou renvoie une structure par valeur** (`Rectangle`, `Vector2`, `Color` en structure, `Texture`). Les fonctions `rlgl` à arguments scalaires passent par la table de liens de SBCL, sans recherche ni allocation.
 
-### Reste à faire
+## Allocations par image (2026-11-12)
 
-- La variante `rlgl` alloue encore environ 1,2 ko par image en moyenne, hors de sa boucle (le maximum de 64 ko correspond à une région d'allocation de SBCL). À localiser avant de viser zéro allocation à l'étape 8.
+Les 1,2 ko par image restants de la variante `rlgl` venaient de deux sources, mesurées appel par appel avec `get-bytes-consed` :
+
+| Source | Octets par appel |
+| --- | --- |
+| `raylib:clear-background`, `raylib:draw-rectangle`, `raylib:draw-text` (couleur passée par valeur) | 820 à 950 |
+| dont la recherche du symbole C (`foreign-symbol-pointer`) | 334 |
+| `console-draw`, console fermée (mise en page de la saisie calculée quand même) | 295 |
+| `raylib:draw-text` : conversion de la chaîne en chaîne C | 16 |
+
+Corrections :
+
+- **`src/draw.lisp`** redéclare `ClearBackground`, `DrawRectangle`, `DrawLine` et `DrawText` avec la couleur en `:uint32`. Une `Color` de 4 octets passe dans un registre entier sur arm64 comme sur x86-64 : l'appel passe alors par la table de liens de SBCL, sans libffi. Couleurs vérifiées sur capture (mots-clés et listes RGBA).
+- **`draw-text`** écrit le texte dans un tampon C préalloué avec `lisp-string-to-foreign` (UTF-8 compris).
+- **`console-draw`** ne calcule plus rien quand la console est fermée.
+
+Résultat : 0 octet par appel pour chacune de ces fonctions, et aucune zone de 64 ko remplie par le thread principal en 8 s (profil `sb-sprof` en mode `:alloc`, contre 36 avant).
+
+| Variante | `draw` moyen | `draw` 99e centile | Image moyenne | FPS | Images qui allouent |
+| --- | --- | --- | --- | --- | --- |
+| `rlgl` | 0,68 ms | 0,76 ms | 1,64 ms | 617,8 | 1 sur 1 200 (médiane 0) |
+| `pro` | 72,9 ms | 79,4 ms | 75,1 ms | 13,4 | 67 sur 67 (5,6 Mo) |
+
+**Mesurer les allocations :** `get-bytes-consed` compte tous les threads, serveur MCP compris, et n'avance que par zones de 64 ko. `game_benchmark` donne donc la médiane et le nombre d'images qui allouent : une médiane à 0 indique une boucle sans allocation. Les compteurs par thread de SBCL (`thread-tot-bytes-alloc-*`) ne bougent pas en cours d'exécution et ne servent pas ici. Pour attribuer une allocation, utiliser `sb-sprof` en mode `:alloc` sur le thread principal.

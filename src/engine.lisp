@@ -109,13 +109,13 @@ d'appels, met le jeu en pause et renvoie NIL."
 (defun draw-error-overlay ()
   (when *last-error*
     (let ((message (one-line (getf *last-error* :message))))
-      (raylib:draw-rectangle 0 0 *window-width* 90 '(40 0 0 220))
-      (raylib:draw-text (format nil "Erreur dans ~(~a~), image ~d : jeu en pause"
+      (draw-rectangle 0 0 *window-width* 90 '(40 0 0 220))
+      (draw-text (format nil "Erreur dans ~(~a~), image ~d : jeu en pause"
                                 (getf *last-error* :where) (getf *last-error* :frame))
                         10 10 20 :white)
-      (raylib:draw-text (subseq message 0 (min 70 (length message)))
+      (draw-text (subseq message 0 (min 70 (length message)))
                         10 40 20 :white)
-      (raylib:draw-text "Corriger puis game_reload pour reprendre." 10 65 16 :lightgray))))
+      (draw-text "Corriger puis game_reload pour reprendre." 10 65 16 :lightgray))))
 
 ;;; Boucle
 
@@ -178,7 +178,7 @@ le chemin absolu. À appeler pendant WITH-DRAWING, depuis le thread principal."
     (unwind-protect
          (progn
            (timed (:draw)
-             (cond ((draw-error-p) (raylib:clear-background :black))
+             (cond ((draw-error-p) (clear-background :black))
                    (*scene* (guarded :draw (funcall *scene*)))
                    (t (guarded :draw (draw *state*)))))
            (unless (console-error-p)
