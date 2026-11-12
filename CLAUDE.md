@@ -9,6 +9,8 @@ Jeu en Common Lisp (SBCL, raylib) modifiable à chaud par MCP.
 - Tests (file de tâches, choix des fichiers rechargés) : `sbcl --non-interactive --load scripts/test.lisp`.
 
 ## Architecture
+- `src/rng.lisp` : générateur PCG32 à graine (`make-rng`, `rng-next`, `rng-below`, `rng-float`, `rng-range`, `copy-rng`), sans allocation. La suite ne dépend que de la graine, quelle que soit la version de SBCL.
+- `src/fixed-clock.lisp` : horloge à pas fixe (30 ticks/s). `clock-consume` reçoit le temps réel de l'image et renvoie le nombre de ticks à exécuter ; `clock-alpha` sert à interpoler le dessin ; `clock-time-scale` accélère, ralentit ou suspend (0) la simulation, entre 0 et 16.
 - `src/scene.lisp` : protocole des scènes (`scene-update`, `scene-draw`, `scene-enter`, `scene-exit`), `game-state` et `change-scene`.
 - Une scène par fichier, chargé après `scene` et avant `game` : `src/main-menu.lisp` (« Start Battle »), `src/battle.lisp` (Échap ramène au menu).
 - `src/game.lisp` : `update` et `draw`, appelés par la boucle, qui délèguent à la scène courante ; `*state*`.
@@ -37,6 +39,7 @@ Jeu en Common Lisp (SBCL, raylib) modifiable à chaud par MCP.
 - Ne pas réinitialiser `*state*` sans le dire.
 - `defvar` pour tout état qui doit survivre à un rechargement ; `defparameter` seulement pour un réglage qui doit reprendre sa valeur du fichier.
 - Masquer les float traps uniquement autour de la boucle principale.
+- Tout tirage aléatoire de la simulation passe par `rng.lisp`, jamais par `random` : une bataille doit se rejouer à l'identique à partir de sa graine.
 - Dans le code chaud, n'appeler aucune fonction raylib qui prend ou renvoie une structure par valeur (`DrawTexturePro`, `Rectangle`, `Vector2`…) : CFFI cherche alors le symbole C à chaque appel (82 ms pour 10 000 sprites). Passer par `rlgl` et ses arguments scalaires, comme `draw-bench-rlgl`, ou par les fonctions de `src/draw.lisp`. Voir `docs/mesures.md`.
 - Ne pas nommer une fonction ou un accesseur d'après un symbole de `CL` (`speed`, `step`, etc.) : verrou de package SBCL.
 

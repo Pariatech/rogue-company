@@ -14,6 +14,8 @@
                (:file "engine")
                (:file "mcp-tools")
                (:file "console")
+               (:file "rng")
+               (:file "fixed-clock")
                (:file "scene")
                (:file "main-menu")
                (:file "battle")
@@ -25,10 +27,12 @@
   :pathname "tests"
   :serial t
   :components ((:file "jobs-tests")
-               (:file "reload-tests"))
+               (:file "reload-tests")
+               (:file "rng-tests")
+               (:file "fixed-clock-tests"))
   :perform (asdf:test-op (o c)
              (when (member nil (mapcar (lambda (suite)
                                        (uiop:symbol-call :fiveam :run!
                                                          (uiop:find-symbol* suite :rogue-company/tests)))
-                                     '(:jobs :reload)))
+                                     '(:jobs :reload :rng :fixed-clock)))
                (error "Des tests ont échoué."))))
