@@ -14,6 +14,9 @@
                (:file "engine")
                (:file "mcp-tools")
                (:file "console")
+               (:file "scene")
+               (:file "main-menu")
+               (:file "battle")
                (:file "game")
                (:file "bench")))
 

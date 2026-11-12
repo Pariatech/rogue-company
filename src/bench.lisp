@@ -169,7 +169,7 @@ vers le haut, pour que la rotation se voie."
 seconde. Thread principal."
   (stop-bench)
   (setf *bench* (make-sprite-bench variant count)
-        *scene* #'draw-bench)
+        *draw-override* #'draw-bench)
   (raylib:set-target-fps 0))
 
 (defun stop-bench ()
@@ -177,8 +177,8 @@ seconde. Thread principal."
   (when *bench*
     (raylib:unload-texture (bench-texture *bench*))
     (setf *bench* nil))
-  (when (eq *scene* #'draw-bench)
-    (setf *scene* nil))
+  (when (eq *draw-override* #'draw-bench)
+    (setf *draw-override* nil))
   (raylib:set-target-fps 60))
 
 ;;; Statistiques

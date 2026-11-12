@@ -15,7 +15,7 @@
   "NIL si le jeu tourne, :USER si mis en pause à la demande, :ERROR après une erreur.")
 (defvar *last-error* nil
   "Dernière erreur capturée : plist (:where :message :backtrace :frame).")
-(defvar *scene* nil
+(defvar *draw-override* nil
   "Si non NIL, fonction sans argument dessinée à la place de DRAW, par exemple
 le banc d'essai de rendu.")
 
@@ -179,7 +179,7 @@ le chemin absolu. À appeler pendant WITH-DRAWING, depuis le thread principal."
          (progn
            (timed (:draw)
              (cond ((draw-error-p) (clear-background :black))
-                   (*scene* (guarded :draw (funcall *scene*)))
+                   (*draw-override* (guarded :draw (funcall *draw-override*)))
                    (t (guarded :draw (draw *state*)))))
            (unless (console-error-p)
              (timed (:console) (guarded :console (console-draw))))
@@ -197,6 +197,8 @@ le chemin absolu. À appeler pendant WITH-DRAWING, depuis le thread principal."
        (sb-int:with-float-traps-masked (:invalid :divide-by-zero :overflow :inexact)
          (raylib:with-window (*window-width* *window-height* "rogue-company")
            (raylib:set-target-fps 60)
+           ;; Échap sert au jeu (retour au menu) : la fenêtre se ferme par son bouton.
+           (raylib:set-exit-key :key-null)
            (loop until (raylib:window-should-close)
                  do (run-frame))))
     (stop-mcp-server)))

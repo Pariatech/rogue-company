@@ -87,18 +87,14 @@ Les messages retirés sont considérés comme reçus par Claude."
 (defun console-open (console)
   (setf (console-open-p console) t
         (console-banner console) nil)
-  ;; ESC fermerait la fenêtre pendant la saisie.
-  (raylib:set-exit-key :key-null)
   (unless *paused* (setf *paused* :console)))
 
 (defun console-close (console)
   (setf (console-open-p console) nil)
-  (raylib:set-exit-key :key-escape)
   (when (eq *paused* :console) (setf *paused* nil)))
 
 (defun mouse-context ()
-  (let ((mouse (raylib:get-mouse-position)))
-    (values (round (3d-vectors:vx mouse)) (round (3d-vectors:vy mouse)))))
+  (values (raylib:get-mouse-x) (raylib:get-mouse-y)))
 
 (defun console-send (console)
   ;; STRING-TRIM peut renvoyer la chaîne d'origine : la copier avant de la vider.
@@ -143,7 +139,10 @@ Les messages retirés sont considérés comme reçus par Claude."
       (when (and (key-pressed-p :key-backspace :repeat t)
                  (plusp (fill-pointer (console-input console))))
         (decf (fill-pointer (console-input console))))
-      (console-scroll-input console))
+      (console-scroll-input console)
+      ;; Le jeu est en pause et ADVANCE-INPUT n'est pas appelé : sans cela, une
+      ;; touche simulée resterait tout juste enfoncée à chaque image.
+      (mark-simulated-keys-seen))
     (let ((banner (console-banner console)))
       (when (and banner (> *frame* (cdr banner)))
         (setf (console-banner console) nil)))))
@@ -211,7 +210,7 @@ qui prépare sa réponse. NIL si rien n'est en attente."
         (dolist (word (remove "" (uiop:split-string paragraph :separator '(#\Space))
                               :test #'string=))
           (let ((candidate (if (string= line "") word (concatenate 'string line " " word))))
-            (if (or (string= line "") (<= (raylib:measure-text candidate size) width))
+            (if (or (string= line "") (<= (measure-text candidate size) width))
                 (setf line candidate)
                 (progn (push line lines) (setf line word)))))
         (push line lines)))))
@@ -221,13 +220,13 @@ qui prépare sa réponse. NIL si rien n'est en attente."
 coupe après le dernier espace qui tient, sinon au milieu du mot."
   (let ((lines '()) (start 0) (len (length text)))
     (loop
-      (when (<= (raylib:measure-text (subseq text start) size) width)
+      (when (<= (measure-text (subseq text start) size) width)
         (push (subseq text start) lines)
         (return (nreverse lines)))
       ;; Plus long préfixe qui tient, au moins un caractère.
       (let* ((end (loop with fit = (1+ start)
                         for e from (1+ start) to len
-                        while (<= (raylib:measure-text (subseq text start e) size) width)
+                        while (<= (measure-text (subseq text start e) size) width)
                         do (setf fit e)
                         finally (return fit)))
              (space (position #\Space text :start start :end end :from-end t))
@@ -287,7 +286,7 @@ liste de (couleur . texte)."
                  ;; Le curseur clignote : retirer le _ final une demi-seconde sur deux.
                  do (draw-text (if (or more blink) line (subseq line 0 (1- (length line))))
                                       10 y size :white))
-           (draw-text status (- *window-width* (raylib:measure-text status 14) 10)
+           (draw-text status (- *window-width* (measure-text status 14) 10)
                              (+ top 4) 14 :gray)))))
       ((console-banner console)
        (let* ((line-height (+ size 4))

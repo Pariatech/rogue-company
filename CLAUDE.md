@@ -9,14 +9,17 @@ Jeu en Common Lisp (SBCL, raylib) modifiable à chaud par MCP.
 - Tests (file de tâches, choix des fichiers rechargés) : `sbcl --non-interactive --load scripts/test.lisp`.
 
 ## Architecture
-- `src/game.lisp` : état (`game-state`), `update` et `draw`.
+- `src/scene.lisp` : protocole des scènes (`scene-update`, `scene-draw`, `scene-enter`, `scene-exit`), `game-state` et `change-scene`.
+- Une scène par fichier, chargé après `scene` et avant `game` : `src/main-menu.lisp` (« Start Battle »), `src/battle.lisp` (Échap ramène au menu).
+- `src/game.lisp` : `update` et `draw`, appelés par la boucle, qui délèguent à la scène courante ; `*state*`.
 - `src/engine.lisp` : boucle, pause, erreurs gardées (`guarded`), pas à pas, capture d'écran.
 - `src/jobs.lisp` : file vers le thread principal (`call-in-main-thread`).
-- `src/input.lisp` : `key-down-p` combine le clavier réel et les touches simulées.
+- `src/input.lisp` : `key-down-p` et `key-pressed-p` combinent le clavier réel et les touches simulées (une touche simulée compte comme enfoncée à sa première image).
+- Échap ne ferme pas la fenêtre (`set-exit-key :key-null` dans `main`) : il sert au jeu.
 - `src/mcp-server.lisp` : serveur MCP Hunchentoot (JSON-RPC sur HTTP).
 - `src/mcp-tools.lisp` : outils `game_*`, déclarés avec `define-mcp-tool`.
 - `src/draw.lisp` : `clear-background`, `draw-rectangle`, `draw-line` et `draw-text` sans allocation (couleur en `uint32`, tampon C pour le texte). Les utiliser à la place de leurs équivalents `raylib:`.
-- `src/bench.lisp` : banc d'essai de rendu (variantes `pro` et `rlgl`), utilisé par `game_benchmark` et `game_profile`. `engine.lisp` mesure chaque section de l'image (`timed`) et les octets alloués ; `*scene*` remplace `draw` pendant un banc d'essai.
+- `src/bench.lisp` : banc d'essai de rendu (variantes `pro` et `rlgl`), utilisé par `game_benchmark` et `game_profile`. `engine.lisp` mesure chaque section de l'image (`timed`) et les octets alloués ; `*draw-override*` remplace `draw` pendant un banc d'essai.
 - `src/console.lisp` : console du jeu (touche `` ` ``, met le jeu en pause). Les messages partent dans une boîte d'envoi que le serveur expose en `GET /console/outbox`, avec les mêmes contrôles que `/mcp`.
 - `bridge/server.ts` : channel `game-console` (Bun, stdio, lancé par Claude Code). Il relève la boîte d'envoi toutes les 300 ms et transmet chaque message en notification `claude/channel`. À sens unique : il n'ouvre aucun port.
 - `mcp-lisp` n'est pas utilisé : il écoute sur 0.0.0.0, sans authentification, et expose un outil `shell`.
@@ -26,9 +29,10 @@ Jeu en Common Lisp (SBCL, raylib) modifiable à chaud par MCP.
 
 ## Règles de développement
 - Écrire tout changement durable dans `src/`, puis appeler `game_reload`.
+- Préférer de petits fichiers à contexte bien délimité (un protocole, une scène, un système) à un gros fichier fourre-tout.
 - Réserver `game_eval` à l'exploration et au diagnostic. Une tâche est interrompue au bout de 2 s.
 - Ne jamais appeler raylib hors du thread principal : passer par la file de tâches.
-- Lire le clavier avec `key-down-p`, jamais `raylib:is-key-down`, sinon `game_input` est sans effet.
+- Lire le clavier avec `key-down-p` et `key-pressed-p`, jamais `raylib:is-key-down` ou `raylib:is-key-pressed`, sinon `game_input` est sans effet.
 - Utiliser `defclass` pour l'état, jamais `defstruct` pour des données qui évoluent.
 - Ne pas réinitialiser `*state*` sans le dire.
 - `defvar` pour tout état qui doit survivre à un rechargement ; `defparameter` seulement pour un réglage qui doit reprendre sa valeur du fichier.

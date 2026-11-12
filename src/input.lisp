@@ -5,13 +5,24 @@
 
 (defvar *simulated-keys* (make-hash-table)
   "Touche raylib (mot-clé, par exemple :KEY-RIGHT) -> images restantes.")
+(defvar *simulated-previous* (make-hash-table)
+  "Touches simulées enfoncées à l'image précédente, pour KEY-PRESSED-P.")
 
 (defun key-down-p (key)
   (or (plusp (gethash key *simulated-keys* 0))
       (raylib:is-key-down key)))
 
+(defun mark-simulated-keys-seen ()
+  "Les touches simulées tenues ne comptent plus comme tout juste enfoncées."
+  (maphash (lambda (key frames)
+             (declare (ignore frames))
+             (setf (gethash key *simulated-previous*) t))
+           *simulated-keys*))
+
 (defun advance-input ()
   "Consomme une image de chaque touche simulée. Appelé après chaque update."
+  (clrhash *simulated-previous*)
+  (mark-simulated-keys-seen)
   (loop for key in (loop for k being the hash-keys of *simulated-keys* collect k)
         do (when (<= (decf (gethash key *simulated-keys*)) 0)
              (remhash key *simulated-keys*))))
@@ -36,6 +47,9 @@ caractère, jusqu'à NIL, à chaque image."
         (when (plusp code) (code-char code)))))
 
 (defun key-pressed-p (key &key repeat)
-  "Vrai si KEY vient d'être enfoncée sur le clavier réel, ou répétée si REPEAT."
-  (or (raylib:is-key-pressed key)
+  "Vrai si KEY vient d'être enfoncée, ou répétée si REPEAT. Une touche simulée
+par game_input compte comme enfoncée à la première image où elle est tenue."
+  (or (and (plusp (gethash key *simulated-keys* 0))
+           (not (gethash key *simulated-previous*)))
+      (raylib:is-key-pressed key)
       (and repeat (raylib:is-key-pressed-repeat key))))

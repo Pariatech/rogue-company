@@ -36,12 +36,15 @@ ou entier déjà empaqueté."
 (cffi:defcfun ("DrawText" %draw-text) :void
   (text :pointer) (x :int) (y :int) (size :int) (color :uint32))
 
+(cffi:defcfun ("MeasureText" %measure-text) :int
+  (text :pointer) (size :int))
+
 (defvar *text-buffer-size* 4096
   "Taille de *TEXT-BUFFER*. DEFVAR : elle doit rester celle du tampon déjà
 alloué, même après un rechargement.")
 
 (defvar *text-buffer* nil
-  "Tampon C réutilisé par DRAW-TEXT, pour ne pas allouer de chaîne C à chaque
+  "Tampon C réutilisé par DRAW-TEXT et MEASURE-TEXT, pour ne pas allouer de chaîne C à chaque
 appel. Thread principal uniquement, comme tout dessin.")
 
 (defun clear-background (color)
@@ -57,12 +60,26 @@ appel. Thread principal uniquement, comme tout dessin.")
   (or *text-buffer*
       (setf *text-buffer* (cffi:foreign-alloc :uint8 :count *text-buffer-size*))))
 
+(defmacro with-c-text ((pointer text) &body body)
+  "Exécute BODY avec POINTER sur TEXT en chaîne C UTF-8. Un caractère prend au
+plus 4 octets : au-delà du tampon, une chaîne C temporaire (allocation, mais rare)."
+  (let ((string (gensym "TEXT")))
+    `(let ((,string ,text))
+       (if (< (* 4 (length ,string)) *text-buffer-size*)
+           (let ((,pointer (text-buffer)))
+             (cffi:lisp-string-to-foreign ,string ,pointer *text-buffer-size*)
+             ,@body)
+           (cffi:with-foreign-string (,pointer ,string)
+             ,@body)))))
+
 (defun draw-text (text x y size color)
-  ;; Un caractère prend au plus 4 octets en UTF-8 ; au-delà du tampon, une
-  ;; chaîne C temporaire (allocation, mais rare).
-  (if (< (* 4 (length text)) *text-buffer-size*)
-      (let ((buffer (text-buffer)))
-        (cffi:lisp-string-to-foreign text buffer *text-buffer-size*)
-        (%draw-text buffer x y size (color-value color)))
-      (cffi:with-foreign-string (pointer text)
-        (%draw-text pointer x y size (color-value color)))))
+  (with-c-text (pointer text)
+    (%draw-text pointer x y size (color-value color))))
+
+(defun measure-text (text size)
+  "Largeur de TEXT en pixels, avec la police par défaut."
+  (with-c-text (pointer text)
+    (%measure-text pointer size)))
+
+(defun draw-text-centered (text center-x y size color)
+  (draw-text text (- center-x (floor (measure-text text size) 2)) y size color))
