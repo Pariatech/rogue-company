@@ -12,6 +12,10 @@
 ;;; L'accumulateur est un single-float, valeur immédiate sous SBCL 64 bits : le
 ;;; ranger dans un slot n'alloue rien, contrairement à un double-float.
 
+(defconstant +ticks-per-second+ 30
+  "Ticks de simulation par seconde de simulation. Les durées des stats sont
+converties en ticks avec ce taux (stats.lisp).")
+
 (defparameter *max-time-scale* 16f0)
 
 (defclass fixed-clock ()
@@ -27,7 +31,7 @@ abandonné plutôt que rattrapé, pour qu'une image lente n'en ralentisse pas d'
    (dropped :initform 0f0 :accessor clock-dropped
             :documentation "Temps de simulation abandonné par le plafond, en secondes.")))
 
-(defun make-fixed-clock (&key (tick-rate 30) (max-ticks 5) (time-scale 1f0))
+(defun make-fixed-clock (&key (tick-rate +ticks-per-second+) (max-ticks 5) (time-scale 1f0))
   "Horloge de TICK-RATE ticks par seconde de simulation."
   (let ((clock (make-instance 'fixed-clock :tick-dt (/ 1f0 tick-rate) :max-ticks max-ticks)))
     (setf (clock-time-scale clock) time-scale)

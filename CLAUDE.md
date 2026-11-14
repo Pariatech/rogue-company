@@ -11,6 +11,9 @@ Jeu en Common Lisp (SBCL, raylib) modifiable à chaud par MCP.
 ## Architecture
 - `src/rng.lisp` : générateur PCG32 à graine (`make-rng`, `rng-next`, `rng-below`, `rng-float`, `rng-range`, `copy-rng`), sans allocation. La suite ne dépend que de la graine, quelle que soit la version de SBCL.
 - `src/fixed-clock.lisp` : horloge à pas fixe (30 ticks/s). `clock-consume` reçoit le temps réel de l'image et renvoie le nombre de ticks à exécuter ; `clock-alpha` sert à interpoler le dessin ; `clock-time-scale` accélère, ralentit ou suspend (0) la simulation, entre 0 et 16.
+- `src/stats.lisp` : stats effectives d'un régiment (`regiment-stats`, deux `attack-profile`, principal et secondaire), tout ce que la simulation lit. Durées converties en ticks (`+ticks-per-second+`, dans `fixed-clock.lisp`).
+- `src/equipment.lisp` : hommes de base (`define-man`), modèles d'objets (`define-item`), `validate-loadout` (emplacements, mains, `:requires`, `:forbids`) et `compute-regiment-stats` (homme + six emplacements + modificateurs `:set`, puis `:add`, puis `:mul`).
+- `src/items.lisp` : catalogue des hommes, des objets et des dotations de démonstration (`dotation-stats`). Recharger ce fichier rééquilibre les objets.
 - `src/scene.lisp` : protocole des scènes (`scene-update`, `scene-draw`, `scene-enter`, `scene-exit`), `game-state` et `change-scene`.
 - Une scène par fichier, chargé après `scene` et avant `game` : `src/main-menu.lisp` (« Start Battle »), `src/battle-scene.lisp`. `scene-snapshot` donne le résumé de la scène dans `game_state`.
 - `src/battle.lisp` : simulation de la bataille (`battle`, `make-battle`, `battle-tick`, `battle-digest`). Elle ne connaît ni raylib, ni l'horloge, ni le clavier, et tourne sans fenêtre dans les tests. Ses systèmes s'ajoutent dans `battle-tick`, dans l'ordre documenté.
