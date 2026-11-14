@@ -24,7 +24,7 @@ C'est un jeu de batailles en 2D vu de dessus, à l'époque du pike and shock, o�
 | Langage | Common Lisp (SBCL) | Tout se modifie à chaud, classes comprises ; Rust avec Bevy ne recharge que les fonctions |
 | Vue | De dessus, orthographique | La position à l'écran est la position au sol ; un seul sprite par soldat, pivoté ; l'isométrique rend les hauteurs moins lisibles |
 | Mêlée | Combat de formation : chaque soldat frappe l'ennemi le plus proche à portée | Simple et peu coûteux ; la profondeur de formation compte sans règle spéciale |
-| Tir | Résolu par régiment, avec test de ligne de tir | Aucun projectile simulé |
+| Tir | Résolu par régiment, avec test de ligne de tir ; tir ami par partage des pertes | Aucun projectile simulé |
 | Terrain | Carte d'élévation, ombrage du relief, mode topographique | Le relief agit sur le tir, le mouvement, les charges et le moral |
 | Équipement | Six emplacements par régiment, en liberté totale, obtenus au magasin, en butin ou par les améliorations | Les stats d'un régiment viennent de ce qu'il porte ; le poids rend chaque choix coûteux |
 | Progression | Roguelike : entre les batailles, un régiment qui monte en grade choisit une amélioration parmi trois, tirées dans un arbre | Chaque régiment a son histoire ; les choix changent la façon de jouer |
@@ -315,7 +315,7 @@ Une entité se décrit par ce qu'elle possède, pas par ce qu'elle est. Il n'y a
 
 Les modèles d'objets et l'homme de base sont partagés et ne changent jamais. Les systèmes ne les lisent pas directement : ils lisent les stats effectives du régiment, chargées dans des variables locales avant de parcourir sa plage de soldats. Chaque régiment a ainsi ses propres stats sans coût par soldat.
 
-**Soldats, en tableaux typés.** Un soldat est un indice. Chaque attribut a son propre tableau `(simple-array single-float (*))` ou `fixnum` : position, vitesse, emplacement cible, points de vie, cible, recharge et régiment.
+**Soldats, en tableaux typés.** Un soldat est un indice. Chaque attribut a son propre tableau `(simple-array single-float (*))` ou `fixnum` : position, vitesse, emplacement cible, points de vie, cible, recharge, arme en main (`weapon`, 0 principale, 1 secondaire), délai de changement d'arme (`switch-timer`), arme chargée et régiment.
 
 - **Plages contiguës :** chaque régiment possède une plage fixe d'indices, de `start` à `start + capacity`. Parcourir un régiment revient à parcourir une plage continue de mémoire.
 - **Suppression par échange :** quand un soldat meurt, il est échangé avec le dernier vivant de son régiment, puis `alive` diminue. Les tableaux restent compacts.
@@ -337,22 +337,57 @@ homme (entraînement) + 6 emplacements d'équipement + améliorations → stats 
 
 « Piquiers » ou « mousquetaires » ne sont donc pas des types, mais des dotations : un homme de base avec un équipement donné.
 
-### Les stats
+### Les stats d'un régiment
 
 Les distances sont en mètres, les durées en secondes, converties en ticks au chargement. Les valeurs de départ s'équilibrent en jouant.
 
-| Famille | Stats |
+```
+stats communes + profil d'attaque principal + profil d'attaque secondaire
+```
+
+**Stats communes**, valables quelle que soit l'arme en main :
+
+| Famille | Stats | Origine |
+| --- | --- | --- |
+| Corps | `hp`, `armor` (réduction des dégâts), `speed` (marche), `run-speed` (course et charge), `mass` (poussée) | Homme, armure, casque, monture |
+| Charge | `load` (kg portés), `endurance` (résistance à la fatigue) | Somme des poids ; homme ou monture |
+| Défense | `defense` (chance de faire rater en mêlée), `cover` (protection contre le tir, de face, pavise plantée) | Adresse, bouclier |
+| Adresse | `melee-skill`, `marksmanship` | Homme, améliorations : un bon tireur n'est pas forcément un bon bretteur |
+| Moral et formation | `morale`, `discipline` (formation reformée et moral qui remonte), `spacing`, `ranks` | Homme, améliorations |
+
+**Profils d'attaque.** Le régiment en a deux, l'arme principale et l'arme secondaire, chacun de mêlée ou de tir :
+
+| Profil de mêlée | Profil de tir |
 | --- | --- |
-| Corps | `hp`, `armor` (réduction des dégâts), `speed` (marche), `run-speed` (course et charge), `mass` (poussée), `endurance` (résistance à la fatigue) |
-| Mêlée | `skill` (adresse), `reach`, `melee-damage`, `melee-cooldown`, `penetration`, `defense` (chance de faire rater), `charge-bonus` |
-| Tir | `range`, `accuracy`, `ranged-damage`, `ranged-penetration`, `reload` |
-| Moral et formation | `morale`, `discipline` (formation reformée et moral qui remonte), `spacing`, `ranks` |
+| `min-reach`, `reach` | `range` (portée maximale ; la précision baisse avec la distance) |
+| `damage`, `penetration` | `damage`, `penetration` |
+| `accuracy` (s'ajoute à `melee-skill`) | `accuracy` (s'ajoute à `marksmanship`) |
+| `cooldown` | `reload` |
+| `charge-bonus` | `volley` (salve par rang possible ou non) |
+| `ready-time` (délai pour prendre l'arme en main) | `ready-time` |
+
+Sans arme secondaire, un régiment de tireurs reçoit un profil improvisé (la crosse ou les poings), faible mais jamais nul.
+
+### Quelle arme en main
+
+**Choix par soldat, au ciblage.** Le ciblage connaît déjà la distance à l'ennemi le plus proche, donc le choix ne coûte rien :
+
+- si l'arme principale est de mêlée et que la cible est entre `min-reach` et `reach`, le soldat frappe avec elle ;
+- sinon, il prend l'arme secondaire si la cible est à sa portée.
+
+La `min-reach` fait l'intérêt de la pique : elle ne sert à rien contre un ennemi collé à soi. Des rondachiers passés sous les piques forcent les piquiers à prendre leur dague. Le duel piques contre rodeleros émerge sans règle spéciale, et une amélioration « Piques courtes » réduirait `min-reach`.
+
+**Changer d'arme prend du temps.** Le délai est le `ready-time` de l'arme qu'on prend en main : environ 1 s pour poser le mousquet et tirer l'épée, 0,5 s pour lâcher la pique et prendre la dague. Une amélioration « Exercice des armes » peut le réduire.
+
+- **Un ennemi entre à portée de l'arme secondaire :** le soldat change d'arme, puis frappe une fois le délai écoulé. Pendant le changement, il ne frappe pas. Un régiment de tireurs surpris en paie le prix.
+- **Plus aucun ennemi au contact pendant environ 1 s :** il reprend son arme principale. Ce délai évite d'alterner sans cesse quand un ennemi oscille à la limite de portée.
+- **Le chargement est conservé :** un soldat qui avait chargé son mousquet tire dès qu'il le reprend en main. Le rechargement ne progresse pas pendant qu'il tient l'arme secondaire.
 
 ### Toucher et blesser
 
 Le corps à corps peut rater. Chaque coup se résout en deux temps :
 
-1. **Toucher :** chance = adresse de l'homme + précision de l'arme − défense de la cible (bouclier, parade) − pénalité de fatigue, bornée entre un minimum et un maximum.
+1. **Toucher :** chance = `melee-skill` + précision de l'arme − défense de la cible (bouclier, parade) − pénalité de fatigue, bornée entre un minimum et un maximum.
 2. **Blesser :** dégâts de l'arme, réduits par l'armure de la cible diminuée de la pénétration de l'arme (armure effective = max(0, armure − pénétration)).
 
 La pénétration donne sa valeur à chaque armure : une balle de mousquet à courte portée traverse un corselet, une épée glisse dessus. L'armure lourde vaut beaucoup contre la mêlée et moins contre le tir rapproché.
@@ -391,7 +426,7 @@ L'équipement s'applique au régiment entier. Un tercio qui mêle piques et mous
 
 ### Cavalerie
 
-La cavalerie n'est qu'une monture : elle multiplie la vitesse et la masse et apporte le trait `:charge` (bonus d'élan au premier impact, pénalité contre des piques de face). Le même homme avec des pistolets donne des reîtres ; avec une lance et une armure lourde, des lanciers ; avec une arquebuse, des arquebusiers à cheval. La fatigue de la monture suit la même règle, avec l'endurance du cheval.
+La cavalerie n'est qu'une monture : elle multiplie la vitesse et la masse et apporte le trait `:charge` (bonus d'élan au premier impact, pénalité contre des piques de face). Le même homme avec des pistolets donne des reîtres ; avec une lance et une armure lourde, des lanciers ; avec une arquebuse, des arquebusiers à cheval. Les pistolets des reîtres sont un profil de tir ordinaire, à très courte portée et au rechargement très long : le régiment tire une fois en approche, puis passe à l'épée. La fatigue de la monture suit la même règle, avec l'endurance du cheval.
 
 ### Posséder l'équipement
 
@@ -493,8 +528,19 @@ La portée de chaque arme fait émerger le combat de formation :
 
 ### Tir des mousquetaires, sans projectiles
 
-- **Salve par rang, puis contremarche :** le rang qui a tiré passe à l'arrière pour recharger.
-- **Pertes :** tireurs × probabilité de toucher selon la distance × part de rayons dégagés (section Terrain), réparties sur les ennemis les plus proches.
+Le tir se calcule par régiment, sans projectiles, mais chaque soldat décide s'il peut tirer à ce tick : arme principale en main, chargée, et pas au contact. Il suffit de compter ces soldats dans la plage du régiment, leur rang étant connu par leur emplacement en formation.
+
+| | Régiment en ordre | Régiment engagé (au moins un soldat en mêlée) |
+| --- | --- | --- |
+| Manœuvre | Salve par rang, puis contremarche : le rang qui a tiré passe à l'arrière pour recharger | Feu à volonté, sans manœuvre |
+| Qui tire | Le rang de tir | Chaque soldat des deux premiers rangs qui peut tirer |
+| Cadence | Élevée : les rangs arrière rechargent pendant que l'avant tire | Faible : chacun tire quand il a rechargé, les rangs arrière ne contribuent pas |
+| Effet sur le moral adverse | Fort (choc de la salve) | Faible |
+
+Un fantassin au contact a pris son arme secondaire et ne tire pas ; un fantassin de premier rang plus loin sur la ligne, hors de la mêlée, continue de tirer. Quand plus aucun soldat n'est en mêlée, le régiment reprend les salves par rang, après un délai de remise en ordre qui dépend de `discipline`.
+
+- **Pertes :** tirs × probabilité de toucher (`marksmanship`, précision, distance, fatigue, `cover` de la cible) × part de rayons dégagés (section Terrain), réparties sur les ennemis les plus proches.
+- **Tir ami :** les tireurs peuvent viser un ennemi en mêlée avec un régiment allié. Une part des pertes, selon la proportion d'alliés dans la mêlée visée, retombe alors sur les alliés. C'est un simple partage des pertes, pas une simulation de balles.
 - **Effets visuels :** fumée et éclairs sont décoratifs, jusqu'à l'ajout éventuel d'une grille de fumée.
 
 ### Déterminisme
