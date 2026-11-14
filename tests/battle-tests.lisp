@@ -66,7 +66,8 @@
   (let* ((b (run-ticks (demo) (* 30 30)))
          (pikes (first (regiments b)))
          (soldiers (rogue-company::battle-soldiers b)))
-    (rogue-company::order-move pikes 10 10 (/ pi 2))
+    ;; Loin des mousquetaires (x de 13 à 17) : avec la collision, ils bloqueraient.
+    (rogue-company::order-move pikes -10 10 (/ pi 2))
     (run-ticks b 1)
     (is (> (worst-slot-distance b) 1) "les emplacements ont bougé")
     (run-ticks b (* 30 40))
@@ -75,7 +76,7 @@
           (start (rogue-company::regiment-start pikes)))
       (flet ((mean (array)
                (/ (loop for i from start below (+ start n) sum (aref array i)) n)))
-        (is (near 10 (mean (rogue-company::soldiers-x soldiers)) 1f-3))
+        (is (near -10 (mean (rogue-company::soldiers-x soldiers)) 1f-3))
         (is (near 10 (mean (rogue-company::soldiers-y soldiers)) 1f-3))))))
 
 (test previous-positions-lag-one-tick
@@ -99,9 +100,53 @@
       (run-ticks b 1000)
       (is (< (- (sb-ext:get-bytes-consed) before) 65536)))))
 
+(defun mean-slot-distance (battle)
+  (loop for regiment in (regiments battle)
+        maximize (rogue-company::regiment-slot-distances
+                  regiment (rogue-company::battle-soldiers battle))))
+
 (test random-orders-move-every-regiment
+  "Les destinations peuvent se chevaucher, et les régiments alors se bloquer :
+on vérifie seulement qu'ils s'en approchent nettement."
   (let ((b (run-ticks (demo) (* 30 30))))
     (rogue-company::order-random-moves b (rogue-company::make-rng 7 99))
     (is (every (lambda (regiment) (rogue-company::regiment-slots-dirty-p regiment)) (regiments b)))
-    (run-ticks b (* 30 90))
-    (is (< (worst-slot-distance b) 1f-3))))
+    (run-ticks b 1)
+    (let ((far (mean-slot-distance b)))
+      (run-ticks b (* 30 90))
+      (is (< (mean-slot-distance b) (* 0.2 far))))))
+
+;;; Orientation des soldats
+
+(defun lone-soldier-at (x &key (facing 0))
+  "Un piquier seul, dont l'emplacement est en (0, 0) face à FACING, placé en (X, 0)."
+  (let* ((b (rogue-company::make-battle))
+         (soldiers (rogue-company::battle-soldiers b)))
+    (rogue-company::add-regiment b (rogue-company::dotation-stats :pikemen) 1 :facing facing)
+    (setf (aref (rogue-company::soldiers-x soldiers) 0) (float x 1f0)
+          (aref (rogue-company::soldiers-prev-x soldiers) 0) (float x 1f0))
+    b))
+
+(defun facing-of (battle)
+  (aref (rogue-company::soldiers-facing (rogue-company::battle-soldiers battle)) 0))
+
+(test walking-soldier-faces-where-he-goes-then-turns-to-the-front
+  "Emplacement 10 m derrière lui : il fait demi-tour, marche, puis se retourne."
+  (let ((b (lone-soldier-at 10)))
+    (run-ticks b 45)
+    (is (near pi (abs (facing-of b)) 1f-3) "face à -x pendant la marche")
+    (run-ticks b (* 30 12))
+    (is (near 0 (facing-of b) 1f-3) "arrivé : face au front")
+    (is (near 0 (aref (rogue-company::soldiers-x (rogue-company::battle-soldiers b)) 0) 1f-3))))
+
+(test small-step-back-without-turning
+  (let ((b (lone-soldier-at 0.8)))
+    (run-ticks b 30)
+    (is (= 0 (facing-of b)) "recule face au front")
+    (is (near 0 (aref (rogue-company::soldiers-x (rogue-company::battle-soldiers b)) 0) 1f-3))))
+
+(test turning-is-limited-by-turn-rate
+  (let* ((b (lone-soldier-at 10))
+         (limit (/ (rogue-company::stats-turn-rate (rogue-company::dotation-stats :pikemen)) 30)))
+    (run-ticks b 1)
+    (is (near limit (abs (facing-of b)) 1f-5))))

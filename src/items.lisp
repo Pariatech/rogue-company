@@ -10,7 +10,7 @@
 ;;; Hommes
 
 (define-man :recruit "Recrue"
-  :hp 100 :speed 1.3 :run-speed 3.0 :mass 1.0 :endurance 1.0
+  :hp 100 :speed 1.3 :run-speed 3.0 :turn-rate 3.14 :mass 1.0 :radius 0.3 :endurance 1.0
   :defense 0.05 :melee-skill 0.5 :marksmanship 0.4
   :morale 60 :discipline 0.5 :spacing 1.0 :ranks 4)
 
@@ -107,13 +107,15 @@
 
 (define-item :light-horse "Cheval léger"
   :slots '(:mount) :price 60
-  :modifiers '((:speed :set 4.0) (:run-speed :set 8.0) (:mass :mul 3) (:endurance :set 1.5)
+  :modifiers '((:speed :set 4.0) (:run-speed :set 8.0) (:mass :mul 3) (:radius :set 0.9) (:turn-rate :set 1.6)
+               (:endurance :set 1.5)
                (:spacing :set 2.0) (:ranks :set 2))
   :traits '(:charge))
 
 (define-item :heavy-horse "Cheval lourd"
   :slots '(:mount) :price 100
-  :modifiers '((:speed :set 3.2) (:run-speed :set 6.5) (:mass :mul 4.5) (:endurance :set 1.2)
+  :modifiers '((:speed :set 3.2) (:run-speed :set 6.5) (:mass :mul 4.5) (:radius :set 1.0) (:turn-rate :set 1.2)
+               (:endurance :set 1.2)
                (:spacing :set 2.2) (:ranks :set 2))
   :traits '(:charge))
 

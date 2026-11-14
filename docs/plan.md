@@ -315,7 +315,7 @@ Une entité se décrit par ce qu'elle possède, pas par ce qu'elle est. Il n'y a
 
 Les modèles d'objets et l'homme de base sont partagés et ne changent jamais. Les systèmes ne les lisent pas directement : ils lisent les stats effectives du régiment, chargées dans des variables locales avant de parcourir sa plage de soldats. Chaque régiment a ainsi ses propres stats sans coût par soldat.
 
-**Soldats, en tableaux typés.** Un soldat est un indice. Chaque attribut a son propre tableau `(simple-array single-float (*))` ou `fixnum` : position, vitesse, emplacement cible, points de vie, cible, recharge, arme en main (`weapon`, 0 principale, 1 secondaire), délai de changement d'arme (`switch-timer`), arme chargée et régiment.
+**Soldats, en tableaux typés.** Un soldat est un indice. Chaque attribut a son propre tableau `(simple-array single-float (*))` ou `fixnum` : position, orientation, marche ou arrêt (`walking`), vitesse, emplacement cible, points de vie, cible, recharge, arme en main (`weapon`, 0 principale, 1 secondaire), délai de changement d'arme (`switch-timer`), arme chargée et régiment.
 
 - **Plages contiguës :** chaque régiment possède une plage fixe d'indices, de `start` à `start + capacity`. Parcourir un régiment revient à parcourir une plage continue de mémoire.
 - **Suppression par échange :** quand un soldat meurt, il est échangé avec le dernier vivant de son régiment, puis `alive` diminue. Les tableaux restent compacts.
@@ -349,7 +349,7 @@ stats communes + profil d'attaque principal + profil d'attaque secondaire
 
 | Famille | Stats | Origine |
 | --- | --- | --- |
-| Corps | `hp`, `armor` (réduction des dégâts), `speed` (marche), `run-speed` (course et charge), `mass` (poussée) | Homme, armure, casque, monture |
+| Corps | `hp`, `armor` (réduction des dégâts), `speed` (marche), `run-speed` (course et charge), `turn-rate` (vitesse de rotation), `mass` (poussée) | Homme, armure, casque, monture |
 | Charge | `load` (kg portés), `endurance` (résistance à la fatigue) | Somme des poids ; homme ou monture |
 | Défense | `defense` (chance de faire rater en mêlée), `cover` (protection contre le tir, de face, pavise plantée) | Adresse, bouclier |
 | Adresse | `melee-skill`, `marksmanship` | Homme, améliorations : un bon tireur n'est pas forcément un bon bretteur |
@@ -492,7 +492,10 @@ Le principe : calculer le moins possible par soldat, et le plus possible par ré
 
 - **Formation par emplacements :** le régiment calcule une grille de positions cibles, et chaque soldat se dirige vers la sienne.
 - **Une recherche de chemin par régiment,** jamais par soldat.
-- **Grille spatiale :** des cases au moins aussi grandes que la portée maximale de mêlée, pour que les 9 cases voisines suffisent toujours. Elle est reconstruite à chaque tick dans des tableaux préalloués, par tri par case.
+- **Grille spatiale :** des cases de 1 m, reconstruites à chaque tick dans des tableaux préalloués, par tri par comptage. La collision ne parcourt que les cases voisines ; une recherche plus longue, comme la portée d'une pique, parcourt plus de cases. Des cases aussi grandes que la portée maximale feraient tester environ 180 voisins par soldat à la collision.
+- **Collision :** tous les soldats se repoussent quand ils se chevauchent (rayon, partage selon la masse), en séparation douce, poussées accumulées puis appliquées.
+- **Orientation par soldat :** chaque soldat a sa propre orientation, distincte de celle de sa formation. À plus de 2 m de son emplacement, il se tourne vers lui et marche face à sa destination ; sous 1 m, il fait face au front de sa formation. Un petit pas en arrière ou de côté se fait donc sans se retourner. Les deux seuils (hystérésis) l'empêchent d'alterner à la limite.
+- **Rotation limitée :** un soldat tourne d'au plus `turn-rate` radians par seconde (environ 180°/s à pied, 92°/s pour le cheval léger, 69°/s pour le cheval lourd), par le plus court chemin. La monture fixe cette stat.
 - **Test préalable :** un soldat dont le régiment ne touche aucun ennemi, portée comprise, saute la recherche de cible.
 
 ### Combat de formation, en deux phases par tick
@@ -613,7 +616,7 @@ En vue de dessus, toute l'élévation passe par la couleur et l'ombrage, et la p
 
 **Soldats :**
 
-- **Un sprite par type d'unité,** pivoté selon l'orientation du régiment avec `DrawTexturePro`.
+- **Un sprite par type d'unité,** pivoté selon l'orientation du soldat, en lot `rlgl` (pas `DrawTexturePro`, voir docs/mesures.md). Pour l'instant, un rectangle à l'avant plus clair.
 - **Un atlas de textures** pour tous les sprites, afin que raylib regroupe les dessins.
 - **Animation minimale :** deux ou trois images par action au plus.
 - **Élimination hors champ :** les régiments hors de la caméra ne sont pas dessinés, par test de boîte englobante.

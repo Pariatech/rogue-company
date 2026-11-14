@@ -11,7 +11,7 @@
 ;;; fractions, ajoutées puis bornées au moment du tirage.
 
 (defparameter *common-stats*
-  '(:hp :armor :speed :run-speed :mass :load :endurance :defense :cover
+  '(:hp :armor :speed :run-speed :turn-rate :mass :radius :load :endurance :defense :cover
     :melee-skill :marksmanship :morale :discipline :spacing :ranks)
   "Stats communes, quelle que soit l'arme en main. Chacune est un slot de
 REGIMENT-STATS du même nom.")
@@ -92,7 +92,11 @@ l'écart d'un single-float converti."
           :documentation "Retirée des dégâts reçus, moins la pénétration de l'arme.")
    (speed :reader stats-speed :type single-float :documentation "Marche, m/s.")
    (run-speed :reader stats-run-speed :type single-float :documentation "Course et charge, m/s.")
+   (turn-rate :reader stats-turn-rate :type single-float
+              :documentation "Vitesse de rotation d'un soldat, en radians par seconde.")
    (mass :reader stats-mass :type single-float :documentation "Poids dans la poussée.")
+   (radius :reader stats-radius :type single-float
+           :documentation "Rayon de collision, en mètres : un cheval est plus large qu'un homme.")
    (load :reader stats-load :type single-float
          :documentation "Kilogrammes portés, monture exclue : nourrit la fatigue.")
    (endurance :reader stats-endurance :type single-float)

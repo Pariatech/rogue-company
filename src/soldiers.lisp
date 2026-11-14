@@ -10,8 +10,20 @@
 (deftype float-array () '(simple-array single-float (*)))
 (deftype fixnum-array () '(simple-array fixnum (*)))
 
-(defparameter *soldier-float-arrays* '(x y prev-x prev-y slot-x slot-y hp)
+(defparameter *soldier-float-arrays*
+  '(x y prev-x prev-y facing prev-facing slot-x slot-y hp radius mass push-x push-y)
   "Slots de SOLDIERS qui sont des tableaux de single-float.")
+
+(defparameter *soldier-fixnum-arrays* '(regiment walking)
+  "Slots de SOLDIERS qui sont des tableaux de fixnums.")
+
+(defparameter *walk-start-distance* 2f0
+  "Au-delà de cette distance à son emplacement, le soldat se tourne vers lui pour
+marcher.")
+
+(defparameter *walk-stop-distance* 1f0
+  "En deçà, il fait face au front de sa formation, et recule ou se décale sans se
+retourner. L'écart entre les deux seuils évite qu'il alterne à la limite.")
 
 (defclass soldiers ()
   ((count :initform 0 :accessor soldiers-count :type fixnum
@@ -22,12 +34,26 @@
    (prev-x :initform (make-float-array 0) :reader soldiers-prev-x :type float-array
            :documentation "Position au tick précédent, pour interpoler le dessin.")
    (prev-y :initform (make-float-array 0) :reader soldiers-prev-y :type float-array)
+   (facing :initform (make-float-array 0) :reader soldiers-facing :type float-array
+           :documentation "Orientation, en radians dans [-pi, pi] ; 0 regarde vers +x.")
+   (prev-facing :initform (make-float-array 0) :reader soldiers-prev-facing :type float-array
+                :documentation "Orientation au tick précédent, pour interpoler le dessin.")
    (slot-x :initform (make-float-array 0) :reader soldiers-slot-x :type float-array
            :documentation "Emplacement cible dans la formation.")
    (slot-y :initform (make-float-array 0) :reader soldiers-slot-y :type float-array)
    (hp :initform (make-float-array 0) :reader soldiers-hp :type float-array)
+   (radius :initform (make-float-array 0) :reader soldiers-radius :type float-array
+           :documentation "Rayon de collision, copié des stats du régiment.")
+   (mass :initform (make-float-array 0) :reader soldiers-mass :type float-array
+         :documentation "Masse, copiée des stats : partage la séparation entre deux soldats.")
+   (push-x :initform (make-float-array 0) :reader soldiers-push-x :type float-array
+           :documentation "Déplacement de séparation accumulé pendant les collisions du tick.")
+   (push-y :initform (make-float-array 0) :reader soldiers-push-y :type float-array)
    (regiment :initform (make-array 0 :element-type 'fixnum) :reader soldiers-regiment
-             :type fixnum-array :documentation "Indice du régiment dans la bataille.")))
+             :type fixnum-array :documentation "Indice du régiment dans la bataille.")
+   (walking :initform (make-array 0 :element-type 'fixnum) :reader soldiers-walking
+            :type fixnum-array
+            :documentation "1 si le soldat marche face à sa destination, 0 s'il fait face au front.")))
 
 (defun make-float-array (size)
   (make-array size :element-type 'single-float :initial-element 0f0))
@@ -50,7 +76,7 @@ doublant la capacité pour que des ajouts successifs restent bon marché."
          (needed (+ start n)))
     (when (> needed (soldiers-capacity soldiers))
       (let ((size (max needed (* 2 (soldiers-capacity soldiers)))))
-        (dolist (slot (cons 'regiment *soldier-float-arrays*))
+        (dolist (slot (append *soldier-fixnum-arrays* *soldier-float-arrays*))
           (setf (slot-value soldiers slot) (grow-array (slot-value soldiers slot) size)))))
     (setf (soldiers-count soldiers) needed)
     start))
@@ -63,21 +89,50 @@ doublant la capacité pour que des ajouts successifs restent bon marché."
     (replace (the float-array (soldiers-prev-x soldiers)) (the float-array (soldiers-x soldiers))
              :end2 count)
     (replace (the float-array (soldiers-prev-y soldiers)) (the float-array (soldiers-y soldiers))
+             :end2 count)
+    (replace (the float-array (soldiers-prev-facing soldiers))
+             (the float-array (soldiers-facing soldiers))
              :end2 count)))
 
-(defun move-toward-slots (soldiers start end step)
-  "Avance les soldats de START à END d'au plus STEP mètres vers leur emplacement."
+(declaim (inline wrap-angle))
+(defun wrap-angle (angle)
+  "ANGLE ramené dans [-pi, pi], pour un ANGLE dans [-3 pi, 3 pi]."
+  (declare (type single-float angle))
+  (cond ((> angle #.(float pi 1f0)) (- angle #.(float (* 2 pi) 1f0)))
+        ((< angle #.(float (- pi) 1f0)) (+ angle #.(float (* 2 pi) 1f0)))
+        (t angle)))
+
+(defun move-toward-slots (soldiers start end step front turn-step)
+  "Avance les soldats de START à END d'au plus STEP mètres vers leur emplacement,
+et les tourne d'au plus TURN-STEP radians : vers leur destination s'ils en sont
+loin, vers FRONT, l'orientation de la formation, s'ils en sont près."
   (declare (optimize (speed 3) (safety 1))
            (type fixnum start end)
-           (type single-float step))
+           (type single-float step front turn-step))
   (let ((xs (soldiers-x soldiers)) (ys (soldiers-y soldiers))
-        (slot-xs (soldiers-slot-x soldiers)) (slot-ys (soldiers-slot-y soldiers)))
-    (declare (type float-array xs ys slot-xs slot-ys))
+        (slot-xs (soldiers-slot-x soldiers)) (slot-ys (soldiers-slot-y soldiers))
+        (facings (soldiers-facing soldiers))
+        (walking (soldiers-walking soldiers))
+        (start-distance *walk-start-distance*)
+        (stop-distance *walk-stop-distance*))
+    (declare (type float-array xs ys slot-xs slot-ys facings)
+             (type fixnum-array walking)
+             (type single-float start-distance stop-distance))
     (loop for i of-type fixnum from start below end
           do (let* ((dx (- (aref slot-xs i) (aref xs i)))
                     (dy (- (aref slot-ys i) (aref ys i)))
                     (distance (sqrt (the (single-float 0f0) (+ (* dx dx) (* dy dy))))))
                (declare (type single-float dx dy distance))
+               ;; Orientation : face à la destination en marche, face au front sinon.
+               (setf (aref walking i)
+                     (if (zerop (aref walking i))
+                         (if (> distance start-distance) 1 0)
+                         (if (< distance stop-distance) 0 1)))
+               (let* ((target (if (zerop (aref walking i)) front (atan dy dx)))
+                      (turn (wrap-angle (- target (aref facings i)))))
+                 (declare (type single-float target turn))
+                 (setf (aref facings i)
+                       (wrap-angle (+ (aref facings i) (max (- turn-step) (min turn-step turn))))))
                (if (<= distance step)
                    (setf (aref xs i) (aref slot-xs i)
                          (aref ys i) (aref slot-ys i))
@@ -96,4 +151,6 @@ doublant la capacité pour que des ajouts successifs restent bon marché."
       "y" (json-float (aref (soldiers-y soldiers) i))
       "slot_x" (json-float (aref (soldiers-slot-x soldiers) i))
       "slot_y" (json-float (aref (soldiers-slot-y soldiers) i))
+      "facing_degrees" (json-float (* (aref (soldiers-facing soldiers) i) (/ 180 pi)))
+      "walking" (if (plusp (aref (soldiers-walking soldiers) i)) t 'yason:false)
       "hp" (json-float (aref (soldiers-hp soldiers) i))))

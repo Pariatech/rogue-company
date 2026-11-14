@@ -19,10 +19,18 @@ pour reproduire une bataille.")
          :documentation "Ticks exécutés depuis le début de la bataille.")
    (regiments :initform (make-array 0 :adjustable t :fill-pointer t) :reader battle-regiments)
    (soldiers :initform (make-soldiers) :reader battle-soldiers
-             :documentation "Tableaux typés des soldats de tous les régiments.")))
+             :documentation "Tableaux typés des soldats de tous les régiments.")
+   (grid :initarg :grid :reader battle-grid
+         :documentation "Grille spatiale, reconstruite à chaque tick.")
+   (max-radius :initform 0f0 :accessor battle-max-radius
+               :documentation "Plus grand rayon de collision des régiments.")))
 
-(defun make-battle (&key (seed *battle-seed*))
-  (make-instance 'battle :seed seed :rng (make-rng seed)))
+(defparameter *battlefield-size* 256
+  "Côté de la carte, en mètres, centrée sur l'origine.")
+
+(defun make-battle (&key (seed *battle-seed*) (size *battlefield-size*))
+  (make-instance 'battle :seed seed :rng (make-rng seed)
+                         :grid (make-spatial-grid :size size)))
 
 (defun add-regiment (battle stats count &key (name "Régiment") (side 0) (x 0) (y 0) (facing 0)
                                              (ranks (stats-ranks stats)) (scatter 0))
@@ -41,15 +49,22 @@ SCATTER mètres de son emplacement, sur chaque axe. Renvoie le régiment."
          (rng (battle-rng battle))
          (scatter (float scatter 1f0)))
     (vector-push-extend regiment regiments)
+    (ensure-grid-capacity (battle-grid battle) (soldiers-capacity soldiers))
+    (setf (battle-max-radius battle) (max (battle-max-radius battle) (stats-radius stats)))
     (order-move regiment x y facing)
     (update-regiment-slots regiment soldiers)
     (loop for i from start below (+ start count)
           do (setf (aref (soldiers-regiment soldiers) i) (regiment-index regiment)
                    (aref (soldiers-hp soldiers) i) (stats-hp stats)
+                   (aref (soldiers-radius soldiers) i) (stats-radius stats)
+                   (aref (soldiers-mass soldiers) i) (stats-mass stats)
                    (aref (soldiers-x soldiers) i)
                    (+ (aref (soldiers-slot-x soldiers) i) (rng-range rng (- scatter) scatter))
                    (aref (soldiers-y soldiers) i)
                    (+ (aref (soldiers-slot-y soldiers) i) (rng-range rng (- scatter) scatter))
+                   (aref (soldiers-facing soldiers) i) (wrap-angle (float facing 1f0))
+                   (aref (soldiers-prev-facing soldiers) i) (aref (soldiers-facing soldiers) i)
+                   (aref (soldiers-walking soldiers) i) 0
                    (aref (soldiers-prev-x soldiers) i) (aref (soldiers-x soldiers) i)
                    (aref (soldiers-prev-y soldiers) i) (aref (soldiers-y soldiers) i)))
     regiment))
@@ -59,7 +74,8 @@ SCATTER mètres de son emplacement, sur chaque axe. Renvoie le régiment."
 et s'ajoutent ici au fil des étapes :
   1. copie des positions courantes dans les positions précédentes ;
   2. régiments : ordres, formation, moral (chacun un tick sur plusieurs) ;
-  3. soldats : déplacement vers leur emplacement ;
+  3. soldats : déplacement vers leur emplacement, puis grille spatiale et
+     collisions ;
   4. combat : ciblage en lecture seule, puis dégâts appliqués en séquence."
   (let ((soldiers (battle-soldiers battle))
         (regiments (battle-regiments battle)))
@@ -67,7 +83,9 @@ et s'ajoutent ici au fil des étapes :
     (loop for regiment across regiments
           do (update-regiment-slots regiment soldiers))
     (loop for regiment across regiments
-          do (move-regiment regiment soldiers)))
+          do (move-regiment regiment soldiers))
+    (rebuild-grid (battle-grid battle) soldiers)
+    (resolve-collisions soldiers (battle-grid battle) (battle-max-radius battle)))
   (incf (battle-tick-count battle))
   battle)
 
@@ -92,8 +110,10 @@ aux tests et au diagnostic."
         (let ((array (slot-value soldiers slot)))
           (dotimes (i (soldiers-count soldiers))
             (add-u64 (ldb (byte 32 0) (sb-kernel:single-float-bits (aref array i)))))))
-      (dotimes (i (soldiers-count soldiers))
-        (add-u64 (aref (soldiers-regiment soldiers) i))))
+      (dolist (slot *soldier-fixnum-arrays*)
+        (let ((array (slot-value soldiers slot)))
+          (dotimes (i (soldiers-count soldiers))
+            (add-u64 (ldb (byte 64 0) (aref array i)))))))
     (format nil "~(~{~2,'0x~}~)"
             (coerce (sb-md5:md5sum-sequence (coerce octets '(simple-array (unsigned-byte 8) (*))))
                     'list))))

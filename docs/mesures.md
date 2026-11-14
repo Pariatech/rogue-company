@@ -70,3 +70,19 @@ Une bataille de 50 régiments de 200 piquiers, soit 10 000 soldats, dispersés d
 | Octets alloués sur 600 ticks | 0 |
 
 Un tick à 30 Hz coûte donc environ 5 ms par seconde de jeu pour 10 000 soldats, soit 0,5 % d'une image à 60 FPS par tick exécuté. Le tick ne contient encore que la copie des positions précédentes, le recalcul des emplacements des régiments qui ont reçu un ordre, et la marche vers l'emplacement.
+
+## Collisions entre soldats (2026-11-14)
+
+Même bataille de 10 000 piquiers, régiments espacés de 25 m et dispersés de 15 m, avec la grille spatiale (cases de 1 m, carte de 256 m) et la séparation des soldats :
+
+| Mesure | Résultat |
+| --- | --- |
+| Tick, soldats dispersés qui se démêlent | 860 µs |
+| Tick, soldats en place | 480 µs |
+| dont reconstruction de la grille | 150 µs |
+| dont collisions | 270 µs |
+| Octets alloués sur 300 ticks | 0 |
+
+Avec l'orientation par soldat (rotation limitée, marche ou arrêt), le tick des soldats dispersés qui se démêlent passe à 965 µs, toujours sans allocation.
+
+La reconstruction de la grille parcourt ses 65 536 cases deux fois par tick, quel que soit le nombre de soldats ; c'est la première piste si elle devient gênante (ne vider que les cases occupées).

@@ -58,9 +58,11 @@ se recalculent au tick suivant."
 
 (defun move-regiment (regiment soldiers)
   "Avance les soldats de REGIMENT vers leur emplacement, au pas de marche."
-  (move-toward-slots soldiers (regiment-start regiment) (regiment-end regiment)
-                     (/ (stats-speed (regiment-stats regiment))
-                        #.(float +ticks-per-second+ 1f0))))
+  (let ((stats (regiment-stats regiment)))
+    (move-toward-slots soldiers (regiment-start regiment) (regiment-end regiment)
+                       (/ (stats-speed stats) #.(float +ticks-per-second+ 1f0))
+                       (formation-facing (regiment-formation regiment))
+                       (/ (stats-turn-rate stats) #.(float +ticks-per-second+ 1f0)))))
 
 ;;; Inspection
 
