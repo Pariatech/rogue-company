@@ -26,6 +26,8 @@ C'est un jeu de batailles en 2D vu de dessus, à l'époque du pike and shock, o�
 | Mêlée | Combat de formation : chaque soldat frappe l'ennemi le plus proche à portée | Simple et peu coûteux ; la profondeur de formation compte sans règle spéciale |
 | Tir | Résolu par régiment, avec test de ligne de tir | Aucun projectile simulé |
 | Terrain | Carte d'élévation, ombrage du relief, mode topographique | Le relief agit sur le tir, le mouvement, les charges et le moral |
+| Équipement | Six emplacements par régiment, en liberté totale, obtenus au magasin, en butin ou par les améliorations | Les stats d'un régiment viennent de ce qu'il porte ; le poids rend chaque choix coûteux |
+| Progression | Roguelike : entre les batailles, un régiment qui monte en grade choisit une amélioration parmi trois, tirées dans un arbre | Chaque régiment a son histoire ; les choix changent la façon de jouer |
 | Console dans le jeu | Channel Claude Code | La session survit aux plantages du jeu et reste celle du terminal |
 
 **Cible de performance initiale, à confirmer :** 10 000 soldats à 60 images par seconde sur ton Mac, soit 16,6 ms par image.
@@ -226,6 +228,8 @@ Ajouter deux outils MCP :
 
 Mettre en place le modèle de la section Données : régiments en CLOS, soldats en tableaux typés. La simulation passe à un pas fixe de 30 Hz, indépendant du rendu, avec un générateur aléatoire à graine.
 
+Le régiment reçoit ses stats effectives et ses traits à sa création (homme + équipement, voir Soldats et équipement), et compte ses ennemis tués (voir Progression des régiments). La fiche, l'inventaire, le magasin, l'arbre d'améliorations et la partie viendront après le combat.
+
 **Validation :** deux régiments rejoignent leur formation, et `(time ...)` sur 1 000 ticks montre zéro octet alloué par tick dans les systèmes de soldats.
 
 ### Étape 9 : grille spatiale et combat de formation
@@ -279,27 +283,37 @@ Budget initial par image, à ajuster après l'étape 7 :
 
 ## Données : composition plutôt qu'héritage
 
-Une entité se décrit par ce qu'elle possède, pas par ce qu'elle est. Il n'y a pas de hiérarchie de classes de soldats : un type d'unité est un profil de données.
+Une entité se décrit par ce qu'elle possède, pas par ce qu'elle est. Il n'y a pas de hiérarchie de classes de soldats : un régiment est un homme de base, son équipement et ses améliorations, tous décrits par des données (voir Soldats et équipement).
 
-**Régiments, en CLOS.** Peu nombreux, ils gardent la souplesse du rechargement à chaud. Un régiment compose ses parties dans des slots : profil d'arme, formation, moral, ordres et plage de soldats.
+**Régiments, en CLOS.** Peu nombreux, ils gardent la souplesse du rechargement à chaud. Un régiment compose ses parties dans des slots : fiche, stats effectives, traits, formation, moral, fatigue, ordres et plage de soldats.
 
 ```lisp
-(defclass weapon-profile ()
-  ((reach    :initarg :reach)      ; m : piques sur environ 4 rangs, épées 1
-   (damage   :initarg :damage)
-   (cooldown :initarg :cooldown)   ; ticks entre deux coups
-   (ranged   :initarg :ranged :initform nil)))
+(defclass item-template ()         ; un modèle d'objet : « Iron Cuirass », « Pique »
+  ((slot      :initarg :slot)      ; :main, :secondary, :shield, :armor, :helmet, :mount
+   (hands     :initarg :hands)     ; mains occupées au combat : 0, 1 ou 2
+   (weight    :initarg :weight)    ; kg, nourrit la fatigue
+   (modifiers :initarg :modifiers) ; (:reach :set 4.5) (:armor :add 4)
+   (traits    :initarg :traits)    ; :deployed-cover, :charge…
+   (requires  :initarg :requires)  ; (:mount) pour la lance
+   (forbids   :initarg :forbids)   ; (:mount) pour la pique
+   (price     :initarg :price)))
 
 (defclass regiment ()
   ((side      :initarg :side)
-   (profile   :initarg :profile)   ; weapon-profile partagé par type d'unité
+   (record    :initarg :record)    ; fiche persistante (voir Progression des régiments)
+   (stats     :initarg :stats)     ; stats effectives : homme + équipement + améliorations, calculées à la création
+   (traits    :initarg :traits)    ; comportements apportés par l'équipement et les améliorations
    (formation :initarg :formation) ; rangs, files, orientation, emplacements
    (morale    :initarg :morale)
+   (fatigue   :initarg :fatigue :initform 0f0) ; 0 frais, 1 épuisé
    (orders    :initarg :orders)
    (start     :initarg :start)     ; premier indice dans les tableaux de soldats
    (capacity  :initarg :capacity)
-   (alive     :initarg :alive)))
+   (alive     :initarg :alive)
+   (kills     :initarg :kills :initform 0))) ; ennemis tués, convertis en XP après la bataille
 ```
+
+Les modèles d'objets et l'homme de base sont partagés et ne changent jamais. Les systèmes ne les lisent pas directement : ils lisent les stats effectives du régiment, chargées dans des variables locales avant de parcourir sa plage de soldats. Chaque régiment a ainsi ses propres stats sans coût par soldat.
 
 **Soldats, en tableaux typés.** Un soldat est un indice. Chaque attribut a son propre tableau `(simple-array single-float (*))` ou `fixnum` : position, vitesse, emplacement cible, points de vie, cible, recharge et régiment.
 
@@ -308,6 +322,127 @@ Une entité se décrit par ce qu'elle possède, pas par ce qu'elle est. Il n'y a
 - **Inspection :** `game_state` affiche un régiment et ses soldats sous une forme lisible.
 
 Les fonctions génériques restent utiles comme protocoles. Par exemple, `on-charge-impact` peut être spécialisée à la fois sur l'attaquant et sur le défenseur, ce qui remplace bien des hiérarchies.
+
+## Soldats et équipement
+
+Les stats d'un régiment se calculent en un seul endroit, à la création de la bataille :
+
+```
+homme (entraînement) + 6 emplacements d'équipement + améliorations → stats effectives + traits
+```
+
+- **L'homme** porte ce qui ne dépend pas de l'équipement : points de vie, adresse, moral, discipline, endurance. Une recrue et un vétéran diffèrent ici.
+- **L'équipement** porte le reste, avec un poids pour chaque pièce.
+- **Les améliorations** s'appliquent par-dessus (voir Progression des régiments).
+
+« Piquiers » ou « mousquetaires » ne sont donc pas des types, mais des dotations : un homme de base avec un équipement donné.
+
+### Les stats
+
+Les distances sont en mètres, les durées en secondes, converties en ticks au chargement. Les valeurs de départ s'équilibrent en jouant.
+
+| Famille | Stats |
+| --- | --- |
+| Corps | `hp`, `armor` (réduction des dégâts), `speed` (marche), `run-speed` (course et charge), `mass` (poussée), `endurance` (résistance à la fatigue) |
+| Mêlée | `skill` (adresse), `reach`, `melee-damage`, `melee-cooldown`, `penetration`, `defense` (chance de faire rater), `charge-bonus` |
+| Tir | `range`, `accuracy`, `ranged-damage`, `ranged-penetration`, `reload` |
+| Moral et formation | `morale`, `discipline` (formation reformée et moral qui remonte), `spacing`, `ranks` |
+
+### Toucher et blesser
+
+Le corps à corps peut rater. Chaque coup se résout en deux temps :
+
+1. **Toucher :** chance = adresse de l'homme + précision de l'arme − défense de la cible (bouclier, parade) − pénalité de fatigue, bornée entre un minimum et un maximum.
+2. **Blesser :** dégâts de l'arme, réduits par l'armure de la cible diminuée de la pénétration de l'arme (armure effective = max(0, armure − pénétration)).
+
+La pénétration donne sa valeur à chaque armure : une balle de mousquet à courte portée traverse un corselet, une épée glisse dessus. L'armure lourde vaut beaucoup contre la mêlée et moins contre le tir rapproché.
+
+Le tirage se fait dans la phase 2 du combat, séquentielle, avec le générateur de la bataille : l'ordre des tirages est fixe, la bataille se rejoue.
+
+### Fatigue
+
+La fatigue est une valeur par régiment, de 0 (frais) à 1 (épuisé), calculée au niveau du régiment comme le moral.
+
+- **Elle monte** avec la course, la charge, le combat et la pente (étape 10), d'autant plus vite que la charge portée (poids total de l'équipement) est lourde par rapport à l'endurance.
+- **Elle descend** au repos, plus vite à l'arrêt qu'en marche.
+- **Elle réduit** la vitesse, la chance de toucher (mêlée et tir) et le moral.
+
+Un cuirassier en armure complète est redoutable au contact, mais s'épuise en courant en montée. Le même mécanisme oppose les unités lourdes et légères sans règle spéciale.
+
+### Les six emplacements
+
+| Emplacement | Exemples | Apport |
+| --- | --- | --- |
+| Arme principale | Pique, mousquet, arquebuse, arbalète, hallebarde, épée, lance, pistolets | Portée, dégâts, pénétration, précision, cadence, tir ou non |
+| Arme secondaire | Épée courte, dague, pistolet | Remplace l'arme principale quand elle ne peut pas servir : le mousquetaire au contact, le piquier dans une mêlée trop serrée |
+| Bouclier | Rondache, pavise | Défense, surtout contre la mêlée ; couverture contre le tir pour la pavise |
+| Armure | Buffle, corselet, armure de cuirassier | Armure, poids |
+| Casque | Morion, cabasset | Petite armure, poids léger |
+| Monture | Cheval léger, cheval lourd | Vitesse, masse, charge ; une cible plus grosse pour le tir |
+
+L'équipement s'applique au régiment entier. Un tercio qui mêle piques et mousquets est formé de deux régiments côte à côte.
+
+### Compatibilités
+
+- **Mains :** chaque pièce déclare les mains qu'elle occupe au combat, et le total ne dépasse pas 2. La pique, le mousquet, l'arquebuse, l'arbalète et la hallebarde en prennent 2 : pas de bouclier tenu. L'épée et le pistolet en prennent 1 : la main libre peut tenir une rondache. L'arme secondaire ne compte pas, puisqu'elle remplace l'arme principale.
+- **La pavise** n'occupe aucune main au combat : portée sur le dos, plantée à l'arrêt. Elle protège seulement à l'arrêt, après un temps de mise en place, seulement de face et surtout contre le tir (trait `:deployed-cover`). Elle est lourde et fatigue en marche. Des arbalétriers derrière leurs pavises forment une ligne de tir solide mais lente à déplacer et exposée sur les flancs.
+- **`:requires` et `:forbids` :** la lance exige une monture ; la pique, le mousquet, l'arbalète et la pavise l'interdisent.
+- **Validation :** une fonction renvoie les raisons d'un refus (« la pique occupe les deux mains »), affichées par l'écran d'équipement.
+
+### Cavalerie
+
+La cavalerie n'est qu'une monture : elle multiplie la vitesse et la masse et apporte le trait `:charge` (bonus d'élan au premier impact, pénalité contre des piques de face). Le même homme avec des pistolets donne des reîtres ; avec une lance et une armure lourde, des lanciers ; avec une arquebuse, des arquebusiers à cheval. La fatigue de la monture suit la même règle, avec l'endurance du cheval.
+
+### Posséder l'équipement
+
+- **Une pièce équipe un régiment entier,** quel que soit son effectif : acheter un « Iron Cuirass » et le mettre sur un régiment d'épéistes suffit.
+- **Objets et modèles :** chaque pièce est un objet (`item`) de l'inventaire de la partie, créé d'après un modèle (`item-template`). Le butin pourra ainsi porter des variantes (« Iron Cuirass de Milan »).
+- **Une pièce est sur un seul régiment à la fois,** ou dans l'inventaire. Entre les batailles, on la déplace librement, en liberté totale tant que les compatibilités sont respectées.
+- **Rien ne se perd :** un régiment dissous rend son équipement à l'inventaire. Les renforts arrivent équipés, puisque l'équipement appartient au régiment.
+- **Trois sources :**
+  - le magasin entre les batailles ;
+  - le butin après une victoire ;
+  - les améliorations, qui ne donnent pas de pièce mais ouvrent l'accès : « Entraînement aux armures lourdes » permet de porter l'armure de cuirassier, « Maîtres armuriers » fait apparaître de meilleurs objets au magasin.
+
+## Progression des régiments
+
+Une partie enchaîne des batailles. Entre deux batailles, les régiments qui ont gagné assez d'expérience montent en grade et choisissent une amélioration. La simulation de bataille n'en sait rien : elle reçoit des stats effectives et rend des résultats.
+
+**Fiche et régiment de bataille.** Deux objets distincts :
+
+- **La fiche (`regiment-record`)** vit toute la partie, dans l'armée du joueur : nom, homme de base, six emplacements d'équipement, XP, grade, liste des améliorations prises, effectif.
+- **Le régiment de bataille (`regiment`)** ne vit que le temps d'une bataille. Il pointe vers sa fiche et ajoute formation, ordres, moral, plage de soldats et ennemis tués.
+
+À la création de la bataille, les stats effectives sont calculées depuis la fiche. À la fin, les pertes et les ennemis tués sont reportés sur la fiche.
+
+**Garder les améliorations, pas les stats modifiées.** La fiche garde la liste des améliorations prises, par exemple `(:long-pikes :drill :drill)`. Les stats effectives en sont recalculées : un changement d'équilibrage s'applique aux régiments existants au rechargement, l'interface peut afficher l'historique, et une partie se sauvegarde simplement.
+
+**Améliorations, en données.** Déclarées par `define-upgrade` :
+
+| Champ | Rôle |
+| --- | --- |
+| `:requires` | Améliorations déjà prises, toutes ou au moins une (`(:any …)`) : c'est ce qui forme l'arbre |
+| `:excludes` | Branches incompatibles, par exemple piques longues contre piques courtes et épées |
+| `:max` | Nombre de prises possibles (forage ×3, par exemple) |
+| `:units` | Conditions sur l'équipement porté (une arme à feu, une monture…) |
+| `:weight` | Probabilité relative d'être tirée |
+| `:effects` | Modificateurs numériques, `(:hp :mul 1.15)` ou `(:reload :add -5)`, appliqués dans un ordre fixe : additions puis multiplications |
+| `:unlocks` | Équipement que le régiment peut désormais porter, ou objets ouverts au magasin |
+| `:traits` | Comportements, comme `:brace` (les piques encaissent les charges) ou `:volley` (tir par rang), lus par les systèmes et les fonctions génériques (`on-charge-impact`) |
+
+Les traits comptent plus que les chiffres : un choix qui change la façon de jouer vaut mieux qu'un +5 % de points de vie.
+
+**Tirage.** À chaque montée en grade, on rassemble les améliorations disponibles (conditions remplies, non exclues, maximum non atteint, équipement compatible) et on en tire trois différentes, pondérées par leur poids. S'il en reste moins de trois, on en propose moins ; une amélioration générique répétable (points de vie, moral) sert de bouche-trou. Le tirage passe par le générateur de la partie, avec sa propre graine, jamais par celui de la bataille : ouvrir l'écran de choix ne doit pas changer la simulation.
+
+**Expérience.** Seuls les ennemis tués en rapportent. Le système de dégâts attribue chaque mort au régiment du soldat qui a porté le coup, par un simple compteur. Les paliers de grade sont croissants (10, 25, 50…). À surveiller : les piquiers protègent les mousquetaires et tuent peu. S'ils ne montent jamais en grade, prévoir des paliers par type d'unité ou une part d'expérience pour avoir tenu au corps à corps.
+
+**Pertes et renforts.**
+
+- Un régiment garde ses améliorations quelles que soient ses pertes : elles appartiennent au régiment, pas aux soldats.
+- Les renforts coûtent plus cher quand le grade du régiment est élevé.
+- Un régiment sous 20 % de son effectif à la fin d'une bataille est dissous : il perd ses améliorations et son expérience, mais son équipement retourne à l'inventaire.
+
+Le dilemme : risquer son régiment vétéran, ou le ménager.
 
 ## Simulation de bataille
 
@@ -339,12 +474,13 @@ Le principe : calculer le moins possible par soldat, et le plus possible par ré
 (fill *damage* 0f0)
 (dotimes (i count)
   (let ((tgt (aref *target* i)))
-    (when (and (>= tgt 0) (attack-ready-p i))
-      (incf (aref *damage* tgt) (attack-damage i tgt)))))
+    (when (and (>= tgt 0) (attack-ready-p i)
+               (attack-hits-p i tgt rng))        ; chance de toucher, tirage à graine
+      (incf (aref *damage* tgt) (attack-damage i tgt)))))  ; armure moins pénétration
 (remove-dead-soldiers)
 ```
 
-La portée de chaque type fait émerger le combat de formation :
+La portée de chaque arme fait émerger le combat de formation :
 
 - **Piquiers :** une portée d'environ trois ou quatre rangs, donc plusieurs rangs frappent ensemble.
 - **Épéistes et rondachiers :** une portée courte, donc seul le premier rang frappe, mais plus fort.
@@ -566,7 +702,8 @@ Le plan et les règles de conception sont dans docs/plan.md : le lire avant tout
 ## Simulation
 - Pas fixe de 30 Hz ; tout tirage aléatoire passe par le générateur à graine du jeu.
 - Combat en deux phases : ciblage en lecture seule, puis application séquentielle.
-- Pas de hiérarchie de classes de soldats : un type d'unité est un profil de données.
+- Pas de hiérarchie de classes de soldats : un régiment est un homme de base, un équipement et des améliorations, en données.
+- La simulation lit les stats effectives du régiment, jamais les objets ni les améliorations.
 
 ## Vérifier un changement
 1. Appeler `game_reload` et lire les avertissements.
