@@ -14,10 +14,16 @@ Jeu en Common Lisp (SBCL, raylib) modifiable à chaud par MCP.
 - `src/stats.lisp` : stats effectives d'un régiment (`regiment-stats`, deux `attack-profile`, principal et secondaire), tout ce que la simulation lit. Durées converties en ticks (`+ticks-per-second+`, dans `fixed-clock.lisp`).
 - `src/equipment.lisp` : hommes de base (`define-man`), modèles d'objets (`define-item`), `validate-loadout` (emplacements, mains, `:requires`, `:forbids`) et `compute-regiment-stats` (homme + six emplacements + modificateurs `:set`, puis `:add`, puis `:mul`).
 - `src/items.lisp` : catalogue des hommes, des objets et des dotations de démonstration (`dotation-stats`). Recharger ce fichier rééquilibre les objets.
+- `src/formation.lisp` : grille d'emplacements d'un régiment (rangs, files, espacement, centre, orientation). `place-formation` écrit les emplacements dans les tableaux de soldats ; le soldat n° i de la plage va à l'emplacement n° i.
+- `src/soldiers.lisp` : soldats en tableaux typés (`x`, `y`, `prev-x`, `prev-y`, `slot-x`, `slot-y`, `hp`, `regiment`). La capacité ne grandit qu'à l'ajout d'un régiment (`reserve-soldiers`), jamais pendant un tick.
+- `src/regiment.lisp` : régiment de bataille (stats, formation, moral, fatigue, ordres, plage `start` à `start + alive`, ennemis tués). `order-move` ; les systèmes prennent un régiment et les tableaux de soldats, pas la bataille.
+- Monde en mètres, x vers la droite, y vers le bas ; un angle de 0 regarde vers +x. Le dessin est à 10 px/m, origine au centre de la fenêtre.
 - `src/scene.lisp` : protocole des scènes (`scene-update`, `scene-draw`, `scene-enter`, `scene-exit`), `game-state` et `change-scene`.
 - Une scène par fichier, chargé après `scene` et avant `game` : `src/main-menu.lisp` (« Start Battle »), `src/battle-scene.lisp`. `scene-snapshot` donne le résumé de la scène dans `game_state`.
-- `src/battle.lisp` : simulation de la bataille (`battle`, `make-battle`, `battle-tick`, `battle-digest`). Elle ne connaît ni raylib, ni l'horloge, ni le clavier, et tourne sans fenêtre dans les tests. Ses systèmes s'ajoutent dans `battle-tick`, dans l'ordre documenté.
-- `src/battle-scene.lisp` : fait avancer la bataille avec une `fixed-clock`. Espace suspend ou reprend la simulation, `+` et `-` changent sa vitesse (×0,25 à ×4), Échap ramène au menu.
+- `src/battle.lisp` : simulation de la bataille (`battle`, `make-battle`, `add-regiment`, `battle-tick`, `battle-digest`). Elle ne connaît ni raylib, ni l'horloge, ni le clavier, et tourne sans fenêtre dans les tests. Ses systèmes s'ajoutent dans `battle-tick`, dans l'ordre documenté.
+- `src/demo-battle.lisp` : bataille de démonstration (piquiers contre mousquetaires) et ordres au hasard.
+- `src/battle-view.lisp` : dessin des soldats, un lot rlgl de rectangles tournés et interpolés avec `clock-alpha`.
+- `src/battle-scene.lisp` : fait avancer la bataille avec une `fixed-clock`. Espace suspend ou reprend la simulation, `+` et `-` changent sa vitesse (×0,25 à ×4), `R` donne un ordre au hasard à chaque régiment, Échap ramène au menu.
 - `src/game.lisp` : `update` et `draw`, appelés par la boucle, qui délèguent à la scène courante ; `*state*`.
 - `src/engine.lisp` : boucle, pause, erreurs gardées (`guarded`), pas à pas, capture d'écran.
 - `src/jobs.lisp` : file vers le thread principal (`call-in-main-thread`).

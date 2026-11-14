@@ -59,3 +59,14 @@ Le premier affichage « Tick 1234   x2 » de la scène de bataille allouait envi
 - **`cffi:lisp-string-to-foreign` alloue 33 octets pour une `simple-base-string`**, le type que renvoie `format` quand le texte est en ASCII. `draw.lisp` encode maintenant lui-même l'UTF-8 dans le tampon C (`encode-utf8-into`), sans allocation pour aucun type de chaîne.
 
 Résultat : aucune zone de 64 ko remplie par le thread principal en 8 s de bataille à ×2.
+
+## Tick de simulation, étape 8 (2026-11-14)
+
+Une bataille de 50 régiments de 200 piquiers, soit 10 000 soldats, dispersés de 20 m autour de leur formation (`game_eval`, jeu en cours, 600 ticks après 30 ticks de chauffe) :
+
+| Mesure | Résultat |
+| --- | --- |
+| Tick, soldats en marche | 170 à 176 µs |
+| Octets alloués sur 600 ticks | 0 |
+
+Un tick à 30 Hz coûte donc environ 5 ms par seconde de jeu pour 10 000 soldats, soit 0,5 % d'une image à 60 FPS par tick exécuté. Le tick ne contient encore que la copie des positions précédentes, le recalcul des emplacements des régiments qui ont reçu un ordre, et la marche vers l'emplacement.

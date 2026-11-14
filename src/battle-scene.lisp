@@ -3,8 +3,8 @@
 ;;; Scène de bataille : fait avancer la simulation (battle.lisp) au rythme de son
 ;;; horloge à pas fixe, lit les commandes et dessine.
 ;;;
-;;; Espace suspend ou reprend la simulation, + et - changent sa vitesse, Échap
-;;; ramène au menu principal. Cette pause est propre à la bataille : celle du jeu
+;;; Espace suspend ou reprend la simulation, + et - changent sa vitesse, R donne
+;;; un nouvel ordre au hasard à chaque régiment, Échap ramène au menu principal. Cette pause est propre à la bataille : celle du jeu
 ;;; (console, game_control) arrête aussi la lecture du clavier.
 
 (defparameter *battle-speeds* '(0.25 0.5 1 2 4)
@@ -13,7 +13,9 @@
 (defclass battle-scene (scene)
   ;; Des initforms plutôt que SCENE-ENTER : une scène neuve a une bataille neuve,
   ;; et une instance existante reçoit ses nouveaux slots au rechargement.
-  ((battle :initform (make-battle) :reader scene-battle)
+  ((battle :initform (make-demo-battle) :reader scene-battle)
+   (orders-rng :initform (make-rng 7 99) :reader scene-orders-rng
+               :documentation "Tire les ordres de R, sans toucher au générateur de la bataille.")
    (clock :initform (make-fixed-clock) :reader scene-clock)
    (resume-speed :initform 1 :accessor scene-resume-speed
                  :documentation "Vitesse retrouvée quand on reprend après Espace.")
@@ -23,7 +25,7 @@
    (speed-key :initform nil :accessor scene-speed-key
               :documentation "Vitesse et pause de SPEED-TEXT : le texte n'est reconstruit
 que s'ils changent, ce qui est rare."))
-  (:documentation "La bataille. Pour l'instant un écran noir avec le tick et la vitesse."))
+  (:documentation "La bataille de démonstration, son tick et sa vitesse."))
 
 ;;; Vitesse
 
@@ -67,6 +69,8 @@ que s'ils changent, ce qui est rare."))
            (change-battle-speed scene 1))
          (when (or (key-pressed-p :key-minus) (key-pressed-p :key-kp-subtract))
            (change-battle-speed scene -1))
+         (when (key-pressed-p :key-r)
+           (order-random-moves (scene-battle scene) (scene-orders-rng scene)))
          (let ((battle (scene-battle scene)))
            (dotimes (i (clock-consume (scene-clock scene) dt))
              (battle-tick battle))))))
@@ -100,8 +104,9 @@ que s'ils changent, ce qui est rare."))
 
 (defmethod scene-draw ((scene battle-scene))
   (clear-background :black)
+  (draw-soldiers (scene-battle scene) (clock-alpha (scene-clock scene)))
   (draw-battle-hud scene)
-  (draw-text "Espace : pause   + / - : vitesse   Échap : menu"
+  (draw-text "Espace : pause   + / - : vitesse   R : nouvel ordre   Échap : menu"
              10 (- *window-height* 26) 16 :darkgray))
 
 ;;; Inspection
