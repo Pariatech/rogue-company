@@ -19,17 +19,21 @@ Jeu en Common Lisp (SBCL, raylib) modifiable à chaud par MCP.
 - `src/regiment.lisp` : régiment de bataille (stats, formation, moral, fatigue, ordres, plage `start` à `start + alive`, ennemis tués). `order-move` ; les systèmes prennent un régiment et les tableaux de soldats, pas la bataille.
 - `src/spatial-grid.lisp` : grille spatiale de cases de 1 m sur une carte carrée (`*battlefield-size*`), reconstruite à chaque tick par tri par comptage, sans allocation.
 - `src/collision.lisp` : séparation douce des soldats qui se chevauchent (`radius`, partage selon `mass`), entre tous les soldats ; poussées accumulées puis appliquées, donc indépendantes de l'ordre.
-- Monde en mètres, x vers la droite, y vers le bas ; un angle de 0 regarde vers +x. Le dessin est à 10 px/m, origine au centre de la fenêtre.
+- Monde en mètres, x vers la droite, y vers le bas ; un angle de 0 regarde vers +x. Le dessin passe par la caméra de la scène.
 - `src/scene.lisp` : protocole des scènes (`scene-update`, `scene-draw`, `scene-enter`, `scene-exit`), `game-state` et `change-scene`.
 - Une scène par fichier, chargé après `scene` et avant `game` : `src/main-menu.lisp` (« Start Battle »), `src/battle-scene.lisp`. `scene-snapshot` donne le résumé de la scène dans `game_state`.
 - `src/battle.lisp` : simulation de la bataille (`battle`, `make-battle`, `add-regiment`, `battle-tick`, `battle-digest`). Elle ne connaît ni raylib, ni l'horloge, ni le clavier, et tourne sans fenêtre dans les tests. Ses systèmes s'ajoutent dans `battle-tick`, dans l'ordre documenté.
 - `src/demo-battle.lisp` : bataille de démonstration (piquiers contre mousquetaires) et ordres au hasard.
-- `src/battle-view.lisp` : dessin des soldats, un lot rlgl de rectangles tournés et interpolés avec `clock-alpha`.
+- `src/camera.lisp` : caméra de la bataille (centre en mètres, zoom par crans en pixels par mètre). Flèches ou ZQSD/WASD, clic droit ou milieu pour glisser, molette ou Page préc./suiv. pour zoomer vers la souris. Les crans à partir de `*sprite-pixels-per-meter*` (18) sont des multiples entiers de l'échelle des sprites.
+- `src/sprites.lisp` : atlas des soldats (`assets/atlas.png` et `assets/atlas.sexp`), chargé au premier dessin, `reload-atlas` après reconstruction.
+- `scripts/build-atlas.lisp` : construit l'atlas depuis `assets/sprites/<type>/`, à la disposition des exports PixelLab (`animations/<nom>/<direction>/frame_NNN.png`, ou `rotations/<direction>.png` pour un type sans animation), 32 px, vue de trois quarts. Cinq directions stockées (est, sud-est, sud, nord-est, nord) : l'ouest se dessine en miroir. Chaque direction d'une animation : une rangée d'images, puis la rangée de leurs masques (pixels cramoisis, teints de la couleur du camp au dessin). `sbcl --non-interactive --load scripts/build-atlas.lisp`, puis `(reload-atlas)` dans le jeu. PixelLab redessine les couleurs d'une animation : la pose immobile est la première image de la marche.
+- `src/battle-view.lisp` : dessin des soldats vus par la caméra, en un lot rlgl. Sprites : direction la plus proche parmi 8 (miroir pour l'ouest), image de marche si le soldat a bougé pendant le tick (`*walk-frames-per-second*`, décalée par soldat), masque teint par-dessus, ordre de la grille spatiale (les plus bas devant), soldats hors écran sautés. Vue d'ensemble (zoom sous 18 px/m) : rectangles tournés, l'avant plus clair.
 - `src/battle-scene.lisp` : fait avancer la bataille avec une `fixed-clock`. Espace suspend ou reprend la simulation, `+` et `-` changent sa vitesse (×0,25 à ×4), `R` donne un ordre au hasard à chaque régiment, Échap ramène au menu.
 - `src/game.lisp` : `update` et `draw`, appelés par la boucle, qui délèguent à la scène courante ; `*state*`.
 - `src/engine.lisp` : boucle, pause, erreurs gardées (`guarded`), pas à pas, capture d'écran.
 - `src/jobs.lisp` : file vers le thread principal (`call-in-main-thread`).
 - `src/input.lisp` : `key-down-p` et `key-pressed-p` combinent le clavier réel et les touches simulées (une touche simulée compte comme enfoncée à sa première image).
+- La fenêtre s'ouvre en plein écran fenêtré (`*start-fullscreen*`), F11 bascule ; `*window-width*` et `*window-height*` sont relus à chaque image.
 - Échap ne ferme pas la fenêtre (`set-exit-key :key-null` dans `main`) : il sert au jeu.
 - `src/mcp-server.lisp` : serveur MCP Hunchentoot (JSON-RPC sur HTTP).
 - `src/mcp-tools.lisp` : outils `game_*`, déclarés avec `define-mcp-tool`.

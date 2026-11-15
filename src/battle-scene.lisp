@@ -4,8 +4,10 @@
 ;;; horloge à pas fixe, lit les commandes et dessine.
 ;;;
 ;;; Espace suspend ou reprend la simulation, + et - changent sa vitesse, R donne
-;;; un nouvel ordre au hasard à chaque régiment, Échap ramène au menu principal. Cette pause est propre à la bataille : celle du jeu
-;;; (console, game_control) arrête aussi la lecture du clavier.
+;;; un nouvel ordre au hasard à chaque régiment, Échap ramène au menu principal.
+;;; Cette pause est propre à la bataille : celle du jeu (console, game_control)
+;;; arrête aussi la lecture du clavier. La caméra (camera.lisp) bouge même
+;;; quand la bataille est suspendue.
 
 (defparameter *battle-speeds* '(0.25 0.5 1 2 4)
   "Vitesses proposées par + et -, en ordre croissant.")
@@ -17,6 +19,7 @@
    (orders-rng :initform (make-rng 7 99) :reader scene-orders-rng
                :documentation "Tire les ordres de R, sans toucher au générateur de la bataille.")
    (clock :initform (make-fixed-clock) :reader scene-clock)
+   (camera :initform (make-camera) :reader scene-camera)
    (resume-speed :initform 1 :accessor scene-resume-speed
                  :documentation "Vitesse retrouvée quand on reprend après Espace.")
    (tick-text :initform (make-text-buffer) :reader scene-tick-text
@@ -71,6 +74,7 @@ que s'ils changent, ce qui est rare."))
            (change-battle-speed scene -1))
          (when (key-pressed-p :key-r)
            (order-random-moves (scene-battle scene) (scene-orders-rng scene)))
+         (update-camera (scene-camera scene) dt)
          (let ((battle (scene-battle scene)))
            (dotimes (i (clock-consume (scene-clock scene) dt))
              (battle-tick battle))))))
@@ -104,9 +108,9 @@ que s'ils changent, ce qui est rare."))
 
 (defmethod scene-draw ((scene battle-scene))
   (clear-background :black)
-  (draw-soldiers (scene-battle scene) (clock-alpha (scene-clock scene)))
+  (draw-soldiers (scene-battle scene) (clock-alpha (scene-clock scene)) (scene-camera scene))
   (draw-battle-hud scene)
-  (draw-text "Espace : pause   + / - : vitesse   R : nouvel ordre   Échap : menu"
+  (draw-text "Espace : pause   + / - : vitesse   R : nouvel ordre   Flèches, ZQSD, clic droit : caméra   Molette : zoom   F11 : plein écran   Échap : menu"
              10 (- *window-height* 26) 16 :darkgray))
 
 ;;; Inspection
@@ -118,5 +122,6 @@ que s'ils changent, ce qui est rare."))
           (gethash "time_scale" snapshot) (float (clock-time-scale clock) 1d0)
           (gethash "resume_speed" snapshot) (float (scene-resume-speed scene) 1d0)
           (gethash "alpha" snapshot) (float (clock-alpha clock) 1d0)
-          (gethash "dropped_seconds" snapshot) (float (clock-dropped clock) 1d0))
+          (gethash "dropped_seconds" snapshot) (float (clock-dropped clock) 1d0)
+          (gethash "camera" snapshot) (camera-snapshot (scene-camera scene)))
     snapshot))

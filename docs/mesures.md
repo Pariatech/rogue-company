@@ -86,3 +86,14 @@ Même bataille de 10 000 piquiers, régiments espacés de 25 m et dispersés de 
 Avec l'orientation par soldat (rotation limitée, marche ou arrêt), le tick des soldats dispersés qui se démêlent passe à 965 µs, toujours sans allocation.
 
 La reconstruction de la grille parcourt ses 65 536 cases deux fois par tick, quel que soit le nombre de soldats ; c'est la première piste si elle devient gênante (ne vider que les cases occupées).
+
+## Sprites des soldats (2026-11-14)
+
+10 240 piquiers en 64 régiments, fenêtre 1920×1200, zoom 18 px/m (sprites à l'échelle 1, environ un tiers des soldats à l'écran) : sprite plus masque teint, deux quads par soldat visible, parcourus dans l'ordre de la grille.
+
+| Mesure | Résultat |
+| --- | --- |
+| Construction du lot (`draw-soldier-sprites`) | 510 µs |
+| Octets alloués | 0 |
+
+Avec la marche (8 images, miroir pour l'ouest, image choisie par soldat) : 516 µs, toujours 0 octet.

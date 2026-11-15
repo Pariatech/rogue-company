@@ -1,7 +1,11 @@
 (in-package #:rogue-company)
 
-(defparameter *window-width* 800)
-(defparameter *window-height* 600)
+(defvar *window-width* 1280
+  "Largeur de la fenêtre, en points. Relue à chaque image : la fenêtre change de
+taille en plein écran.")
+(defvar *window-height* 800)
+(defparameter *start-fullscreen* t
+  "Ouvrir en plein écran fenêtré (sans bordure, à la taille du moniteur). F11 bascule.")
 (defparameter *fixed-dt* (/ 1.0 60)
   "Pas de temps utilisé en mode pas à pas.")
 (defparameter *captures-directory*
@@ -169,6 +173,10 @@ le chemin absolu. À appeler pendant WITH-DRAWING, depuis le thread principal."
   (let ((start (get-internal-real-time))
         (consed (sb-ext:get-bytes-consed)))
     (begin-frame-timing)
+    (when (key-pressed-p :key-f11)
+      (raylib:toggle-borderless-windowed))
+    (setf *window-width* (raylib:get-screen-width)
+          *window-height* (raylib:get-screen-height))
     (timed (:jobs) (run-pending-jobs :max 8))
     ;; La console tourne aussi en pause ; après une erreur de sa part, elle attend
     ;; la correction pour ne pas la répéter à chaque image.
@@ -203,6 +211,8 @@ le chemin absolu. À appeler pendant WITH-DRAWING, depuis le thread principal."
            (raylib:set-target-fps 60)
            ;; Échap sert au jeu (retour au menu) : la fenêtre se ferme par son bouton.
            (raylib:set-exit-key :key-null)
+           (when *start-fullscreen*
+             (raylib:toggle-borderless-windowed))
            (loop until (raylib:window-should-close)
                  do (run-frame))))
     (stop-mcp-server)))

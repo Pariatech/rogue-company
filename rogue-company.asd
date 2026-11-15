@@ -28,6 +28,8 @@
                (:file "main-menu")
                (:file "battle")
                (:file "demo-battle")
+               (:file "camera")
+               (:file "sprites")
                (:file "battle-view")
                (:file "battle-scene")
                (:file "game")

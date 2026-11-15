@@ -616,11 +616,16 @@ En vue de dessus, toute l'élévation passe par la couleur et l'ombrage, et la p
 
 **Soldats :**
 
-- **Un sprite par type d'unité,** pivoté selon l'orientation du soldat, en lot `rlgl` (pas `DrawTexturePro`, voir docs/mesures.md). Pour l'instant, un rectangle à l'avant plus clair.
-- **Un atlas de textures** pour tous les sprites, afin que raylib regroupe les dessins.
-- **Animation minimale :** deux ou trois images par action au plus.
-- **Élimination hors champ :** les régiments hors de la caméra ne sont pas dessinés, par test de boîte englobante.
-- **Vue éloignée :** au dézoom, chaque régiment devient un rectangle coloré avec son drapeau.
+- **Sprites en vue de trois quarts, 8 directions,** générés par PixelLab (MCP) en 32 px. La simulation garde l'orientation continue ; le dessin prend la direction la plus proche. Un sprite par silhouette (arme principale et monture), pas par combinaison d'équipement.
+- **Couleur du camp par masque :** les sprites portent une écharpe et des culottes cramoisies ; `scripts/build-atlas.lisp` en tire un masque en niveaux de gris, dessiné par-dessus le sprite et teint de la couleur du camp. Un même sprite sert aux deux camps.
+- **Un atlas de textures** pour tous les sprites, dessinés en un seul lot `rlgl` (pas `DrawTexturePro`, voir docs/mesures.md).
+- **Ordre de dessin :** un soldat plus bas sur l'écran passe devant ; l'ordre de la grille spatiale, triée par rangées de 1 m, suffit.
+- **Caméra :** défilement et zoom par crans. À partir de 18 px/m, les crans sont des multiples entiers de l'échelle des sprites, pour un pixel art net.
+- **Animation :** la marche (8 images, gabarit `walking-8-frames`, 1 génération par direction) ; l'attaque et la mort à l'étape 9. Les directions vers l'ouest sont le miroir de celles vers l'est : 5 directions générées sur 8. Environ 20 à 30 générations par silhouette. PixelLab redessine les couleurs d'une animation : la pose immobile est la première image de la marche, pas la rotation du personnage.
+- **Marche :** dessinée quand le soldat a bougé pendant le tick, à 9 images par seconde de bataille, chaque soldat décalé dans le cycle pour que le régiment ne marche pas au pas.
+- **Élimination hors champ :** les soldats hors de l'écran ne sont pas dessinés.
+- **Vue éloignée :** sous 18 px/m, un rectangle par soldat, l'avant plus clair ; plus tard, un rectangle par régiment avec son drapeau.
+- **Fenêtre :** plein écran fenêtré, F11 bascule.
 
 **Fond de carte :**
 
