@@ -1,16 +1,17 @@
 (in-package #:rogue-company)
 
-;;; Bataille de démonstration, en attendant la partie : des piquiers et des
-;;; mousquetaires dispersés au hasard, qui rejoignent leur formation face à face.
+;;; Bataille de démonstration, en attendant la partie : deux régiments de
+;;; piquiers dispersés au hasard, qui rejoignent leur formation face à face.
+;;; Seul le piquier a un sprite pour l'instant.
 
 (defparameter *demo-scatter* 12 "Dispersion initiale des soldats, en mètres.")
 
 (defun make-demo-battle (&key (seed *battle-seed*))
   (let ((battle (make-battle :seed seed)))
     (add-regiment battle (dotation-stats :pikemen) 160
-                  :name "Piquiers" :side 0 :x -15 :y 0 :facing 0 :scatter *demo-scatter*)
-    (add-regiment battle (dotation-stats :musketeers) 120
-                  :name "Mousquetaires" :side 1 :x 15 :y 0 :facing pi :scatter *demo-scatter*)
+                  :name "Piquiers rouges" :side 0 :x -25 :y 0 :facing 0 :scatter *demo-scatter*)
+    (add-regiment battle (dotation-stats :pikemen) 160
+                  :name "Piquiers bleus" :side 1 :x 25 :y 0 :facing pi :scatter *demo-scatter*)
     battle))
 
 (defun order-random-moves (battle rng &key (half-width 30) (half-height 20))
@@ -24,3 +25,19 @@ est une commande du joueur, pas un tirage de la simulation."
                          (rng-range rng (- half-width) half-width)
                          (rng-range rng (- half-height) half-height)
                          (rng-range rng 0f0 (float (* 2 pi) 1f0))))))
+
+(defun order-charge (battle)
+  "Lance chaque régiment sur le régiment ennemi vivant le plus proche."
+  (let ((regiments (battle-regiments battle))
+        (soldiers (battle-soldiers battle)))
+    (loop for regiment across regiments
+          when (plusp (regiment-alive regiment))
+            do (multiple-value-bind (x y) (regiment-centroid regiment soldiers)
+                 (let ((nearest nil) (best most-positive-single-float))
+                   (loop for other across regiments
+                         when (and (/= (regiment-side other) (regiment-side regiment))
+                                   (plusp (regiment-alive other)))
+                           do (multiple-value-bind (ox oy) (regiment-centroid other soldiers)
+                                (let ((d (+ (expt (- ox x) 2) (expt (- oy y) 2))))
+                                  (when (< d best) (setf best d nearest other)))))
+                   (when nearest (order-attack regiment nearest)))))))

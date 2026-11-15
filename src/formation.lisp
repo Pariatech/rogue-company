@@ -2,8 +2,9 @@
 
 ;;; Formation d'un régiment : une grille d'emplacements, rangs et files, centrée
 ;;; sur un point et tournée vers une direction. Le soldat n° I de la plage du
-;;; régiment va à l'emplacement n° I : la suppression par échange garde les
-;;; vivants compacts, donc l'emplacement suit l'indice.
+;;; régiment va à l'emplacement n° I, rang par rang : les FILES premiers forment
+;;; le premier rang. Un régiment en bataille garde son front (FILES) et perd de
+;;; la profondeur : les pertes se comblent colonne par colonne (combat.lisp).
 ;;;
 ;;; Repère du monde : mètres, x vers la droite, y vers le bas comme l'écran.
 ;;; FACING est l'angle de la direction vers laquelle le front regarde, depuis +x.
@@ -14,17 +15,24 @@
    (facing :initarg :facing :accessor formation-facing :type single-float
            :documentation "Radians ; 0 regarde vers +x, pi/2 vers le bas de l'écran.")
    (ranks :initarg :ranks :accessor formation-ranks :type fixnum
-          :documentation "Profondeur voulue ; le nombre de files en découle.")
+          :documentation "Profondeur voulue ; sans FILES, le nombre de files en découle.")
+   (files :initarg :files :initform nil :accessor formation-fixed-files
+          :documentation "Front fixé, ou NIL pour le déduire de RANKS.")
    (spacing :initarg :spacing :accessor formation-spacing :type single-float
             :documentation "Écart entre files et entre rangs, en mètres.")))
 
-(defun make-formation (&key (x 0) (y 0) (facing 0) (ranks 4) (spacing 1))
+(defun make-formation (&key (x 0) (y 0) (facing 0) (ranks 4) (spacing 1) files)
   (make-instance 'formation :x (float x 1f0) :y (float y 1f0) :facing (float facing 1f0)
-                            :ranks (max 1 ranks) :spacing (float spacing 1f0)))
+                            :ranks (max 1 ranks) :spacing (float spacing 1f0)
+                            :files (and files (max 1 files))))
 
 (defun formation-files (formation count)
-  "Files pour COUNT soldats : le front s'élargit pour tenir la profondeur voulue."
-  (max 1 (ceiling count (formation-ranks formation))))
+  "Files pour COUNT soldats : le front fixé s'il y en a un (moins large si les
+soldats manquent), sinon assez de files pour tenir la profondeur voulue."
+  (let ((files (formation-fixed-files formation)))
+    (if files
+        (max 1 (min files count))
+        (max 1 (ceiling count (formation-ranks formation))))))
 
 (defun place-formation (formation count slot-x slot-y start)
   "Écrit dans SLOT-X et SLOT-Y, à partir de START, les emplacements des COUNT

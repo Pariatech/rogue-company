@@ -4,7 +4,8 @@
 ;;; horloge à pas fixe, lit les commandes et dessine.
 ;;;
 ;;; Espace suspend ou reprend la simulation, + et - changent sa vitesse, R donne
-;;; un nouvel ordre au hasard à chaque régiment, Échap ramène au menu principal.
+;;; un nouvel ordre au hasard à chaque régiment, C lance chaque régiment sur
+;;; l'ennemi le plus proche, Échap ramène au menu principal.
 ;;; Cette pause est propre à la bataille : celle du jeu (console, game_control)
 ;;; arrête aussi la lecture du clavier. La caméra (camera.lisp) bouge même
 ;;; quand la bataille est suspendue.
@@ -74,6 +75,8 @@ que s'ils changent, ce qui est rare."))
            (change-battle-speed scene -1))
          (when (key-pressed-p :key-r)
            (order-random-moves (scene-battle scene) (scene-orders-rng scene)))
+         (when (key-pressed-p :key-c)
+           (order-charge (scene-battle scene)))
          (update-camera (scene-camera scene) dt)
          (let ((battle (scene-battle scene)))
            (dotimes (i (clock-consume (scene-clock scene) dt))
@@ -110,7 +113,7 @@ que s'ils changent, ce qui est rare."))
   (clear-background :black)
   (draw-soldiers (scene-battle scene) (clock-alpha (scene-clock scene)) (scene-camera scene))
   (draw-battle-hud scene)
-  (draw-text "Espace : pause   + / - : vitesse   R : nouvel ordre   Flèches, ZQSD, clic droit : caméra   Molette : zoom   F11 : plein écran   Échap : menu"
+  (draw-text "Espace : pause   + / - : vitesse   R : nouvel ordre   C : charge   Flèches, ZQSD, clic droit : caméra   Molette : zoom   F11 : plein écran   Échap : menu"
              10 (- *window-height* 26) 16 :darkgray))
 
 ;;; Inspection

@@ -97,3 +97,14 @@ La reconstruction de la grille parcourt ses 65 536 cases deux fois par tick, que
 | Octets alloués | 0 |
 
 Avec la marche (8 images, miroir pour l'ouest, image choisie par soldat) : 516 µs, toujours 0 octet.
+
+## Combat de mêlée (2026-11-14)
+
+Deux régiments de 500 piquiers sur 8 rangs, au contact après une charge (environ 185 soldats engagés de chaque côté) : engagement, ciblage par la grille, coups et morts compris.
+
+| Mesure | Résultat |
+| --- | --- |
+| Tick complet | 470 µs |
+| Octets alloués sur 60 ticks | 0 |
+
+Rythme des pertes, deux régiments de 160 au contact : environ 0,7 mort par seconde de chaque côté, la moitié d'un régiment en deux minutes. Sans moral, rien n'arrête encore le combat.

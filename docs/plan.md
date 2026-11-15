@@ -236,9 +236,18 @@ Le régiment reçoit ses stats effectives et ses traits à sa création (homme +
 
 Écrire la grille spatiale, le combat en deux phases, la poussée et le moral, décrits dans la section Simulation.
 
+Fait (parties A et B) :
+
+- **Engagement :** `order-attack` avance la formation vers le centre de l'ennemi, front tourné vers lui. Un soldat dont la cible est à sa distance d'arrêt (portée minimale de l'arme principale + 0,25 m, soit 1,75 m pour une pique) s'arrête et lui fait face. Quand un quart des files y est, le régiment se fige sur la position de son premier rang. Sans contact pendant 2 s, il reprend son avance. Les régiments ne s'interpénètrent plus, et les trois premiers rangs de piques frappent ensemble.
+- **Ciblage :** par régiment, seulement si un régiment ennemi est assez proche (boîtes englobantes). Portées mesurées de bord à bord. Le premier coup d'un soldat part au hasard dans sa période de recharge, pour que le rang ne frappe pas d'un bloc.
+- **Morts :** retirés à la fin du tick. Le régiment garde son front et perd de la profondeur : le soldat derrière le mort avance d'un rang, et ainsi de suite dans la file ; le trou arrivé à l'avant-dernier rang est comblé par le soldat du dernier rang le plus proche, puis le dernier rang se resserre. Crédités au régiment du dernier soldat qui a blessé la victime.
+- **Démo :** deux régiments de piquiers ; `C` lance chaque régiment sur l'ennemi le plus proche.
+
+Reste la partie C (poussée et moral).
+
 **Validation :**
 
-- Deux blocs de 500 piquiers se rencontrent à 60 images par seconde, avec une marge mesurée par `game_benchmark`.
+- Deux blocs de 500 piquiers se rencontrent à 60 images par seconde, avec une marge mesurée par `game_benchmark`. Mesuré : 0,47 ms par tick au contact, sans allocation.
 - Deux exécutions avec la même graine donnent le même résultat : un test compare un hachage de l'état après 1 000 ticks.
 
 ### Étape 10 : terrain et mode topographique

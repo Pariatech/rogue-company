@@ -53,7 +53,7 @@
 (test demo-has-two-regiments
   (let ((b (demo)))
     (is (= 2 (length (regiments b))))
-    (is (= 280 (rogue-company::soldiers-count (rogue-company::battle-soldiers b))))
+    (is (= 320 (rogue-company::soldiers-count (rogue-company::battle-soldiers b))))
     (is (equal '(0 1) (mapcar #'rogue-company::regiment-side (regiments b))))
     (is (> (worst-slot-distance b) 1) "les soldats partent dispersés")))
 
@@ -66,7 +66,7 @@
   (let* ((b (run-ticks (demo) (* 30 30)))
          (pikes (first (regiments b)))
          (soldiers (rogue-company::battle-soldiers b)))
-    ;; Loin des mousquetaires (x de 13 à 17) : avec la collision, ils bloqueraient.
+    ;; Loin des piquiers bleus (x de 21,5 à 28,5) : avec la collision, ils bloqueraient.
     (rogue-company::order-move pikes -10 10 (/ pi 2))
     (run-ticks b 1)
     (is (> (worst-slot-distance b) 1) "les emplacements ont bougé")

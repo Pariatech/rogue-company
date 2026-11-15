@@ -41,7 +41,9 @@ la bataille : il fixe jusqu'où chercher les voisins."
       (let* ((xi (aref xs i)) (yi (aref ys i))
              (ri (aref radii i)) (mi (aref masses i))
              (cell (aref soldier-cell i))
-             (row (floor cell columns))
+             ;; Un mort (case -1) ne pousse personne : sa ligne et ses colonnes
+             ;; sont vides, la boucle ne trouve aucun voisin.
+             (row (if (< cell 0) -1000 (floor cell columns)))
              (column (- cell (* row columns)))
              ;; Cases à parcourir de chaque côté pour trouver tout voisin à moins
              ;; de RI + MAX-RADIUS.

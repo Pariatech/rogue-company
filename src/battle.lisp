@@ -43,6 +43,7 @@ SCATTER mètres de son emplacement, sur chaque axe. Renvoie le régiment."
          (regiment (make-instance 'regiment
                                   :index (length regiments) :name name :side side :stats stats
                                   :formation (make-formation :x x :y y :facing facing :ranks ranks
+                                                             :files (ceiling count (max 1 ranks))
                                                              :spacing (stats-spacing stats))
                                   :morale (stats-morale stats)
                                   :start start :capacity count :alive count))
@@ -65,6 +66,14 @@ SCATTER mètres de son emplacement, sur chaque axe. Renvoie le régiment."
                    (aref (soldiers-facing soldiers) i) (wrap-angle (float facing 1f0))
                    (aref (soldiers-prev-facing soldiers) i) (aref (soldiers-facing soldiers) i)
                    (aref (soldiers-walking soldiers) i) 0
+                   (aref (soldiers-side soldiers) i) side
+                   (aref (soldiers-target soldiers) i) -1
+                   (aref (soldiers-weapon soldiers) i) 0
+                   (aref (soldiers-switch-timer soldiers) i) 0
+                   (aref (soldiers-cooldown soldiers) i) -1
+                   (aref (soldiers-calm soldiers) i) 0
+                   (aref (soldiers-last-attacker soldiers) i) -1
+                   (aref (soldiers-damage soldiers) i) 0f0
                    (aref (soldiers-prev-x soldiers) i) (aref (soldiers-x soldiers) i)
                    (aref (soldiers-prev-y soldiers) i) (aref (soldiers-y soldiers) i)))
     regiment))
@@ -73,19 +82,27 @@ SCATTER mètres de son emplacement, sur chaque axe. Renvoie le régiment."
   "Avance BATTLE d'un tick. Les systèmes s'exécutent toujours dans cet ordre,
 et s'ajoutent ici au fil des étapes :
   1. copie des positions courantes dans les positions précédentes ;
-  2. régiments : ordres, formation, moral (chacun un tick sur plusieurs) ;
-  3. soldats : déplacement vers leur emplacement, puis grille spatiale et
-     collisions ;
-  4. combat : ciblage en lecture seule, puis dégâts appliqués en séquence."
+  2. régiments : engagement (avance ou arrêt au contact), puis emplacements ;
+  3. soldats : déplacement vers leur emplacement (ou face à leur cible), puis
+     grille spatiale et collisions ;
+  4. combat (combat.lisp) : ciblage par régiment, coups en séquence, puis
+     dégâts appliqués et morts retirés."
   (let ((soldiers (battle-soldiers battle))
         (regiments (battle-regiments battle)))
     (copy-previous-positions soldiers)
     (loop for regiment across regiments
-          do (update-regiment-slots regiment soldiers))
+          do (update-engagement battle regiment)
+             (update-regiment-slots regiment soldiers))
     (loop for regiment across regiments
           do (move-regiment regiment soldiers))
     (rebuild-grid (battle-grid battle) soldiers)
-    (resolve-collisions soldiers (battle-grid battle) (battle-max-radius battle)))
+    (resolve-collisions soldiers (battle-grid battle) (battle-max-radius battle))
+    (loop for regiment across regiments
+          do (update-regiment-bounds regiment soldiers))
+    (loop for regiment across regiments
+          do (acquire-targets battle regiment))
+    (strike battle)
+    (apply-damage battle))
   (incf (battle-tick-count battle))
   battle)
 

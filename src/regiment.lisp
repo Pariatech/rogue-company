@@ -19,7 +19,20 @@
    (fatigue :initform 0f0 :accessor regiment-fatigue :type single-float
             :documentation "0 frais, 1 épuisé. Reste à 0 jusqu'à la course et au combat.")
    (orders :initform nil :accessor regiment-orders
-           :documentation "Ordre en cours : (:move x y facing) ou NIL.")
+           :documentation "Ordre en cours : (:move x y facing), (:attack régiment) ou NIL.")
+   (engaged :initform 0 :accessor regiment-engaged :type fixnum
+            :documentation "Soldats qui avaient une cible au dernier tick.")
+   (closed :initform 0 :accessor regiment-closed :type fixnum
+           :documentation "Soldats dont la cible était à la distance d'arrêt.")
+   (holding :initform nil :accessor regiment-holding-p
+            :documentation "Au contact : la formation ne bouge plus.")
+   (contact-lost :initform 0 :accessor regiment-contact-lost :type fixnum
+                 :documentation "Ticks sans aucun soldat engagé, pendant un ordre d'attaque.")
+   (min-x :initform 0f0 :accessor regiment-min-x :type single-float
+          :documentation "Boîte englobante des soldats vivants, recalculée à chaque tick.")
+   (min-y :initform 0f0 :accessor regiment-min-y :type single-float)
+   (max-x :initform 0f0 :accessor regiment-max-x :type single-float)
+   (max-y :initform 0f0 :accessor regiment-max-y :type single-float)
    (start :initarg :start :reader regiment-start :type fixnum
           :documentation "Premier indice dans les tableaux de soldats.")
    (capacity :initarg :capacity :reader regiment-capacity :type fixnum)
@@ -43,6 +56,7 @@ se recalculent au tick suivant."
           (formation-y formation) (float y 1f0)
           (formation-facing formation) (float facing 1f0)
           (regiment-orders regiment) (list :move (float x 1f0) (float y 1f0) (float facing 1f0))
+          (regiment-holding-p regiment) nil
           (regiment-slots-dirty-p regiment) t))
   regiment)
 
@@ -56,13 +70,26 @@ se recalculent au tick suivant."
                      (regiment-start regiment))
     (setf (regiment-slots-dirty-p regiment) nil)))
 
+(defparameter *hold-margin* 0.25f0
+  "Marge ajoutée à la portée minimale de l'arme principale pour la distance
+d'arrêt au contact.")
+
+(defun regiment-hold-distance (regiment)
+  "Distance de bord à bord où un soldat s'arrête devant sa cible : juste au-delà
+de la portée minimale de son arme principale de mêlée. Avec une pique (1,5 m),
+les trois ou quatre premiers rangs frappent ensemble."
+  (let ((primary (stats-primary (regiment-stats regiment))))
+    (+ *hold-margin*
+       (if (eq (attack-kind primary) :melee) (attack-min-reach primary) 0f0))))
+
 (defun move-regiment (regiment soldiers)
   "Avance les soldats de REGIMENT vers leur emplacement, au pas de marche."
   (let ((stats (regiment-stats regiment)))
     (move-toward-slots soldiers (regiment-start regiment) (regiment-end regiment)
                        (/ (stats-speed stats) #.(float +ticks-per-second+ 1f0))
                        (formation-facing (regiment-formation regiment))
-                       (/ (stats-turn-rate stats) #.(float +ticks-per-second+ 1f0)))))
+                       (/ (stats-turn-rate stats) #.(float +ticks-per-second+ 1f0))
+                       (regiment-hold-distance regiment))))
 
 ;;; Inspection
 
@@ -85,11 +112,14 @@ se recalculent au tick suivant."
           "alive" (regiment-alive regiment)
           "capacity" (regiment-capacity regiment)
           "start" (regiment-start regiment)
-          "orders" (if orders
-                       (destructuring-bind (kind x y facing) orders
-                         (ht "kind" (string-downcase kind) "x" (json-float x) "y" (json-float y)
-                             "facing_degrees" (json-float (* facing (/ 180 pi)))))
-                       nil)
+          "orders" (case (first orders)
+                     (:move (destructuring-bind (x y facing) (rest orders)
+                              (ht "kind" "move" "x" (json-float x) "y" (json-float y)
+                                  "facing_degrees" (json-float (* facing (/ 180 pi))))))
+                     (:attack (ht "kind" "attack" "regiment" (second orders)))
+                     (t nil))
+          "engaged" (regiment-engaged regiment)
+          "holding" (if (regiment-holding-p regiment) t 'yason:false)
           "formation" (formation-snapshot (regiment-formation regiment) (regiment-alive regiment))
           "slot_distance_mean" (json-float mean)
           "slot_distance_max" (json-float worst)
