@@ -24,7 +24,11 @@ compté depuis le centre de la case : les images y sont centrées.")
    (width :initarg :width :reader atlas-width)
    (height :initarg :height :reader atlas-height)
    (units :initarg :units :reader atlas-units
-          :documentation "Plist type -> plist animation -> (rangée . images).")))
+          :documentation "Plist type -> plist animation -> (rangée images sommets).
+SOMMETS : tableau de fixnums, pour chaque direction stockée puis chaque image,
+x et y du pixel le plus haut depuis le centre de la case.")
+   (overlays :initarg :overlays :reader atlas-overlays
+             :documentation "Plist surimpression -> (rangée images largeur hauteur).")))
 
 (defvar *atlas* nil "Atlas chargé, ou NIL avant le premier dessin.")
 
@@ -53,8 +57,21 @@ et le format de sa description a pu changer.")
                                 append (list unit
                                              (loop for (name . properties) in animations
                                                    append (list name
-                                                                (cons (getf properties :row)
-                                                                      (getf properties :frames)))))))))
+                                                                (list (getf properties :row)
+                                                                      (getf properties :frames)
+                                                                      (tips-array (getf properties :tips)))))))
+                   :overlays (loop for (name . properties) in (getf description :overlays)
+                                   append (list name
+                                                (list (getf properties :row)
+                                                      (getf properties :frames)
+                                                      (getf properties :width)
+                                                      (getf properties :height)))))))
+
+(defun tips-array (tips)
+  "Les sommets d'une animation, par direction puis par image, à plat : x et y."
+  (coerce (loop for frames in tips
+                append (loop for (x y) in frames append (list x y)))
+          '(simple-array fixnum (*))))
 
 (defun ensure-atlas ()
   "L'atlas, chargé au premier appel et relu après un rechargement de ce
@@ -73,19 +90,24 @@ fichier. Thread principal seulement."
   (ensure-atlas))
 
 (defun atlas-animation (atlas unit animation)
-  "Première rangée et nombre d'images de l'ANIMATION de UNIT, ou NIL."
+  "Première rangée, nombre d'images et sommets de l'ANIMATION de UNIT, ou NIL."
   (let ((entry (getf (getf (atlas-units atlas) unit) animation)))
-    (when entry (values (car entry) (cdr entry)))))
+    (when entry (values-list entry))))
 
-(defun atlas-walk (atlas unit)
-  "Rangée et nombre d'images de la marche de UNIT. Sans marche, la pose
-immobile : une seule image."
-  (multiple-value-bind (row frames) (atlas-animation atlas unit :walk)
+(defun atlas-overlay (atlas name)
+  "Rangée, nombre d'images, largeur et hauteur de la surimpression NAME, ou NIL."
+  (values-list (getf (atlas-overlays atlas) name)))
+
+(defun atlas-walk (atlas unit &optional fallback)
+  "Rangée, nombre d'images et sommets de la marche de UNIT. Sans marche, la pose
+immobile : une seule image. Sans sprite pour UNIT, ceux de FALLBACK."
+  (multiple-value-bind (row frames tips) (atlas-animation atlas unit :walk)
     (if row
-        (values row frames)
-        (multiple-value-bind (row frames) (atlas-animation atlas unit :idle)
-          (unless row (error "Pas de sprite ~s dans l'atlas" unit))
-          (values row frames)))))
+        (values row frames tips)
+        (multiple-value-bind (row frames tips) (atlas-animation atlas unit :idle)
+          (cond (row (values row frames tips))
+                (fallback (atlas-walk atlas fallback))
+                (t (error "Pas de sprite ~s dans l'atlas" unit)))))))
 
 (defparameter *direction-strips* #(0 1 2 1 0 3 4 3)
   "Pour chacune des 8 directions (est, sud-est, sud, sud-ouest, ouest,

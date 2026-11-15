@@ -249,7 +249,8 @@ Fait (partie C) :
 - **Moral :** chaque mort coûte 1 point par pour cent de l'effectif de départ, multiplié par 1,5 − discipline. Hors du contact, il remonte de 0,5 point par seconde jusqu'à sa valeur de départ.
 - **Débandade :** sous 20, le régiment fuit en courant à 150 m à l'opposé de l'ennemi, ses emplacements dispersés, et ne frappe plus. Le vainqueur s'arrête au lieu de poursuivre. Deux régiments de 160 piquiers égaux : un se débande après environ 53 s de mêlée, avec 40 % de pertes de chaque côté.
 - **Animation d'attaque :** un coup de pique en 6 images (PixelLab, mode libre, 5 générations), joué pendant 0,6 s à partir du tick du coup. Au sud et au nord, la pique part de côté plutôt que vers l'écran ou vers le fond : à refaire avec une consigne par direction si ça gêne.
-- **Pas encore :** flancs exposés, charges, ralliement, fatigue, porteur d'étendard qui montre le moral (voir Rendu).
+- **Porteur d'étendard (affichage) :** voir Rendu. Il ne frappe pas ; un régiment d'un seul homme n'en a pas.
+- **Pas encore :** flancs exposés, charges, ralliement, fatigue.
 
 **Validation :**
 
@@ -640,7 +641,7 @@ En vue de dessus, toute l'élévation passe par la couleur et l'ombrage, et la p
 - **Marche :** dessinée quand le soldat a bougé pendant le tick, à 9 images par seconde de bataille, chaque soldat décalé dans le cycle pour que le régiment ne marche pas au pas.
 - **Élimination hors champ :** les soldats hors de l'écran ne sont pas dessinés.
 - **Vue éloignée :** sous 18 px/m, un rectangle par soldat, l'avant plus clair ; plus tard, un rectangle par régiment avec son drapeau.
-- **Porteur d'étendard, pour lire le moral sans interface :** chaque régiment a un porteur au centre de son deuxième rang, qui ne gêne pas les piques du premier. Son drapeau, aux couleurs du camp par le même masque que les soldats, s'abîme avec le moral, en part du moral de départ : intact au-dessus de 75 %, troué de 50 à 75 %, en lambeaux de 25 à 50 %, penché ou à terre en débandade (seuils à régler). Le drapeau se dessine aussi en vue éloignée. Sprites : le porteur est un personnage PixelLab avec sa marche (environ 6 générations) ; le drapeau et ses trois dégradations sont dessinés avec `pixelart_workbench`, sans génération, en sprite séparé posé sur le porteur.
+- **Porteur d'étendard, pour lire le moral sans interface :** chaque régiment a un porteur au centre de son quatrième rang (`*bearer-rank*`), hors de portée des piques ennemies, ou du dernier rang s'il en reste moins. Son drapeau (23 × 17 px, pour se voir de loin), aux couleurs du camp par le même masque que les soldats, s'abîme avec le moral, mesuré entre le seuil de débandade (20) et le moral de départ : intact sur le tiers haut, troué sur le tiers du milieu, en lambeaux sur le tiers bas, pendant le long de la hampe en débandade (`*flag-morale-steps*`). Pour un moral de départ de 60 : intact au-dessus de 47, troué jusqu'à 33. Le drapeau se dessine aussi en vue éloignée. Sprites : le porteur est un personnage PixelLab avec sa marche (8 générations : 2 pour le personnage, 5 pour la marche, 1 pour refaire le nord, où le gabarit avait perdu la hampe) ; le drapeau et ses trois dégradations sont dessinés par `scripts/draw-flags.lisp`, sans génération, en sprite séparé accroché au sommet de la hampe, image par image. Fait.
   - **Pour l'instant, affichage seulement :** le porteur ne combat pas et ne meurt pas.
   - **Plus tard, avec les flancs et le ralliement :** porteur mortel. L'étendard tombe, le régiment perd un gros coup de moral, puis un voisin le relève. Il deviendrait une cible, et une « garde de l'étendard » pourrait s'acheter en boutique.
 - **Fenêtre :** plein écran fenêtré, F11 bascule.

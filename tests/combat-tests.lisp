@@ -52,6 +52,20 @@ frappé reste très loin dans le passé."
     (let ((tick (soldier-value b #'rogue-company::soldiers-strike-tick 0)))
       (is (<= 0 tick (rogue-company::battle-tick-count b)) "il a frappé en moins de 5 s"))))
 
+(test bearer-is-in-the-middle-of-the-fourth-rank
+  "160 piquiers sur 20 files : le porteur est le 11e du quatrième rang. Avec
+moins de rangs, il est au milieu du dernier ; un homme seul n'en a pas."
+  (let* ((b (demo))
+         (r (first (regiments b)))
+         (start (rogue-company::regiment-start r)))
+    (is (= (+ start 60 10) (rogue-company::regiment-bearer r)))
+    (setf (rogue-company::regiment-alive r) 45)
+    (is (= (+ start 40 2) (rogue-company::regiment-bearer r)) "3e rang, 5 hommes")
+    (setf (rogue-company::regiment-alive r) 5)
+    (is (= (+ start 2) (rogue-company::regiment-bearer r)))
+    (setf (rogue-company::regiment-alive r) 1)
+    (is (= -1 (rogue-company::regiment-bearer r)))))
+
 (defun charged-demo (&key (seed rogue-company::*battle-seed*) (seconds 60))
   (let ((b (run-ticks (demo :seed seed) (* 30 30))))
     (rogue-company::order-charge b)
@@ -73,6 +87,29 @@ rangs restent au contact : les fronts sont à moins de 3 m."
     (is-true (every (lambda (r) (< (rogue-company::regiment-depth r) 8)) (regiments b))
              "des rangs perdus")
     (is (< (abs (- (second fronts) (first fronts))) 3))))
+
+(test bearer-never-strikes
+  "Pendant toute une mêlée, le porteur d'étendard ne frappe jamais. Vérifié aux
+ticks sans mort dans son régiment : une mort décale les soldats, et celui qui
+vient de frapper peut glisser à la place du porteur."
+  (let* ((b (run-ticks (demo) (* 30 30)))
+         (checked 0)
+         (struck 0))
+    (rogue-company::order-charge b)
+    (loop repeat (* 30 60)
+          do (let ((before (loop for r in (regiments b)
+                                 collect (cons (rogue-company::regiment-bearer r)
+                                               (rogue-company::regiment-alive r)))))
+               (rogue-company::battle-tick b)
+               (loop for r in (regiments b)
+                     for (bearer . alive) in before
+                     when (and (>= bearer 0) (= alive (rogue-company::regiment-alive r)))
+                       do (incf checked)
+                          (when (= (soldier-value b #'rogue-company::soldiers-strike-tick bearer)
+                                   (1- (rogue-company::battle-tick-count b)))
+                            (incf struck)))))
+    (is (> checked 1000))
+    (is (= 0 struck))))
 
 (test charge-makes-casualties
   (let* ((b (charged-demo))

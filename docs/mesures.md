@@ -98,6 +98,8 @@ La reconstruction de la grille parcourt ses 65 536 cases deux fois par tick, que
 
 Avec la marche (8 images, miroir pour l'ouest, image choisie par soldat) : 516 µs, toujours 0 octet.
 
+Avec l'attaque et le porteur d'étendard (2026-11-15), mesuré par `game_eval` (20 appels, hors de la boucle du jeu) : 650 µs, 0 octet ; le dessin des 64 drapeaux, 0 octet. Comparer chaque soldat à `regiment-bearer` coûtait 44 ns par soldat, soit 0,44 ms pour 10 000 : les porteurs sont calculés une fois par image dans un tampon (`*bearers*`).
+
 ## Combat de mêlée (2026-11-14)
 
 Deux régiments de 500 piquiers sur 8 rangs, au contact après une charge (environ 185 soldats engagés de chaque côté) : engagement, ciblage par la grille, coups et morts compris.

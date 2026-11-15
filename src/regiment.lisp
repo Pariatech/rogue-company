@@ -85,6 +85,26 @@ les trois ou quatre premiers rangs frappent ensemble."
     (+ *hold-margin*
        (if (eq (attack-kind primary) :melee) (attack-min-reach primary) 0f0))))
 
+(defparameter *bearer-rank* 3
+  "Rang du porteur d'étendard, compté depuis 0 au front : le quatrième, hors de
+portée des piques ennemies.")
+
+(defun regiment-bearer (regiment)
+  "Indice du porteur d'étendard : le soldat au centre du rang *BEARER-RANK*, ou
+du dernier rang s'il en reste moins ; -1 pour un homme seul, qui se bat, ou sans
+survivant. Il ne frappe pas. Quand il meurt, le soldat qui prend sa place prend
+aussi l'étendard."
+  (let ((alive (regiment-alive regiment))
+        (start (regiment-start regiment)))
+    (declare (type fixnum alive start))
+    (if (> alive 1)
+        (let* ((files (formation-files (regiment-formation regiment) alive))
+               (rank (min (the fixnum *bearer-rank*) (1- (ceiling alive files))))
+               (in-rank (min files (- alive (* rank files)))))
+          (declare (type fixnum files rank in-rank))
+          (+ start (* rank files) (floor in-rank 2)))
+        -1)))
+
 (defun move-regiment (regiment soldiers)
   "Avance les soldats de REGIMENT vers leur emplacement, au pas de marche."
   (let ((stats (regiment-stats regiment)))

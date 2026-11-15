@@ -298,11 +298,13 @@ indices, avec le générateur de la bataille : la bataille se rejoue."
     (loop for regiment across regiments
           do (let* ((stats (regiment-stats regiment))
                     (skill (stats-melee-skill stats))
-                    (index (regiment-index regiment)))
-               (declare (type single-float skill) (type fixnum index))
+                    (index (regiment-index regiment))
+                    (bearer (regiment-bearer regiment)))
+               (declare (type single-float skill) (type fixnum index bearer))
                (loop for i of-type fixnum from (regiment-start regiment) below (regiment-end regiment)
                      do (let ((target (aref targets i)))
-                          (when (and (>= target 0) (zerop (aref switch-timers i))
+                          ;; Le porteur d'étendard ne frappe pas.
+                          (when (and (>= target 0) (/= i bearer) (zerop (aref switch-timers i))
                                      (plusp (aref hps target)))
                             (let* ((attack (if (zerop (aref weapons i))
                                                (stats-primary stats)
