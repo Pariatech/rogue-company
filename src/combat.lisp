@@ -284,11 +284,14 @@ indices, avec le générateur de la bataille : la bataille se rejoue."
          (hps (soldiers-hp soldiers))
          (damages (soldiers-damage soldiers))
          (last-attackers (soldiers-last-attacker soldiers))
+         (strike-ticks (soldiers-strike-tick soldiers))
+         (tick (battle-tick-count battle))
          (soldier-regiments (soldiers-regiment soldiers))
          (min-chance *min-hit-chance*)
          (max-chance *max-hit-chance*))
     (declare (type fixnum-array targets weapons switch-timers cooldowns last-attackers
-                   soldier-regiments)
+                   strike-ticks soldier-regiments)
+             (type fixnum tick)
              (type float-array hps damages)
              (type vector regiments)
              (type single-float min-chance max-chance))
@@ -311,7 +314,8 @@ indices, avec le générateur de la bataille : la bataille se rejoue."
                                 ;; la période, pour que tout le rang ne frappe pas ensemble.
                                 (-1 (setf (aref cooldowns i) (rng-below rng cooldown)))
                                 (0
-                                 (setf (aref cooldowns i) cooldown)
+                                 (setf (aref cooldowns i) cooldown
+                                       (aref strike-ticks i) tick)
                                  (let* ((defender (regiment-stats
                                                    (aref regiments (aref soldier-regiments target))))
                                         (chance (max min-chance
@@ -400,11 +404,33 @@ croissant de la plage, qui revérifie l'indice I, voit tous les morts."
         (decf (aref hps i) (aref damages i))
         (setf (aref damages i) 0f0)))
     (loop for regiment across regiments
-          do (let ((i (regiment-start regiment)))
+          do (let ((i (regiment-start regiment))
+                   (ranks (regiment-depth regiment)))
                (loop while (< i (regiment-end regiment))
                      do (if (plusp (aref hps i))
                             (incf i)
                             (let ((killer (aref (soldiers-last-attacker soldiers) i)))
                               (when (>= killer 0)
                                 (incf (regiment-kills (aref regiments killer))))
-                              (remove-soldier regiment soldiers i))))))))
+                              (remove-soldier regiment soldiers i))))
+               (keep-front regiment ranks)))))
+
+(defun regiment-depth (regiment)
+  "Nombre de rangs de REGIMENT, le dernier compris même incomplet."
+  (let ((alive (regiment-alive regiment)))
+    (if (plusp alive)
+        (ceiling alive (formation-files (regiment-formation regiment) alive))
+        0)))
+
+(defun keep-front (regiment ranks-before)
+  "Le centre de la formation est au milieu de sa profondeur : quand REGIMENT
+perd des rangs, il avance d'un demi-espacement par rang perdu, pour que le
+premier rang reste au contact au lieu de reculer."
+  (let ((lost (- ranks-before (regiment-depth regiment))))
+    (when (and (plusp lost) (plusp (regiment-alive regiment)))
+      (let* ((formation (regiment-formation regiment))
+             (step (* 0.5f0 (formation-spacing formation) lost))
+             (facing (formation-facing formation)))
+        (incf (formation-x formation) (* step (cos facing)))
+        (incf (formation-y formation) (* step (sin facing)))
+        (setf (regiment-slots-dirty-p regiment) t)))))

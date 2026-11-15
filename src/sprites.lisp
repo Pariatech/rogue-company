@@ -13,9 +13,10 @@
 
 (defparameter *atlas-directory* (asdf:system-relative-pathname :rogue-company "assets/"))
 
-(defparameter *sprite-foot-x* 16f0
-  "Pixel du sprite posé sur la position du soldat : le milieu, entre les pieds.")
-(defparameter *sprite-foot-y* 28f0)
+(defparameter *sprite-foot-x* 0f0
+  "Pixel du sprite posé sur la position du soldat, le milieu entre les pieds,
+compté depuis le centre de la case : les images y sont centrées.")
+(defparameter *sprite-foot-y* 12f0)
 
 (defclass atlas ()
   ((texture :initarg :texture :reader atlas-texture)

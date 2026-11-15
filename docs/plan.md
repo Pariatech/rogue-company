@@ -240,15 +240,16 @@ Fait (parties A et B) :
 
 - **Engagement :** `order-attack` avance la formation vers le centre de l'ennemi, front tourné vers lui. Un soldat dont la cible est à sa distance d'arrêt (portée minimale de l'arme principale + 0,25 m, soit 1,75 m pour une pique) s'arrête et lui fait face. Quand un quart des files y est, le régiment se fige sur la position de son premier rang. Sans contact pendant 2 s, il reprend son avance. Les régiments ne s'interpénètrent plus, et les trois premiers rangs de piques frappent ensemble.
 - **Ciblage :** par régiment, seulement si un régiment ennemi est assez proche (boîtes englobantes). Portées mesurées de bord à bord. Le premier coup d'un soldat part au hasard dans sa période de recharge, pour que le rang ne frappe pas d'un bloc.
-- **Morts :** retirés à la fin du tick. Le régiment garde son front et perd de la profondeur : le soldat derrière le mort avance d'un rang, et ainsi de suite dans la file ; le trou arrivé à l'avant-dernier rang est comblé par le soldat du dernier rang le plus proche, puis le dernier rang se resserre. Crédités au régiment du dernier soldat qui a blessé la victime.
-- **Démo :** deux régiments de piquiers ; `C` lance chaque régiment sur l'ennemi le plus proche.
+- **Morts :** retirés à la fin du tick. Le régiment garde son front et perd de la profondeur ; quand il perd un rang, sa formation avance d'un demi-espacement, pour que son premier rang reste au contact au lieu de reculer : le soldat derrière le mort avance d'un rang, et ainsi de suite dans la file ; le trou arrivé à l'avant-dernier rang est comblé par le soldat du dernier rang le plus proche, puis le dernier rang se resserre. Crédités au régiment du dernier soldat qui a blessé la victime.
+- **Démo :** deux régiments de piquiers, en formation dès le départ (les tests gardent la dispersion de 12 m) ; `C` lance chaque régiment sur l'ennemi le plus proche.
 
 Fait (partie C) :
 
 - **Poussée :** à chaque tick, deux régiments au contact comparent soldats engagés × masse × moral. Le plus faible recule, jusqu'à 0,5 m/s selon l'écart, et perd jusqu'à 2 points de moral par seconde ; le plus fort avance sa formation, et ses soldats suivent dès que l'ennemi sort de leur distance d'arrêt.
 - **Moral :** chaque mort coûte 1 point par pour cent de l'effectif de départ, multiplié par 1,5 − discipline. Hors du contact, il remonte de 0,5 point par seconde jusqu'à sa valeur de départ.
-- **Débandade :** sous 20, le régiment fuit en courant à 150 m à l'opposé de l'ennemi, ses emplacements dispersés, et ne frappe plus. Le vainqueur s'arrête au lieu de poursuivre. Deux régiments de 160 piquiers égaux : un se débande après environ 85 s de mêlée, avec un tiers de pertes.
-- **Pas encore :** flancs exposés, charges, ralliement, fatigue.
+- **Débandade :** sous 20, le régiment fuit en courant à 150 m à l'opposé de l'ennemi, ses emplacements dispersés, et ne frappe plus. Le vainqueur s'arrête au lieu de poursuivre. Deux régiments de 160 piquiers égaux : un se débande après environ 53 s de mêlée, avec 40 % de pertes de chaque côté.
+- **Animation d'attaque :** un coup de pique en 6 images (PixelLab, mode libre, 5 générations), joué pendant 0,6 s à partir du tick du coup. Au sud et au nord, la pique part de côté plutôt que vers l'écran ou vers le fond : à refaire avec une consigne par direction si ça gêne.
+- **Pas encore :** flancs exposés, charges, ralliement, fatigue, porteur d'étendard qui montre le moral (voir Rendu).
 
 **Validation :**
 
@@ -639,6 +640,9 @@ En vue de dessus, toute l'élévation passe par la couleur et l'ombrage, et la p
 - **Marche :** dessinée quand le soldat a bougé pendant le tick, à 9 images par seconde de bataille, chaque soldat décalé dans le cycle pour que le régiment ne marche pas au pas.
 - **Élimination hors champ :** les soldats hors de l'écran ne sont pas dessinés.
 - **Vue éloignée :** sous 18 px/m, un rectangle par soldat, l'avant plus clair ; plus tard, un rectangle par régiment avec son drapeau.
+- **Porteur d'étendard, pour lire le moral sans interface :** chaque régiment a un porteur au centre de son deuxième rang, qui ne gêne pas les piques du premier. Son drapeau, aux couleurs du camp par le même masque que les soldats, s'abîme avec le moral, en part du moral de départ : intact au-dessus de 75 %, troué de 50 à 75 %, en lambeaux de 25 à 50 %, penché ou à terre en débandade (seuils à régler). Le drapeau se dessine aussi en vue éloignée. Sprites : le porteur est un personnage PixelLab avec sa marche (environ 6 générations) ; le drapeau et ses trois dégradations sont dessinés avec `pixelart_workbench`, sans génération, en sprite séparé posé sur le porteur.
+  - **Pour l'instant, affichage seulement :** le porteur ne combat pas et ne meurt pas.
+  - **Plus tard, avec les flancs et le ralliement :** porteur mortel. L'étendard tombe, le régiment perd un gros coup de moral, puis un voisin le relève. Il deviendrait une cible, et une « garde de l'étendard » pourrait s'acheter en boutique.
 - **Fenêtre :** plein écran fenêtré, F11 bascule.
 
 **Fond de carte :**

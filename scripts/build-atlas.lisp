@@ -18,6 +18,11 @@
 ;;; (écharpe, culottes) en niveaux de gris normalisés : le jeu le dessine
 ;;; par-dessus, teinté de la couleur du camp.
 ;;;
+;;; Les images n'ont pas toutes la même taille : PixelLab rend une animation
+;;; libre (l'attaque) sur un canevas plus grand que le personnage, centré sur
+;;; lui. La case de l'atlas prend la plus grande taille, et chaque image y est
+;;; centrée : le centre du personnage reste au centre de la case.
+;;;
 ;;; Écrit assets/atlas.png et assets/atlas.sexp (lu par src/sprites.lisp).
 
 (require :asdf)
@@ -73,7 +78,11 @@ des images d'une direction."
   (let* ((units (loop for dir in (sort (directory (merge-pathnames "assets/sprites/*/" *root*))
                                        #'string< :key #'namestring)
                       collect (cons (last-name dir) (unit-animations dir))))
-         (cell (array-dimension (first (first (cdr (second (first units))))) 0))
+         (cell (loop for (nil . animations) in units
+                     maximize (loop for (nil . directions) in animations
+                                    maximize (loop for frames in directions
+                                                   maximize (loop for image in frames
+                                                                  maximize (array-dimension image 0))))))
          (columns (loop for (nil . animations) in units
                         maximize (loop for (nil . directions) in animations
                                        maximize (loop for frames in directions
@@ -98,9 +107,9 @@ des images d'une direction."
                  ;; Rouge le plus clair du type, toutes images confondues : il
                  ;; devient le blanc du masque.
                  (dolist (image (all-images animations))
-                   (assert (= cell (array-dimension image 0) (array-dimension image 1)))
-                   (dotimes (y cell)
-                     (dotimes (x cell)
+                   (assert (= (array-dimension image 0) (array-dimension image 1)))
+                   (dotimes (y (array-dimension image 0))
+                     (dotimes (x (array-dimension image 1))
                        (when (and (> (aref image y x 3) 0)
                                   (team-pixel-p (aref image y x 0) (aref image y x 1)
                                                 (aref image y x 2)))
@@ -112,12 +121,14 @@ des images d'une direction."
                                    do (dolist (frames directions)
                                         (loop for image in frames
                                               for column from 0
-                                              do (dotimes (y cell)
-                                                   (dotimes (x cell)
+                                              for size = (array-dimension image 0)
+                                              for pad = (floor (- cell size) 2)
+                                              do (dotimes (y size)
+                                                   (dotimes (x size)
                                                      (let ((r (aref image y x 0)) (g (aref image y x 1))
                                                            (b (aref image y x 2)) (a (aref image y x 3))
-                                                           (ax (+ x (* column cell)))
-                                                           (ay (+ y (* row cell))))
+                                                           (ax (+ pad x (* column cell)))
+                                                           (ay (+ pad y (* row cell))))
                                                        (when (> a 0)
                                                          (put ax ay r g b a)
                                                          (when (team-pixel-p r g b)

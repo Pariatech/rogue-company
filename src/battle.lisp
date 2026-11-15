@@ -73,6 +73,7 @@ SCATTER mètres de son emplacement, sur chaque axe. Renvoie le régiment."
                    (aref (soldiers-cooldown soldiers) i) -1
                    (aref (soldiers-calm soldiers) i) 0
                    (aref (soldiers-last-attacker soldiers) i) -1
+                   (aref (soldiers-strike-tick soldiers) i) -1000000
                    (aref (soldiers-damage soldiers) i) 0f0
                    (aref (soldiers-prev-x soldiers) i) (aref (soldiers-x soldiers) i)
                    (aref (soldiers-prev-y soldiers) i) (aref (soldiers-y soldiers) i)))

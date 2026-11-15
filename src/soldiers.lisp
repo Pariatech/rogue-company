@@ -18,7 +18,7 @@
   "Slots de SOLDIERS qui sont des tableaux de single-float.")
 
 (defparameter *soldier-fixnum-arrays*
-  '(regiment side walking target weapon switch-timer cooldown calm last-attacker)
+  '(regiment side walking target weapon switch-timer cooldown calm last-attacker strike-tick)
   "Slots de SOLDIERS qui sont des tableaux de fixnums.")
 
 (defparameter *walk-start-distance* 2f0
@@ -77,6 +77,10 @@ coup est alors décalé au hasard.")
    (last-attacker :initform (make-array 0 :element-type 'fixnum) :reader soldiers-last-attacker
                   :type fixnum-array
                   :documentation "Régiment du dernier soldat qui l'a blessé, ou -1.")
+   (strike-tick :initform (make-array 0 :element-type 'fixnum) :reader soldiers-strike-tick
+                :type fixnum-array
+                :documentation "Tick de son dernier coup, pour l'animation d'attaque ; très
+négatif s'il n'a jamais frappé.")
    (damage :initform (make-float-array 0) :reader soldiers-damage :type float-array
            :documentation "Dégâts reçus pendant le tick, appliqués ensemble.")))
 

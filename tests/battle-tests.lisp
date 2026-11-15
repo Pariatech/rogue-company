@@ -39,8 +39,10 @@
 
 ;;; Bataille de démonstration : deux régiments dispersés qui rejoignent leur formation.
 
-(defun demo (&rest args)
-  (apply #'rogue-company::make-demo-battle args))
+(defun demo (&rest args &key (scatter 12) &allow-other-keys)
+  "La bataille de démonstration, soldats dispersés à SCATTER mètres de leur
+emplacement : les tests éprouvent le regroupement et les collisions."
+  (apply #'rogue-company::make-demo-battle :scatter scatter args))
 
 (defun regiments (battle)
   (coerce (rogue-company::battle-regiments battle) 'list))

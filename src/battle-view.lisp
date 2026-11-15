@@ -3,8 +3,9 @@
 ;;; Dessin des soldats, vus par une caméra (camera.lisp). Deux modes selon le zoom :
 ;;;
 ;;; - Sprites (zoom d'au moins *SPRITE-PIXELS-PER-METER*) : le sprite en vue de
-;;;   trois quarts de la direction la plus proche parmi 8, l'image de marche si
-;;;   le soldat a bougé pendant le tick, puis son masque teint
+;;;   trois quarts de la direction la plus proche parmi 8 : l'animation d'attaque
+;;;   juste après un coup, sinon l'image de marche si le soldat a bougé pendant
+;;;   le tick, sinon la pose immobile ; puis son masque teint
 ;;;   de la couleur du camp. Un soldat plus bas sur l'écran passe devant : les
 ;;;   soldats sont parcourus dans l'ordre de la grille spatiale, triée par
 ;;;   rangées de 1 m à chaque tick. Les soldats hors de l'écran sont sautés.
@@ -33,6 +34,10 @@
   "Images de marche par seconde de bataille : un cycle de 8 images (deux pas)
 en 0,9 s, pour 1,3 m/s.")
 
+(defparameter *attack-frames-per-second* 10f0
+  "Images de l'animation d'attaque par seconde de bataille : le coup de pique
+(6 images) dure 0,6 s, moins que la recharge de la pique (1,5 s).")
+
 (defparameter *walk-threshold* 0.01f0
   "Déplacement minimum en un tick, en mètres, pour dessiner la marche : une
 légère poussée de collision ne fait pas marcher.")
@@ -50,7 +55,15 @@ légère poussée de collision ne fait pas marcher.")
            (type single-float alpha))
   (multiple-value-bind (walk-row walk-frames) (atlas-walk atlas *regiment-sprite*)
     (declare (type fixnum walk-row walk-frames))
+    (multiple-value-bind (attack-row attack-frames) (atlas-animation atlas *regiment-sprite* :attack)
     (let* ((soldiers (battle-soldiers battle))
+           (attack-row (or attack-row 0))
+           (attack-frames (or attack-frames 0))
+           (strike-ticks (soldiers-strike-tick soldiers))
+           (tick (battle-tick-count battle))
+           ;; Images d'attaque par tick, pour l'âge du dernier coup.
+           (attack-rate (/ (the single-float *attack-frames-per-second*)
+                           (float +ticks-per-second+ 1f0)))
            ;; Vivants seulement, dans l'ordre de la grille.
            (count (grid-size (battle-grid battle)))
            (order (grid-sorted (battle-grid battle)))
@@ -68,8 +81,8 @@ légère poussée de collision ne fait pas marcher.")
            (origin-y (- (* 0.5f0 height) (* zoom (the single-float (camera-y camera)))))
            (cell (float (the fixnum (atlas-cell atlas)) 1f0))
            (size (* cell scale))
-           (foot-x (* scale (the single-float *sprite-foot-x*)))
-           (foot-y (* scale (the single-float *sprite-foot-y*)))
+           (foot-x (* scale (+ (* 0.5f0 cell) (the single-float *sprite-foot-x*))))
+           (foot-y (* scale (+ (* 0.5f0 cell) (the single-float *sprite-foot-y*))))
            (cell-u (/ cell (float (the fixnum (atlas-width atlas)) 1f0)))
            (cell-v (/ cell (float (the fixnum (atlas-height atlas)) 1f0)))
            (strips *direction-strips*)
@@ -81,8 +94,9 @@ légère poussée de collision ne fait pas marcher.")
            (threshold (the single-float *walk-threshold*))
            (threshold2 (* threshold threshold))
            (eighth (/ (float pi 1f0) 4f0)))
-      (declare (type fixnum count walk-phase)
-               (type fixnum-array order soldier-regiments)
+      (declare (type fixnum count walk-phase attack-row attack-frames tick)
+               (type fixnum-array order soldier-regiments strike-ticks)
+               (type single-float attack-rate)
                (type float-array xs ys prev-xs prev-ys facings prev-facings)
                (type simple-vector strips mirrored)
                (type vector regiments)
@@ -102,12 +116,20 @@ légère poussée de collision ne fait pas marcher.")
             (let* ((pf (aref prev-facings i))
                    (facing (+ pf (* alpha (wrap-angle (- (aref facings i) pf)))))
                    (direction (mod (the fixnum (round facing eighth)) 8))
+                   ;; Âge du dernier coup, en images d'attaque.
+                   (attack-frame (floor (* attack-rate
+                                           (+ alpha (float (min 1000000
+                                                                (- tick (aref strike-ticks i)))
+                                                           1f0)))))
+                   (attacking (< attack-frame attack-frames))
                    ;; Immobile : la première image de la marche. En marche, chaque
                    ;; soldat a son décalage, pour que le régiment ne marche pas au pas.
-                   (frame (if (> (+ (* dx dx) (* dy dy)) threshold2)
-                              (mod (+ walk-phase (* 3 i)) walk-frames)
-                              0))
-                   (row (+ walk-row (* 2 (the fixnum (svref strips direction)))))
+                   (frame (cond (attacking attack-frame)
+                                ((> (+ (* dx dx) (* dy dy)) threshold2)
+                                 (mod (+ walk-phase (* 3 i)) walk-frames))
+                                (t 0)))
+                   (row (+ (if attacking attack-row walk-row)
+                           (* 2 (the fixnum (svref strips direction)))))
                    (v0 (* cell-v (float row 1f0)))
                    (v1 (+ v0 cell-v))
                    (mask-v1 (+ v1 cell-v))
@@ -120,7 +142,7 @@ légère poussée de collision ne fait pas marcher.")
                    (bottom (+ top size))
                    (color (side-color (regiment-side (aref regiments (aref soldier-regiments i))))))
               (declare (type single-float pf facing v0 v1 mask-v1 left-u right-u u0 u1 right bottom)
-                       (type fixnum direction frame row))
+                       (type fixnum direction attack-frame frame row))
               (macrolet ((quad (red green blue tv0 tv1)
                            `(progn
                               (rlgl:color-4ub ,red ,green ,blue 255)
@@ -133,7 +155,7 @@ légère poussée de collision ne fait pas marcher.")
                   (declare (type (integer 0 255) red green blue))
                   (quad red green blue v1 mask-v1)))))))
       (rlgl:end)
-      (rlgl:set-texture 0))))
+      (rlgl:set-texture 0)))))
 
 (defun draw-soldier-markers (battle alpha camera)
   (declare (optimize (speed 3) (safety 1))

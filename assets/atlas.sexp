@@ -1,4 +1,4 @@
 ;;; Écrit par scripts/build-atlas.lisp : ne pas modifier à la main.
 
-(:cell 32 :directions (:east :south-east :south :north-east :north) :units
- ((:pikeman ((:walk :row 0 :frames 8))))) 
+(:cell 44 :directions (:east :south-east :south :north-east :north) :units
+ ((:pikeman ((:attack :row 0 :frames 6) (:walk :row 10 :frames 8))))) 

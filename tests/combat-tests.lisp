@@ -41,10 +41,38 @@
     (is (= 1 (count 0 alive)) "exactement un mort")
     (is (equal (reverse kills) (mapcar (lambda (a) (- 1 a)) alive)) "le tueur est crédité")))
 
+(test strike-records-its-tick
+  "Un coup note son tick, pour l'animation d'attaque ; un soldat qui n'a jamais
+frappé reste très loin dans le passé."
+  (let ((b (duel 3)))
+    (is (< (soldier-value b #'rogue-company::soldiers-strike-tick 0) -1000))
+    (loop repeat (* 30 5)
+          until (>= (soldier-value b #'rogue-company::soldiers-strike-tick 0) 0)
+          do (rogue-company::battle-tick b))
+    (let ((tick (soldier-value b #'rogue-company::soldiers-strike-tick 0)))
+      (is (<= 0 tick (rogue-company::battle-tick-count b)) "il a frappé en moins de 5 s"))))
+
 (defun charged-demo (&key (seed rogue-company::*battle-seed*) (seconds 60))
   (let ((b (run-ticks (demo :seed seed) (* 30 30))))
     (rogue-company::order-charge b)
     (run-ticks b (* 30 seconds))))
+
+(test front-ranks-stay-in-contact-as-depth-is-lost
+  "Après 60 s de mêlée, chaque régiment a perdu des rangs, mais ses premiers
+rangs restent au contact : les fronts sont à moins de 3 m."
+  (let* ((b (charged-demo :seconds 60))
+         (s (rogue-company::battle-soldiers b))
+         (fronts (loop for r in (regiments b)
+                       collect (let ((files (rogue-company::formation-files
+                                             (rogue-company::regiment-formation r)
+                                             (rogue-company::regiment-alive r))))
+                                 (/ (loop for i from (rogue-company::regiment-start r)
+                                            below (+ (rogue-company::regiment-start r) files)
+                                          sum (aref (rogue-company::soldiers-x s) i))
+                                    files)))))
+    (is-true (every (lambda (r) (< (rogue-company::regiment-depth r) 8)) (regiments b))
+             "des rangs perdus")
+    (is (< (abs (- (second fronts) (first fronts))) 3))))
 
 (test charge-makes-casualties
   (let* ((b (charged-demo))

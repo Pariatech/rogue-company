@@ -1,17 +1,19 @@
 (in-package #:rogue-company)
 
 ;;; Bataille de démonstration, en attendant la partie : deux régiments de
-;;; piquiers dispersés au hasard, qui rejoignent leur formation face à face.
-;;; Seul le piquier a un sprite pour l'instant.
+;;; piquiers en formation, face à face. Seul le piquier a un sprite pour
+;;; l'instant. Les tests dispersent les soldats au départ (SCATTER) pour
+;;; éprouver le regroupement et les collisions.
 
-(defparameter *demo-scatter* 12 "Dispersion initiale des soldats, en mètres.")
+(defparameter *demo-scatter* 0
+  "Dispersion initiale des soldats, en mètres : 0, ils partent à leur emplacement.")
 
-(defun make-demo-battle (&key (seed *battle-seed*))
+(defun make-demo-battle (&key (seed *battle-seed*) (scatter *demo-scatter*))
   (let ((battle (make-battle :seed seed)))
     (add-regiment battle (dotation-stats :pikemen) 160
-                  :name "Piquiers rouges" :side 0 :x -25 :y 0 :facing 0 :scatter *demo-scatter*)
+                  :name "Piquiers rouges" :side 0 :x -25 :y 0 :facing 0 :scatter scatter)
     (add-regiment battle (dotation-stats :pikemen) 160
-                  :name "Piquiers bleus" :side 1 :x 25 :y 0 :facing pi :scatter *demo-scatter*)
+                  :name "Piquiers bleus" :side 1 :x 25 :y 0 :facing pi :scatter scatter)
     battle))
 
 (defun order-random-moves (battle rng &key (half-width 30) (half-height 20))
