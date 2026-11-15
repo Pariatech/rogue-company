@@ -35,7 +35,7 @@ Jeu en Common Lisp (SBCL, raylib) modifiable à chaud par MCP.
 - `src/engine.lisp` : boucle, pause, erreurs gardées (`guarded`), pas à pas, capture d'écran.
 - `src/jobs.lisp` : file vers le thread principal (`call-in-main-thread`).
 - `src/input.lisp` : `key-down-p` et `key-pressed-p` combinent le clavier réel et les touches simulées (une touche simulée compte comme enfoncée à sa première image).
-- La fenêtre s'ouvre en plein écran fenêtré (`*start-fullscreen*`), F11 bascule ; `*window-width*` et `*window-height*` sont relus à chaque image.
+- La fenêtre s'ouvre en plein écran fenêtré (`*start-fullscreen*`), F11 bascule (`toggle-fullscreen-window`) : une fenêtre ordinaire sans bordure, à la taille du moniteur, sous la barre des menus de macOS, que d'autres fenêtres peuvent recouvrir. Ne pas utiliser `raylib:toggle-borderless-windowed` : sur macOS, GLFW en fait une fenêtre posée au-dessus de toutes les autres ; `*window-width*` et `*window-height*` sont relus à chaque image.
 - Échap ne ferme pas la fenêtre (`set-exit-key :key-null` dans `main`) : il sert au jeu.
 - `src/mcp-server.lisp` : serveur MCP Hunchentoot (JSON-RPC sur HTTP).
 - `src/mcp-tools.lisp` : outils `game_*`, déclarés avec `define-mcp-tool`.
