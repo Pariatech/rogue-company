@@ -243,7 +243,12 @@ Fait (parties A et B) :
 - **Morts :** retirés à la fin du tick. Le régiment garde son front et perd de la profondeur : le soldat derrière le mort avance d'un rang, et ainsi de suite dans la file ; le trou arrivé à l'avant-dernier rang est comblé par le soldat du dernier rang le plus proche, puis le dernier rang se resserre. Crédités au régiment du dernier soldat qui a blessé la victime.
 - **Démo :** deux régiments de piquiers ; `C` lance chaque régiment sur l'ennemi le plus proche.
 
-Reste la partie C (poussée et moral).
+Fait (partie C) :
+
+- **Poussée :** à chaque tick, deux régiments au contact comparent soldats engagés × masse × moral. Le plus faible recule, jusqu'à 0,5 m/s selon l'écart, et perd jusqu'à 2 points de moral par seconde ; le plus fort avance sa formation, et ses soldats suivent dès que l'ennemi sort de leur distance d'arrêt.
+- **Moral :** chaque mort coûte 1 point par pour cent de l'effectif de départ, multiplié par 1,5 − discipline. Hors du contact, il remonte de 0,5 point par seconde jusqu'à sa valeur de départ.
+- **Débandade :** sous 20, le régiment fuit en courant à 150 m à l'opposé de l'ennemi, ses emplacements dispersés, et ne frappe plus. Le vainqueur s'arrête au lieu de poursuivre. Deux régiments de 160 piquiers égaux : un se débande après environ 85 s de mêlée, avec un tiers de pertes.
+- **Pas encore :** flancs exposés, charges, ralliement, fatigue.
 
 **Validation :**
 

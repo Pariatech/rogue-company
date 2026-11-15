@@ -86,7 +86,8 @@ et s'ajoutent ici au fil des étapes :
   3. soldats : déplacement vers leur emplacement (ou face à leur cible), puis
      grille spatiale et collisions ;
   4. combat (combat.lisp) : ciblage par régiment, coups en séquence, puis
-     dégâts appliqués et morts retirés."
+     dégâts appliqués et morts retirés ;
+  5. poussée et moral (morale.lisp), débandade sous le seuil."
   (let ((soldiers (battle-soldiers battle))
         (regiments (battle-regiments battle)))
     (copy-previous-positions soldiers)
@@ -102,7 +103,9 @@ et s'ajoutent ici au fil des étapes :
     (loop for regiment across regiments
           do (acquire-targets battle regiment))
     (strike battle)
-    (apply-damage battle))
+    (apply-damage battle)
+    (loop for regiment across regiments
+          do (update-morale battle regiment)))
   (incf (battle-tick-count battle))
   battle)
 

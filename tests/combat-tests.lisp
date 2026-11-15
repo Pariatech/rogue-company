@@ -96,3 +96,49 @@ se resserre (10 et 11 glissent d'une place). Le front garde ses 4 files."
     (is (equal '(0 5 2 3  4 9 6 7  8 10 11)
                (loop for i below 11 collect (round (aref xs i)))))
     (is (= 4 (rogue-company::formation-files (rogue-company::regiment-formation r) 11)))))
+
+;;; Poussée et moral
+
+(test losses-lower-morale
+  "100 hommes, discipline 0,5 : chaque mort coûte 1 point de moral."
+  (let* ((b (rogue-company::make-battle))
+         (r (rogue-company::add-regiment b (rogue-company::dotation-stats :pikemen) 100))
+         (hps (rogue-company::soldiers-hp (rogue-company::battle-soldiers b))))
+    (dotimes (i 10) (setf (aref hps (* 10 i)) 0f0))
+    (rogue-company::apply-damage b)
+    (is (= 90 (rogue-company::regiment-alive r)))
+    (is (near 50 (rogue-company::regiment-morale r) 1f-3))))
+
+(test low-morale-routs-away-from-the-enemy
+  (let* ((b (run-ticks (demo) (* 30 30)))
+         (red (first (regiments b)))
+         (soldiers (rogue-company::battle-soldiers b))
+         (x0 (rogue-company::regiment-centroid red soldiers)))
+    (setf (rogue-company::regiment-morale red) 10f0)
+    (run-ticks b 1)
+    (is-true (rogue-company::regiment-routed-p red))
+    (run-ticks b (* 30 5))
+    (is (< (rogue-company::regiment-centroid red soldiers) (- x0 10))
+        "les rouges, à gauche des bleus, fuient vers la gauche en courant")))
+
+(test weaker-regiment-is-pushed-back
+  "Au contact, des bleus au moral bas reculent et les rouges avancent."
+  (let* ((b (charged-demo :seconds 25))
+         (soldiers (rogue-company::battle-soldiers b)))
+    (destructuring-bind (red blue) (regiments b)
+      (setf (rogue-company::regiment-morale red) 60f0
+            (rogue-company::regiment-morale blue) 25f0)
+      (let ((red-x (rogue-company::regiment-centroid red soldiers))
+            (blue-x (rogue-company::regiment-centroid blue soldiers)))
+        (run-ticks b (* 30 5))
+        (is (> (rogue-company::regiment-centroid blue soldiers) (+ blue-x 0.5)) "les bleus reculent")
+        (is (> (rogue-company::regiment-centroid red soldiers) (+ red-x 0.5)) "les rouges suivent")))))
+
+(test charge-ends-in-a-rout
+  "Sans renfort, un des deux régiments finit par se débander, et le vainqueur
+s'arrête au lieu de le poursuivre."
+  (let* ((b (charged-demo :seconds 240))
+         (rs (regiments b)))
+    (is (= 1 (count-if #'rogue-company::regiment-routed-p rs)))
+    (is (null (rogue-company::regiment-orders
+               (find-if-not #'rogue-company::regiment-routed-p rs))))))

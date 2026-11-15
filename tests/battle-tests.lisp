@@ -106,15 +106,21 @@
                   regiment (rogue-company::battle-soldiers battle))))
 
 (test random-orders-move-every-regiment
-  "Les destinations peuvent se chevaucher, et les régiments alors se bloquer :
-on vérifie seulement qu'ils s'en approchent nettement."
+  "Les destinations peuvent se chevaucher : les régiments se rencontrent alors et
+se battent. On vérifie seulement que chacun s'est nettement rapproché de la sienne
+pendant les 10 premières secondes."
   (let ((b (run-ticks (demo) (* 30 30))))
     (rogue-company::order-random-moves b (rogue-company::make-rng 7 99))
     (is (every (lambda (regiment) (rogue-company::regiment-slots-dirty-p regiment)) (regiments b)))
     (run-ticks b 1)
-    (let ((far (mean-slot-distance b)))
-      (run-ticks b (* 30 90))
-      (is (< (mean-slot-distance b) (* 0.2 far))))))
+    (let ((before (mapcar (lambda (r) (rogue-company::regiment-slot-distances
+                                       r (rogue-company::battle-soldiers b)))
+                          (regiments b))))
+      (run-ticks b (* 30 10))
+      (loop for r in (regiments b)
+            for far in before
+            do (is (< (rogue-company::regiment-slot-distances r (rogue-company::battle-soldiers b))
+                      (- far 5)))))))
 
 ;;; Orientation des soldats
 

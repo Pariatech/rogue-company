@@ -86,8 +86,8 @@ orientation : le premier rang reste au contact, les autres se rangent derrière.
              (needed (max 1 (floor (* *hold-fraction* files))))
              (engaged (regiment-engaged regiment))
              (closed (regiment-closed regiment)))
-        (cond ((zerop (regiment-alive enemy))
-               ;; Plus d'ennemi : le régiment reste où il est.
+        (cond ((or (zerop (regiment-alive enemy)) (regiment-routed-p enemy))
+               ;; Ennemi détruit ou débandé : le régiment reste où il est.
                (setf (regiment-orders regiment) nil
                      (regiment-holding-p regiment) nil)
                (hold-in-place regiment soldiers))
@@ -182,8 +182,9 @@ N'écrit que dans les cases de ces soldats, et compte les engagés."
                 do (when (plusp (aref switch-timers i)) (decf (aref switch-timers i)))
                    (when (plusp (aref cooldowns i)) (decf (aref cooldowns i))))
           (if (or (< search 0f0)
+                  (regiment-routed-p regiment)
                   (not (enemy-within-p battle regiment (+ search (* 2f0 max-radius)))))
-              ;; Aucun ennemi à portée du régiment : personne n'a de cible.
+              ;; Aucun ennemi à portée du régiment, ou débandade : personne n'a de cible.
               (loop for i of-type fixnum from start below end
                     do (setf (aref targets i) -1 (aref cooldowns i) -1)
                        (setf (aref calms i) (min 1000000 (1+ (aref calms i))))
@@ -383,6 +384,7 @@ croissant de la plage, qui revérifie l'indice I, voit tous les morts."
       (setf (aref (soldiers-hp soldiers) freed) 0f0
             (aref (soldiers-target soldiers) freed) -1))
     (decf (regiment-alive regiment))
+    (lose-morale regiment (casualty-morale regiment))
     (setf (regiment-slots-dirty-p regiment) t)))
 
 (defun apply-damage (battle)

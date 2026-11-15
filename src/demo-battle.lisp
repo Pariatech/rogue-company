@@ -31,12 +31,13 @@ est une commande du joueur, pas un tirage de la simulation."
   (let ((regiments (battle-regiments battle))
         (soldiers (battle-soldiers battle)))
     (loop for regiment across regiments
-          when (plusp (regiment-alive regiment))
+          when (and (plusp (regiment-alive regiment)) (not (regiment-routed-p regiment)))
             do (multiple-value-bind (x y) (regiment-centroid regiment soldiers)
                  (let ((nearest nil) (best most-positive-single-float))
                    (loop for other across regiments
                          when (and (/= (regiment-side other) (regiment-side regiment))
-                                   (plusp (regiment-alive other)))
+                                   (plusp (regiment-alive other))
+                                   (not (regiment-routed-p other)))
                            do (multiple-value-bind (ox oy) (regiment-centroid other soldiers)
                                 (let ((d (+ (expt (- ox x) 2) (expt (- oy y) 2))))
                                   (when (< d best) (setf best d nearest other)))))

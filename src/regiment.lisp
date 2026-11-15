@@ -19,7 +19,8 @@
    (fatigue :initform 0f0 :accessor regiment-fatigue :type single-float
             :documentation "0 frais, 1 épuisé. Reste à 0 jusqu'à la course et au combat.")
    (orders :initform nil :accessor regiment-orders
-           :documentation "Ordre en cours : (:move x y facing), (:attack régiment) ou NIL.")
+           :documentation "Ordre en cours : (:move x y facing), (:attack régiment),
+(:rout) pour un régiment débandé, ou NIL.")
    (engaged :initform 0 :accessor regiment-engaged :type fixnum
             :documentation "Soldats qui avaient une cible au dernier tick.")
    (closed :initform 0 :accessor regiment-closed :type fixnum
@@ -68,6 +69,8 @@ se recalculent au tick suivant."
     (place-formation (regiment-formation regiment) (regiment-alive regiment)
                      (soldiers-slot-x soldiers) (soldiers-slot-y soldiers)
                      (regiment-start regiment))
+    (when (eq (first (regiment-orders regiment)) :rout)
+      (scatter-slots regiment soldiers))
     (setf (regiment-slots-dirty-p regiment) nil)))
 
 (defparameter *hold-margin* 0.25f0
@@ -86,7 +89,11 @@ les trois ou quatre premiers rangs frappent ensemble."
   "Avance les soldats de REGIMENT vers leur emplacement, au pas de marche."
   (let ((stats (regiment-stats regiment)))
     (move-toward-slots soldiers (regiment-start regiment) (regiment-end regiment)
-                       (/ (stats-speed stats) #.(float +ticks-per-second+ 1f0))
+                       ;; Un régiment débandé court.
+                       (/ (if (eq (first (regiment-orders regiment)) :rout)
+                              (stats-run-speed stats)
+                              (stats-speed stats))
+                          #.(float +ticks-per-second+ 1f0))
                        (formation-facing (regiment-formation regiment))
                        (/ (stats-turn-rate stats) #.(float +ticks-per-second+ 1f0))
                        (regiment-hold-distance regiment))))
@@ -117,6 +124,7 @@ les trois ou quatre premiers rangs frappent ensemble."
                               (ht "kind" "move" "x" (json-float x) "y" (json-float y)
                                   "facing_degrees" (json-float (* facing (/ 180 pi))))))
                      (:attack (ht "kind" "attack" "regiment" (second orders)))
+                     (:rout (ht "kind" "rout"))
                      (t nil))
           "engaged" (regiment-engaged regiment)
           "holding" (if (regiment-holding-p regiment) t 'yason:false)

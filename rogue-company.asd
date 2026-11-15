@@ -28,6 +28,7 @@
                (:file "main-menu")
                (:file "battle")
                (:file "combat")
+               (:file "morale")
                (:file "demo-battle")
                (:file "camera")
                (:file "sprites")
