@@ -72,9 +72,11 @@ moins de rangs, il est au milieu du dernier ; un homme seul n'en a pas."
     (run-ticks b (* 30 seconds))))
 
 (test front-ranks-stay-in-contact-as-depth-is-lost
-  "Après 60 s de mêlée, chaque régiment a perdu des rangs, mais ses premiers
-rangs restent au contact : les fronts sont à moins de 3 m."
-  (let* ((b (charged-demo :seconds 60))
+  "Après plus d'une minute de mêlée, chaque régiment a perdu des rangs, mais ses
+premiers rangs restent au contact : les fronts, de centre à centre, restent à
+moins d'un mètre de plus que la distance d'arrêt (4 m de bord à bord, 4,6 m
+de centre à centre)."
+  (let* ((b (charged-demo :seconds 90))
          (s (rogue-company::battle-soldiers b))
          (fronts (loop for r in (regiments b)
                        collect (let ((files (rogue-company::formation-files
@@ -86,7 +88,23 @@ rangs restent au contact : les fronts sont à moins de 3 m."
                                     files)))))
     (is-true (every (lambda (r) (< (rogue-company::regiment-depth r) 8)) (regiments b))
              "des rangs perdus")
-    (is (< (abs (- (second fronts) (first fronts))) 3))))
+    (is (< (abs (- (second fronts) (first fronts))) 5.6))))
+
+(test only-the-front-rank-strikes
+  "Les premiers rangs s'arrêtent à 4 m l'un de l'autre : le premier rang, à
+portée de pique (4,5 m), frappe ; le deuxième, un mètre plus loin, non."
+  (let* ((b (charged-demo :seconds 40))
+         (tick (rogue-company::battle-tick-count b))
+         (r (first (regiments b)))
+         (start (rogue-company::regiment-start r))
+         (files (rogue-company::formation-files (rogue-company::regiment-formation r)
+                                                (rogue-company::regiment-alive r))))
+    (flet ((strikers (rank)
+             (loop for i from (+ start (* rank files)) below (+ start (* (1+ rank) files))
+                   count (> (soldier-value b #'rogue-company::soldiers-strike-tick i)
+                            (- tick 90)))))
+      (is (> (strikers 0) (floor files 2)) "le premier rang frappe")
+      (is (= 0 (strikers 1)) "le deuxième rang ne frappe pas"))))
 
 (test bearer-never-strikes
   "Pendant toute une mêlée, le porteur d'étendard ne frappe jamais. Vérifié aux

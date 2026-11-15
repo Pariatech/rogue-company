@@ -19,8 +19,8 @@
 ;;; par-dessus, teinté de la couleur du camp.
 ;;;
 ;;; Les images n'ont pas toutes la même taille : PixelLab rend une animation
-;;; libre (l'attaque) sur un canevas plus grand que le personnage, centré sur
-;;; lui. La case de l'atlas prend la plus grande taille, et chaque image y est
+;;; libre (mode v3, comme la marche nord du porteur) sur un canevas plus grand
+;;; que le personnage, centré sur lui. La case de l'atlas prend la plus grande taille, et chaque image y est
 ;;; centrée : le centre du personnage reste au centre de la case.
 ;;;
 ;;; Pour chaque image d'un type, l'atlas note aussi son pixel le plus haut,
@@ -29,7 +29,8 @@
 ;;;
 ;;; Surimpressions : assets/overlays/<nom>/frame_NNN.png (le drapeau, dessiné
 ;;; par scripts/draw-flags.lisp), sans direction. Une rangée d'images posées
-;;; en haut à gauche de leur case, puis la rangée de leurs masques.
+;;; en haut à gauche de leur case, puis la rangée de leurs masques. S'y ajoute
+;;; :solid, un carré blanc pour les couleurs unies (les piques).
 ;;;
 ;;; Écrit assets/atlas.png et assets/atlas.sexp (lu par src/sprites.lisp).
 
@@ -82,14 +83,22 @@ des images d'une direction."
                                                   (format nil "rotations/~a.png" direction)
                                                   unit-dir))))))))
 
+(defun solid-image ()
+  "Carré blanc opaque de 4 px : le jeu y prend sa couleur unie (piques), teintée
+par la couleur des sommets, sans quitter la texture de l'atlas."
+  (make-array '(4 4 4) :element-type '(unsigned-byte 8) :initial-element 255))
+
 (defun overlay-images ()
-  "Liste de (nom . images) des surimpressions de assets/overlays/."
-  (loop for dir in (sort (directory (merge-pathnames "assets/overlays/*/" *root*))
-                         #'string< :key #'namestring)
-        collect (cons (last-name dir)
-                      (mapcar #'read-rgba
-                              (sort (directory (merge-pathnames "frame_*.png" dir))
-                                    #'string< :key #'namestring)))))
+  "Liste de (nom . images) des surimpressions de assets/overlays/, plus le carré
+blanc :solid."
+  (append
+   (loop for dir in (sort (directory (merge-pathnames "assets/overlays/*/" *root*))
+                          #'string< :key #'namestring)
+         collect (cons (last-name dir)
+                       (mapcar #'read-rgba
+                               (sort (directory (merge-pathnames "frame_*.png" dir))
+                                     #'string< :key #'namestring))))
+   (list (cons "solid" (list (solid-image))))))
 
 (defun brightest-red (images)
   "Rouge le plus clair des pixels de camp de IMAGES : il devient le blanc du masque."

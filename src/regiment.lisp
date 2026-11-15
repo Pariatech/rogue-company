@@ -74,16 +74,23 @@ se recalculent au tick suivant."
     (setf (regiment-slots-dirty-p regiment) nil)))
 
 (defparameter *hold-margin* 0.25f0
-  "Marge ajoutée à la portée minimale de l'arme principale pour la distance
-d'arrêt au contact.")
+  "Marge ajoutée à la portée minimale de l'arme principale : on ne s'arrête jamais
+plus près.")
+
+(defparameter *hold-short-of-reach* 0.5f0
+  "Le soldat s'arrête à cette distance en deçà de la portée de son arme principale.")
 
 (defun regiment-hold-distance (regiment)
-  "Distance de bord à bord où un soldat s'arrête devant sa cible : juste au-delà
-de la portée minimale de son arme principale de mêlée. Avec une pique (1,5 m),
-les trois ou quatre premiers rangs frappent ensemble."
+  "Distance de bord à bord où un soldat s'arrête devant sa cible : 0,5 m en
+deçà de la portée de son arme principale de mêlée, et jamais plus près que sa
+portée minimale. Avec une pique (portée 4,5 m), les premiers rangs s'arrêtent
+à 4 m l'un de l'autre : le premier rang frappe, le deuxième, un mètre plus
+loin, est hors de portée."
   (let ((primary (stats-primary (regiment-stats regiment))))
-    (+ *hold-margin*
-       (if (eq (attack-kind primary) :melee) (attack-min-reach primary) 0f0))))
+    (if (eq (attack-kind primary) :melee)
+        (max (+ *hold-margin* (attack-min-reach primary))
+             (- (attack-reach primary) *hold-short-of-reach*))
+        *hold-margin*)))
 
 (defparameter *bearer-rank* 3
   "Rang du porteur d'étendard, compté depuis 0 au front : le quatrième, hors de

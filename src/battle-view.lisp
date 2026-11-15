@@ -56,18 +56,71 @@ second, en lambeaux. Débandé, il pend.")
 (defparameter *overview-flag-scale* 2f0
   "En vue éloignée, échelle du drapeau : fixe, pour rester lisible à tous les zooms.")
 
+;;; Piques dessinées : une ligne par piquier, à la longueur réelle, que le
+;;; sprite de 32 px ne peut pas contenir. Dressée et un peu penchée vers l'avant
+;;; en marche ; croisée à l'horizontale vers l'ennemi pour les premiers rangs
+;;; d'un régiment qui attaque. Le coup la pousse en avant puis la ramène.
+
+(defparameter *draw-pikes* t
+  "Dessine les piques à part (et plus l'animation d'attaque du sprite).")
+
+(defparameter *pike-length* 5f0 "Longueur de la pique, en mètres.")
+(defparameter *pike-head* 0.3f0 "Longueur du fer, en mètres.")
+(defparameter *pike-width* 1f0 "Épaisseur de la pique, en pixels du sprite.")
+(defparameter *pike-wood* '(110 72 40) "Couleur de la hampe.")
+(defparameter *pike-steel* '(205 212 222) "Couleur du fer.")
+(defparameter *pike-lean* 0.8f0
+  "Pique dressée : avance du fer vers l'avant du soldat, en mètres.")
+(defparameter *pike-hand-height* 0.9f0
+  "Pique croisée : hauteur des mains du premier rang au-dessus du sol, en mètres.")
+(defparameter *pike-rank-rise* 0.2f0
+  "Pique croisée : chaque rang tient la sienne plus haut que le précédent, par-dessus
+l'épaule de l'homme de devant, en mètres.")
+(defparameter *pike-behind* 1.2f0
+  "Pique croisée : longueur qui dépasse derrière les mains, en mètres.")
+(defparameter *pike-lowered-ranks* 4
+  "Rangs qui croisent la pique quand le régiment attaque ; les autres la gardent dressée.")
+(defparameter *pike-thrust* 0.7f0 "Allonge du coup de pique, en mètres.")
+(defparameter *pike-thrust-seconds* 0.5f0 "Durée du coup : la pique part puis revient.")
+
 (defvar *bearers* (make-array 0 :element-type 'fixnum)
   "Porteur d'étendard de chaque régiment, recalculé à chaque image : le dessin
 compare chaque soldat à celui de son régiment sans rappeler REGIMENT-BEARER.
 Réutilisé d'une image à l'autre, agrandi seulement quand des régiments s'ajoutent.")
 
+(defvar *lowered-ends* (make-array 0 :element-type 'fixnum)
+  "Pour chaque régiment, l'indice qui suit le dernier soldat à pique croisée
+(-1 si aucun). Même usage que *BEARERS*.")
+
+(defvar *regiment-starts* (make-array 0 :element-type 'fixnum)
+  "Premier indice de chaque régiment, pour le rang d'un soldat. Même usage que *BEARERS*.")
+
+(defvar *regiment-files* (make-array 0 :element-type 'fixnum)
+  "Files de chaque régiment, pour le rang d'un soldat. Même usage que *BEARERS*.")
+
 (defun update-bearers (battle)
+  "Remplit les tampons par régiment pour l'image, et renvoie *BEARERS*."
   (let ((regiments (battle-regiments battle)))
     (when (< (length *bearers*) (length regiments))
       (setf *bearers* (make-array (length regiments) :element-type 'fixnum)))
+    (when (< (length *lowered-ends*) (length regiments))
+      (setf *lowered-ends* (make-array (length regiments) :element-type 'fixnum)))
+    (when (< (length *regiment-starts*) (length regiments))
+      (setf *regiment-starts* (make-array (length regiments) :element-type 'fixnum)
+            *regiment-files* (make-array (length regiments) :element-type 'fixnum)))
     (loop for regiment across regiments
           for k from 0
-          do (setf (aref *bearers* k) (regiment-bearer regiment)))
+          do (setf (aref *regiment-starts* k) (regiment-start regiment)
+                   (aref *regiment-files* k) (formation-files (regiment-formation regiment)
+                                                              (max 1 (regiment-alive regiment)))
+                   (aref *bearers* k) (regiment-bearer regiment)
+                   (aref *lowered-ends* k)
+                   (if (eq (first (regiment-orders regiment)) :attack)
+                       (+ (regiment-start regiment)
+                          (* *pike-lowered-ranks*
+                             (formation-files (regiment-formation regiment)
+                                              (max 1 (regiment-alive regiment)))))
+                       -1)))
     *bearers*))
 
 (defun draw-soldiers (battle alpha camera)
@@ -119,7 +172,14 @@ lambeaux, 3 pendant (débandade)."
     (multiple-value-bind (bearer-row bearer-frames)
         (atlas-walk atlas *bearer-sprite* *regiment-sprite*)
       (declare (type fixnum bearer-row bearer-frames))
+    (multiple-value-bind (solid-row) (atlas-overlay atlas :solid)
     (let* ((soldiers (battle-soldiers battle))
+           ;; Centre du carré blanc de l'atlas : la couleur unie des piques.
+           (solid-u (/ 2f0 (float (the fixnum (atlas-width atlas)) 1f0)))
+           (solid-v (/ (+ 2f0 (* (float (the fixnum (atlas-cell atlas)) 1f0)
+                                 (float (the fixnum (or solid-row 0)) 1f0)))
+                       (float (the fixnum (atlas-height atlas)) 1f0)))
+           (pi-f (float pi 1f0))
            (attack-row (or attack-row 0))
            (attack-frames (or attack-frames 0))
            (strike-ticks (soldiers-strike-tick soldiers))
@@ -136,6 +196,23 @@ lambeaux, 3 pendant (débandade)."
            (soldier-regiments (soldiers-regiment soldiers))
            (regiments (battle-regiments battle))
            (bearers (update-bearers battle))
+           (lowered-ends *lowered-ends*)
+           (regiment-starts *regiment-starts*)
+           (regiment-files *regiment-files*)
+           (pike-rise (the single-float *pike-rank-rise*))
+           (pikes (and *draw-pikes* solid-row t))
+           (pike-length (the single-float *pike-length*))
+           (pike-head (the single-float *pike-head*))
+           (pike-half-width (* 0.5f0 (the single-float (camera-sprite-scale camera))
+                                (the single-float *pike-width*)))
+           (pike-lean (the single-float *pike-lean*))
+           (pike-hand (the single-float *pike-hand-height*))
+           (pike-behind (the single-float *pike-behind*))
+           (pike-thrust (the single-float *pike-thrust*))
+           (thrust-ticks (* (the single-float *pike-thrust-seconds*) (float +ticks-per-second+ 1f0)))
+           (wood *pike-wood*) (steel *pike-steel*)
+           (wood-r (first wood)) (wood-g (second wood)) (wood-b (third wood))
+           (steel-r (first steel)) (steel-g (second steel)) (steel-b (third steel))
            (zoom (camera-zoom camera))
            (scale (camera-sprite-scale camera))
            (width (float (the fixnum *window-width*) 1f0))
@@ -156,7 +233,12 @@ lambeaux, 3 pendant (débandade)."
            (threshold2 (* threshold threshold))
            (eighth (/ (float pi 1f0) 4f0)))
       (declare (type fixnum count walk-phase attack-row attack-frames tick)
-               (type fixnum-array order soldier-regiments strike-ticks bearers)
+               (type fixnum-array order soldier-regiments strike-ticks bearers lowered-ends
+                     regiment-starts regiment-files)
+               (type single-float pike-rise)
+               (type single-float pike-length pike-head pike-half-width pike-lean pike-hand
+                     pike-behind pike-thrust thrust-ticks solid-u solid-v pi-f)
+               (type (integer 0 255) wood-r wood-g wood-b steel-r steel-g steel-b)
                (type single-float attack-rate)
                (type float-array xs ys prev-xs prev-ys facings prev-facings)
                (type simple-vector strips mirrored)
@@ -184,7 +266,7 @@ lambeaux, 3 pendant (débandade)."
                                            (+ alpha (float (min 1000000
                                                                 (- tick (aref strike-ticks i)))
                                                            1f0)))))
-                   (attacking (and (not bearer) (< attack-frame attack-frames)))
+                   (attacking (and (not bearer) (not pikes) (< attack-frame attack-frames)))
                    (frame (if attacking
                               attack-frame
                               (walk-frame walk-phase i (if bearer bearer-frames walk-frames)
@@ -214,9 +296,55 @@ lambeaux, 3 pendant (débandade)."
                 (quad 255 255 255 v0 v1)
                 (let ((red (first color)) (green (second color)) (blue (third color)))
                   (declare (type (integer 0 255) red green blue))
-                  (quad red green blue v1 mask-v1)))))))
+                  (quad red green blue v1 mask-v1)))
+              (when (and pikes (not bearer))
+                (let* ((sx (+ left foot-x)) (sy (+ top foot-y))
+                       (fx (cos facing)) (fy (sin facing))
+                       (age (+ alpha (float (min 1000000 (- tick (aref strike-ticks i))) 1f0)))
+                       (thrust (if (< age thrust-ticks)
+                                   (* pike-thrust (sin (* pi-f (/ age thrust-ticks))))
+                                   0f0))
+                       (ax 0f0) (ay 0f0) (bx 0f0) (by 0f0))
+                  (declare (type single-float sx sy fx fy age thrust ax ay bx by))
+                  (if (< i (aref lowered-ends regiment-index))
+                      ;; Croisée : horizontale à hauteur des mains, vers l'avant.
+                      (let* ((rank (floor (- i (aref regiment-starts regiment-index))
+                                          (max 1 (aref regiment-files regiment-index))))
+                             (hand-y (- sy (* zoom (+ pike-hand (* pike-rise (float rank 1f0))))))
+                             (back (- thrust pike-behind)))
+                        (declare (type fixnum rank) (type single-float hand-y back))
+                        (setf ax (+ sx (* zoom fx back))
+                              ay (+ hand-y (* zoom fy back))
+                              bx (+ ax (* zoom fx pike-length))
+                              by (+ ay (* zoom fy pike-length))))
+                      ;; Dressée, le fer un peu en avant du soldat.
+                      (setf ax sx
+                            ay sy
+                            bx (+ sx (* zoom fx pike-lean))
+                            by (- (+ sy (* zoom fy pike-lean))
+                                  (* zoom (sqrt (- (* pike-length pike-length)
+                                                   (* pike-lean pike-lean)))))))
+                  (let* ((head (- 1f0 (/ pike-head pike-length)))
+                         (hx (+ ax (* head (- bx ax))))
+                         (hy (+ ay (* head (- by ay))))
+                         (length (sqrt (+ (expt (- bx ax) 2) (expt (- by ay) 2))))
+                         (nx (if (plusp length) (* pike-half-width (/ (- ay by) length)) 0f0))
+                         (ny (if (plusp length) (* pike-half-width (/ (- bx ax) length)) 0f0)))
+                    (declare (type single-float head hx hy length nx ny))
+                    ;; Coins dans l'ordre des quads de sprite : départ -n, départ +n,
+                    ;; arrivée +n, arrivée -n.
+                    (macrolet ((segment (x0 y0 x1 y1 red green blue)
+                                 `(progn
+                                    (rlgl:color-4ub ,red ,green ,blue 255)
+                                    (rlgl::texcoord-2f solid-u solid-v)
+                                    (rlgl:vertex-2f (- ,x0 nx) (- ,y0 ny))
+                                    (rlgl:vertex-2f (+ ,x0 nx) (+ ,y0 ny))
+                                    (rlgl:vertex-2f (+ ,x1 nx) (+ ,y1 ny))
+                                    (rlgl:vertex-2f (- ,x1 nx) (- ,y1 ny)))))
+                      (segment ax ay hx hy wood-r wood-g wood-b)
+                      (segment hx hy bx by steel-r steel-g steel-b)))))))))
       (rlgl:end)
-      (rlgl:set-texture 0))))))
+      (rlgl:set-texture 0)))))))
 
 (defun draw-soldier-markers (battle alpha camera)
   (declare (optimize (speed 3) (safety 1))
