@@ -23,7 +23,9 @@ pour reproduire une bataille.")
    (grid :initarg :grid :reader battle-grid
          :documentation "Grille spatiale, reconstruite à chaque tick.")
    (max-radius :initform 0f0 :accessor battle-max-radius
-               :documentation "Plus grand rayon de collision des régiments.")))
+               :documentation "Plus grand rayon de collision des régiments.")
+   (deaths :initform (make-death-log) :reader battle-deaths
+           :documentation "Journal des morts (deaths.lisp), pour les dessiner.")))
 
 (defparameter *battlefield-size* 256
   "Côté de la carte, en mètres, centrée sur l'origine.")

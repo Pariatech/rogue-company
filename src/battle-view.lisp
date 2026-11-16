@@ -27,6 +27,13 @@
 (defparameter *side-colors* #((205 70 60) (70 115 220))
   "Couleur de chaque camp, en r g b.")
 
+(defvar *soldier-style* :parts
+  "Dessin des soldats au zoom des sprites : :PARTS (morceaux) ou :SPRITES
+(sprites PixelLab).")
+
+(defparameter *finial-length* 0.12f0
+  "Pointe dorée de la hampe du porteur dessiné en morceaux, en mètres.")
+
 (defparameter *regiment-sprite* :pikeman
   "Sprite de tous les régiments, en attendant un sprite par silhouette.")
 
@@ -125,9 +132,11 @@ Réutilisé d'une image à l'autre, agrandi seulement quand des régiments s'ajo
 
 (defun draw-soldiers (battle alpha camera)
   (let ((atlas (ensure-atlas)))
-    (if (camera-sprite-scale camera)
-        (draw-soldier-sprites battle alpha camera atlas)
-        (draw-soldier-markers battle alpha camera))
+    (cond ((not (camera-sprite-scale camera)) (draw-soldier-markers battle alpha camera))
+          ((eq *soldier-style* :parts)
+           (draw-corpses battle alpha camera atlas)
+           (draw-soldier-parts battle alpha camera atlas))
+          (t (draw-soldier-sprites battle alpha camera atlas)))
     (draw-flags battle alpha camera atlas)))
 
 (declaim (inline walk-frame))
@@ -459,11 +468,18 @@ regard en miroir. En vue éloignée, il flotte au-dessus du porteur, à une
                                         (t (aref tips tip))))
                             (center-x (- (fround x) (* flag-scale *sprite-foot-x*)))
                             (center-y (- (fround y) (* flag-scale *sprite-foot-y*)))
-                            ;; Le drapeau touche la hampe, un pixel sous son sommet.
-                            (pole-left (+ center-x (* flag-scale pole)))
-                            (top (if scale
-                                     (+ center-y (* flag-scale (1+ (aref tips (1+ tip)))))
-                                     (fround (- y (* zoom *overview-flag-height*)))))
+                            (parts (and scale (eq *soldier-style* :parts)))
+                            ;; Le drapeau touche la hampe, un pixel sous son sommet ; en
+                            ;; morceaux, sous la pointe dorée.
+                            (pole-left (if parts
+                                           (fround (bearer-pole-top x y facing zoom))
+                                           (+ center-x (* flag-scale pole))))
+                            (top (cond (parts
+                                        (fround (+ (nth-value 1 (bearer-pole-top x y facing zoom))
+                                                   (* zoom *finial-length*))))
+                                       (scale
+                                        (+ center-y (* flag-scale (1+ (aref tips (1+ tip))))))
+                                       (t (fround (- y (* zoom *overview-flag-height*))))))
                             (w (* flag-scale flag-width))
                             (left (if mirror (- pole-left w) (+ pole-left flag-scale)))
                             (right (+ left w))

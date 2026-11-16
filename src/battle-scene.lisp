@@ -77,6 +77,8 @@ que s'ils changent, ce qui est rare."))
            (order-random-moves (scene-battle scene) (scene-orders-rng scene)))
          (when (key-pressed-p :key-c)
            (order-charge (scene-battle scene)))
+         (when (key-pressed-p :key-v)
+           (setf *soldier-style* (if (eq *soldier-style* :parts) :sprites :parts)))
          (update-camera (scene-camera scene) dt)
          (let ((battle (scene-battle scene)))
            (dotimes (i (clock-consume (scene-clock scene) dt))
@@ -113,7 +115,7 @@ que s'ils changent, ce qui est rare."))
   (clear-background :black)
   (draw-soldiers (scene-battle scene) (clock-alpha (scene-clock scene)) (scene-camera scene))
   (draw-battle-hud scene)
-  (draw-text "Espace : pause   + / - : vitesse   R : nouvel ordre   C : charge   Flèches, ZQSD, clic droit : caméra   Molette : zoom   F11 : plein écran   Échap : menu"
+  (draw-text "Espace : pause   + / - : vitesse   R : nouvel ordre   C : charge   V : morceaux / sprites   Flèches, ZQSD, clic droit : caméra   Molette : zoom   F11 : plein écran   Échap : menu"
              10 (- *window-height* 26) 16 :darkgray))
 
 ;;; Inspection

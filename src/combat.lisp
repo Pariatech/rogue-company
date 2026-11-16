@@ -414,6 +414,7 @@ croissant de la plage, qui revérifie l'indice I, voit tous les morts."
                             (let ((killer (aref (soldiers-last-attacker soldiers) i)))
                               (when (>= killer 0)
                                 (incf (regiment-kills (aref regiments killer))))
+                              (record-soldier-death battle regiment i)
                               (remove-soldier regiment soldiers i))))
                (keep-front regiment ranks)))))
 

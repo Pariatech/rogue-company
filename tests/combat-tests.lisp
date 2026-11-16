@@ -225,3 +225,26 @@ s'arrête au lieu de le poursuivre."
     (is (= 1 (count-if #'rogue-company::regiment-routed-p rs)))
     (is (null (rogue-company::regiment-orders
                (find-if-not #'rogue-company::regiment-routed-p rs))))))
+
+(test deaths-are-logged
+  "Chaque mort entre au journal, au front : son camp, son tick passé, un rang
+de mêlée, et une position entre les deux régiments."
+  (let* ((b (charged-demo :seconds 60))
+         (log (rogue-company::battle-deaths b))
+         (lost (loop for r in (regiments b)
+                     sum (- (rogue-company::regiment-capacity r) (rogue-company::regiment-alive r)))))
+    (is (plusp lost))
+    (is (= lost (rogue-company::death-count log)))
+    (dotimes (k lost)
+      (is (<= 0 (aref (rogue-company::death-side log) k) 1))
+      (is (<= (aref (rogue-company::death-tick log) k) (rogue-company::battle-tick-count b)))
+      (is (zerop (aref (rogue-company::death-rank log) k)) "seul le premier rang est à portée")
+      (is (< (abs (aref (rogue-company::death-x log) k)) 10)))))
+
+(test death-log-wraps
+  "Plein, le journal remplace ses plus anciens morts."
+  (let ((log (rogue-company::make-death-log 4)))
+    (dotimes (k 6)
+      (rogue-company::record-death log (float k 1f0) 0f0 0f0 0 k 0))
+    (is (= 6 (rogue-company::death-count log)))
+    (is (equalp #(4f0 5f0 2f0 3f0) (rogue-company::death-x log)))))

@@ -102,6 +102,17 @@ Avec l'attaque et le porteur d'étendard (2026-11-15), mesuré par `game_eval` (
 
 Avec les piques dessinées à part (deux quads de plus par soldat, même lot, 2026-11-15) : 820 µs, 0 octet.
 
+Soldats en morceaux (`draw-soldier-parts`, 2026-11-16) : 64 régiments de 160, fenêtre 1920×1200 simulée, zoom 18 px/m, 20 appels par `game_eval`. Deux pieds, deux mains, corps, masque, tête et trois segments de pique : environ 10 quads par soldat visible.
+
+| Dessin | Temps | Octets alloués |
+| --- | --- | --- |
+| Sprites et piques (`draw-soldier-sprites`) | 1,09 ms | 0 |
+| Morceaux et piques (`draw-soldier-parts`) | 2,21 ms | 0 |
+
+Morts (`draw-corpses`, 2026-11-16) : 4 096 morts couchés, tous à l'écran, fenêtre 3840×2130, zoom 18 px/m, environ 9 quads chacun. Mesuré dans la boucle du jeu (section `:draw`, moyenne de 60 images) : 4,7 ms avec les morts, 0,8 ms sans, soit 3,8 ms pour eux, 0 octet alloué par le dessin. Hors de la boucle, le profil montre 95 % du temps dans l'envoi des lots au GPU (`mach_msg2_trap` sous `rlVertex3f`), pas dans le code Lisp : sauter la trigonométrie des morts couchés n'a gagné que 10 %. Piste : peindre les morts couchés dans une texture du sol.
+
+Les sprites mesurent ici 1,09 ms au lieu des 820 µs plus haut : la bataille d'essai n'est pas la même (régiments en damier, tous à l'écran à cette taille de fenêtre).
+
 ## Combat de mêlée (2026-11-14)
 
 Deux régiments de 500 piquiers sur 8 rangs, au contact après une charge (environ 185 soldats engagés de chaque côté) : engagement, ciblage par la grille, coups et morts compris.
