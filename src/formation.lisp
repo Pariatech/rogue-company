@@ -17,6 +17,10 @@ passer un homme (0,6 m de large) entre deux files (contremarche, shooting.lisp).
   "Feu par rang (shooting.lisp) : rangs qui tirent l'un après l'autre, et
 profondeur d'un régiment à cet exercice (ADD-REGIMENT).")
 
+(defparameter *volley-ranks* 2
+  "Salve (shooting.lisp) : rangs qui tirent ensemble, et profondeur d'un
+régiment à cet exercice (ADD-REGIMENT).")
+
 (defclass formation ()
   ((x :initarg :x :accessor formation-x :type single-float :documentation "Centre, en mètres.")
    (y :initarg :y :accessor formation-y :type single-float)

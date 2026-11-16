@@ -32,6 +32,17 @@
 ;;; debout, à *RANK-FIRE-INTERVAL* d'écart, chacun quand il est prêt. Puis tous
 ;;; se relèvent et rechargent sur place. Trois salves rapprochées, puis le
 ;;; silence du rechargement ; les rangs au-delà du troisième ne tirent pas.
+;;;
+;;; Salve (:VOLLEY), l'exercice par défaut : les *VOLLEY-RANKS* premiers rangs
+;;; tirent ensemble, le premier accroupi, le deuxième debout par-dessus, puis
+;;; rechargent sur place. Le régiment se range sur ces seuls rangs (ADD-REGIMENT).
+;;;
+;;; Salvée (:SALVO), la salve suédoise : les *RANK-FIRE-RANKS* (3) premiers
+;;; rangs tirent ensemble, le premier à genoux, le deuxième courbé, le troisième
+;;; debout, puis rechargent sur place. Le choc d'une salve sur le moral de sa
+;;; cible croît avec le nombre de balles : la salvée frappe trois fois plus fort
+;;; qu'un rang seul, puis laisse un long silence.
+;;;
 ;;; L'exercice d'un régiment est REGIMENT-DRILL (ADD-REGIMENT, :DRILL).
 ;;;
 ;;; Pas encore : ligne de tir (alliés ou relief entre les tireurs et leur
@@ -61,7 +72,8 @@ la dernière salve et le moment où tous se relèvent.")
 de son chemin.")
 
 (defparameter *volley-shock* 2f0
-  "Moral perdu par la cible d'une salve tirée par tout un rang (proportionnel en deçà).")
+  "Moral perdu par la cible d'une salve, par rang complet de balles tirées
+(proportionnel au nombre de balles : deux rangs ensemble, le double).")
 
 (defparameter *fire-distance* 0.75f0
   "Part de sa portée à laquelle un régiment de tireurs s'arrête pour tirer.")
@@ -192,6 +204,12 @@ place. Leur emplacement devient l'étape en cours."
                            (setf (aref slot-xs i) wx
                                  (aref slot-ys i) wy))))))))))
 
+(defun regiment-stoop (regiment)
+  "Rang courbé (dessiné à mi-hauteur) : le deuxième à la salvée, ou -1."
+  (if (and (eq (regiment-drill regiment) :salvo) (plusp (regiment-crouch regiment)))
+      1
+      -1))
+
 (defun volley-fire-p (regiment)
   "Vrai si REGIMENT tire en salves, selon son exercice (REGIMENT-DRILL)."
   (and (regiment-drill regiment)
@@ -204,15 +222,27 @@ place. Leur emplacement devient l'étape en cours."
 debout au feu par rang). Hors des salves (en marche, au contact), tous debout."
   (when (plusp (regiment-volley-timer regiment))
     (decf (regiment-volley-timer regiment)))
-  (unless (volley-fire-p regiment)
-    (setf (regiment-crouch regiment) 0
-          (regiment-volley-rank regiment) 0))
+  ;; Rang à tirer disparu (pertes) : le cycle reprend au premier.
+  (when (>= (regiment-volley-rank regiment)
+            (ceiling (max 1 (regiment-alive regiment))
+                     (formation-files (regiment-formation regiment)
+                                      (max 1 (regiment-alive regiment)))))
+    (setf (regiment-volley-rank regiment) 0
+          (regiment-crouch regiment) 0))
+  (if (volley-fire-p regiment)
+      ;; Salve et salvée : le premier rang reste accroupi, les suivants tirent
+      ;; par-dessus (à la salvée, le deuxième courbé : REGIMENT-STOOP).
+      (when (member (regiment-drill regiment) '(:volley :salvo))
+        (setf (regiment-crouch regiment) 1))
+      (setf (regiment-crouch regiment) 0
+            (regiment-volley-rank regiment) 0))
   (let ((timer (regiment-countermarch-timer regiment)))
     (cond ((> timer 0) (decf (regiment-countermarch-timer regiment)))
           ((= timer 0)
            (setf (regiment-countermarch-timer regiment) -1)
            (when (volley-fire-p regiment)
              (ecase (regiment-drill regiment)
+               ((:volley :salvo))
                (:countermarch (countermarch regiment soldiers))
                (:fire-by-rank (setf (regiment-crouch regiment) 0
                                     (regiment-volley-rank regiment) 0))))))))
@@ -356,8 +386,13 @@ STRIKE, appliqués ensuite par APPLY-DAMAGE."
                       (volley-rank (if (eq (regiment-drill regiment) :fire-by-rank)
                                        (regiment-volley-rank regiment)
                                        0))
+                      ;; Rangs qui tirent ensemble : un, ou deux pour la salve.
+                      (volley-depth (case (regiment-drill regiment)
+                                      (:volley (the fixnum *volley-ranks*))
+                                      (:salvo (the fixnum *rank-fire-ranks*))
+                                      (t 1)))
                       (rank-start (+ start (* volley-rank files)))
-                      (rank-end (min (+ rank-start files) (regiment-end regiment)))
+                      (rank-end (min (+ rank-start (* volley-depth files)) (regiment-end regiment)))
                       (ready (and volley enemy
                                   (< rank-start rank-end)
                                   (zerop (regiment-volley-timer regiment))
@@ -373,11 +408,11 @@ STRIKE, appliqués ensuite par APPLY-DAMAGE."
                       ;; Rangs qui tirent : de LOW à HIGH exclu.
                       (low (if volley volley-rank 0))
                       (high (cond ((not volley) firing-ranks)
-                                  (ready (1+ volley-rank))
+                                  (ready (+ volley-rank volley-depth))
                                   (t volley-rank)))
                       (shots 0))
                  (declare (type single-float range skill)
-                          (type fixnum reload start files bearer index volley-rank rank-start
+                          (type fixnum reload start files bearer index volley-rank volley-depth rank-start
                                 rank-end low high shots))
                  (loop for i of-type fixnum from start below (regiment-end regiment)
                        do (when (= 0 (aref weapons i))
@@ -441,8 +476,11 @@ STRIKE, appliqués ensuite par APPLY-DAMAGE."
                  ;; Salve tirée : la cible est ébranlée ; puis l'exercice.
                  (when (and volley (plusp shots))
                    (lose-morale enemy (* (the single-float *volley-shock*)
-                                         (min 1f0 (/ (float shots 1f0) (float files 1f0)))))
-                   (if (eq (regiment-drill regiment) :fire-by-rank)
+                                         (/ (float shots 1f0) (float files 1f0))))
+                   (case (regiment-drill regiment)
+                     ;; Salve et salvée : rien à faire, chacun recharge sur place.
+                     ((:volley :salvo))
+                     (:fire-by-rank
                        (let ((interval (round (* (the single-float *rank-fire-interval*)
                                                  +ticks-per-second+)))
                              (ranks (ceiling (regiment-alive regiment) files)))
@@ -453,11 +491,12 @@ STRIKE, appliqués ensuite par APPLY-DAMAGE."
                                    (regiment-volley-timer regiment) interval)
                              ;; Dernier rang : tous se relèvent et rechargent.
                              (setf (regiment-countermarch-timer regiment) interval
-                                   (regiment-volley-timer regiment) interval)))
-                       ;; Contremarche : le rang passera à l'arrière.
+                                   (regiment-volley-timer regiment) interval))))
+                     ;; Contremarche : le rang passera à l'arrière.
+                     (t
                        (setf (regiment-countermarch-timer regiment)
                              (round (* (the single-float *countermarch-delay*) +ticks-per-second+))
                              (regiment-volley-timer regiment)
                              (round (* (+ (the single-float *countermarch-delay*)
                                           (the single-float *volley-interval*))
-                                       +ticks-per-second+))))))))))
+                                       +ticks-per-second+)))))))))))

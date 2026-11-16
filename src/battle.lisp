@@ -37,15 +37,19 @@ pour reproduire une bataille.")
 (defun add-regiment (battle stats count &key (name "Régiment") (side 0) (x 0) (y 0) (facing 0)
                                              (ranks (stats-ranks stats)) (scatter 0)
                                              (drill (and (attack-volley-p (stats-primary stats))
-                                                         :countermarch)))
+                                                         :volley)))
   "Ajoute un régiment de COUNT soldats aux STATS données, en formation autour de
 X, Y. Avec SCATTER, chaque soldat part d'un point tiré au hasard à au plus
 SCATTER mètres de son emplacement, sur chaque axe. DRILL : exercice de tir des
-salves (shooting.lisp), la contremarche par défaut pour une arme :VOLLEY.
+salves (shooting.lisp), la salve des deux premiers rangs par défaut pour une
+arme :VOLLEY.
 Renvoie le régiment."
   (let* ((soldiers (battle-soldiers battle))
-         ;; Feu par rang : autant de rangs que de rangs qui tirent.
-         (ranks (if (eq drill :fire-by-rank) (min ranks *rank-fire-ranks*) ranks))
+         ;; Feu par rang et salve : autant de rangs que de rangs qui tirent.
+         (ranks (case drill
+                  ((:fire-by-rank :salvo) (min ranks *rank-fire-ranks*))
+                  (:volley (min ranks *volley-ranks*))
+                  (t ranks)))
          (start (reserve-soldiers soldiers count))
          (regiments (battle-regiments battle))
          (regiment (make-instance 'regiment

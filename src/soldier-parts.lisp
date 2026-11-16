@@ -261,6 +261,7 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (regiment-shields *regiment-shields*)
          (regiment-guards *regiment-guards*)
          (regiment-crouch *regiment-crouch*)
+         (regiment-stoop *regiment-stoop*)
          (crouch-height (the single-float *crouch-height*))
          (soldier-weapons (soldiers-weapon soldiers))
          (tick (battle-tick-count battle))
@@ -349,7 +350,7 @@ dans le sens des aiguilles d'une montre à l'écran)."
              (type single-float recoil-distance)
              (type fixnum-array order strike-ticks stuns marches soldier-regiments bearers lowered-ends
                    regiment-starts regiment-files regiment-weapons regiment-shields
-                   regiment-guards regiment-crouch soldier-weapons)
+                   regiment-guards regiment-crouch regiment-stoop soldier-weapons)
              (type single-float crouch-height)
              (type (simple-array single-float (6)) sword-rest sword-guard-pose sword-raised
                    sword-cut shield-rest shield-guard halberd-rest halberd-guard
@@ -409,11 +410,14 @@ dans le sens des aiguilles d'une montre à l'écran)."
                  (lift (cos phase))
                  ;; Accroupi après sa salve (feu par rang) : corps, tête et mains
                  ;; plus bas, les pieds restent au sol.
-                 (crouched (< (floor (- i (aref regiment-starts regiment-index))
-                                     (max 1 (aref regiment-files regiment-index)))
-                              (aref regiment-crouch regiment-index)))
+                 (rank (floor (- i (aref regiment-starts regiment-index))
+                              (max 1 (aref regiment-files regiment-index))))
+                 ;; Courbé (salvée) : à mi-hauteur.
                  (bob (- (if moving (* bob-height (abs lift)) 0f0)
-                         (if crouched crouch-height 0f0)))
+                         (cond ((< rank (aref regiment-crouch regiment-index)) crouch-height)
+                               ((= rank (aref regiment-stoop regiment-index))
+                                (* 0.5f0 crouch-height))
+                               (t 0f0))))
                  (color (side-color (regiment-side (aref regiments regiment-index))))
                  (team-r (first color)) (team-g (second color)) (team-b (third color))
                  ;; Mains et perche (pique ou hampe) : extrémités A (pied) et B

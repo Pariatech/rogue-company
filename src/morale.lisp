@@ -19,8 +19,9 @@
 
 (defparameter *rout-morale* 20f0 "Sous ce moral, le régiment se débande.")
 
-(defparameter *fire-calm-seconds* 3
-  "Secondes sans tirer ni essuyer de tir avant que le moral remonte.")
+(defparameter *fire-calm-seconds* 20
+  "Secondes sans tirer ni essuyer de tir avant que le moral remonte : plus qu'un
+rechargement, pour que l'accalmie entre deux salves ne compte pas.")
 
 (defparameter *morale-recovery* 0.5f0
   "Moral regagné par seconde sans aucun soldat engagé, jusqu'à la valeur de départ.")

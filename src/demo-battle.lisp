@@ -38,8 +38,8 @@ pendant que les piques s'affrontent de face.")
   "Duels de mêlée côte à côte : piques contre rodeleros, piques contre piques,
 hallebardes contre rodeleros, hallebardes contre piques.")
 
-(defparameter *demo-regiments*
-  '((0 :arquebusiers 120 -40 -75 0)
+(defparameter *arquebus-demo-regiments*
+  '((0 :arquebusiers 120 -40 -75 0 :countermarch)
     (1 :arquebusiers 120 40 -75 180 :fire-by-rank)
     (0 :arquebusiers 120 -40 -25 0)
     (1 :rodeleros 120 40 -25 180)
@@ -47,11 +47,37 @@ hallebardes contre rodeleros, hallebardes contre piques.")
     (1 :pikemen 160 40 25 180)
     (0 :arquebusiers 120 -40 75 0)
     (1 :halberdiers 120 40 75 180))
-  "Régiments de la démonstration : (camp dotation effectif x y orientation en degrés).
-Quatre duels d'arquebusiers côte à côte, du nord au sud, hors de portée de tir
-au départ, que C lance chacun sur l'ennemi le plus proche : contre des
-arquebusiers (contremarche contre feu par rang), des rodeleros, des piquiers et
-des hallebardiers. Un septième élément choisit l'exercice de tir.")
+  "Duels d'arquebusiers contre chaque arme : contre des arquebusiers
+(contremarche contre feu par rang), des rodeleros, des piquiers et des
+hallebardiers.")
+
+(defparameter *drill-demo-regiments*
+  ;; 90 m entre les duels : à la salve, sur deux rangs, le front fait 72 m.
+  '((0 :arquebusiers 120 -40 -90 0 :volley)
+    (1 :arquebusiers 120 40 -90 180 :countermarch)
+    (0 :arquebusiers 120 -40 0 0 :volley)
+    (1 :arquebusiers 120 40 0 180 :fire-by-rank)
+    (0 :arquebusiers 120 -40 90 0 :countermarch)
+    (1 :arquebusiers 120 40 90 180 :fire-by-rank))
+  "Régiments de la démonstration : (camp dotation effectif x y orientation en
+degrés [exercice de tir]). Trois duels d'arquebusiers, un par paire
+d'exercices, hors de portée de tir au départ, que C lance chacun sur l'ennemi
+le plus proche : salve contre contremarche, salve contre feu par rang,
+contremarche contre feu par rang. Sans exercice, la salve.")
+
+(defparameter *demo-regiments*
+  ;; 90 m entre les duels : à la salve, sur deux rangs, le front fait 72 m.
+  '((0 :arquebusiers 120 -40 -90 0 :salvo)
+    (1 :arquebusiers 120 40 -90 180 :volley)
+    (0 :arquebusiers 120 -40 0 0 :salvo)
+    (1 :arquebusiers 120 40 0 180 :countermarch)
+    (0 :arquebusiers 120 -40 90 0 :salvo)
+    (1 :arquebusiers 120 40 90 180 :fire-by-rank))
+  "Régiments de la démonstration : (camp dotation effectif x y orientation en
+degrés [exercice de tir]). Trois duels d'arquebusiers, la salvée contre chacun
+des autres exercices (salve, contremarche, feu par rang), hors de portée de tir
+au départ, que C lance chacun sur l'ennemi le plus proche. Sans exercice, la
+salve.")
 
 (defparameter *demo-names* '((:pikemen . "Piquiers") (:rodeleros . "Rodeleros")
                               (:halberdiers . "Hallebardiers")
@@ -73,7 +99,7 @@ des hallebardiers. Un septième élément choisit l'exercice de tir.")
                            :drill (if options
                                       (first options)
                                       (and (attack-volley-p (stats-primary (dotation-stats dotation)))
-                                           :countermarch))))
+                                           :volley))))
     battle))
 
 (defun order-random-moves (battle rng &key (half-width 30) (half-height 20))
