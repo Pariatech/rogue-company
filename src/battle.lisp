@@ -35,19 +35,32 @@ pour reproduire une bataille.")
                          :grid (make-spatial-grid :size size)))
 
 (defun add-regiment (battle stats count &key (name "Régiment") (side 0) (x 0) (y 0) (facing 0)
-                                             (ranks (stats-ranks stats)) (scatter 0))
+                                             (ranks (stats-ranks stats)) (scatter 0)
+                                             (drill (and (attack-volley-p (stats-primary stats))
+                                                         :countermarch)))
   "Ajoute un régiment de COUNT soldats aux STATS données, en formation autour de
 X, Y. Avec SCATTER, chaque soldat part d'un point tiré au hasard à au plus
-SCATTER mètres de son emplacement, sur chaque axe. Renvoie le régiment."
+SCATTER mètres de son emplacement, sur chaque axe. DRILL : exercice de tir des
+salves (shooting.lisp), la contremarche par défaut pour une arme :VOLLEY.
+Renvoie le régiment."
   (let* ((soldiers (battle-soldiers battle))
+         ;; Feu par rang : autant de rangs que de rangs qui tirent.
+         (ranks (if (eq drill :fire-by-rank) (min ranks *rank-fire-ranks*) ranks))
          (start (reserve-soldiers soldiers count))
          (regiments (battle-regiments battle))
          (regiment (make-instance 'regiment
                                   :index (length regiments) :name name :side side :stats stats
                                   :formation (make-formation :x x :y y :facing facing :ranks ranks
                                                              :files (ceiling count (max 1 ranks))
-                                                             :spacing (stats-spacing stats))
+                                                             :spacing (stats-spacing stats)
+                                                             ;; Tireurs en salves : files
+                                                             ;; ouvertes pour la contremarche.
+                                                             :file-spacing
+                                                             (and (eq drill :countermarch)
+                                                                  (max (stats-spacing stats)
+                                                                       *volley-file-spacing*)))
                                   :morale (stats-morale stats)
+                                  :drill drill
                                   :start start :capacity count :alive count))
          (rng (battle-rng battle))
          (scatter (float scatter 1f0)))
@@ -76,6 +89,7 @@ SCATTER mètres de son emplacement, sur chaque axe. Renvoie le régiment."
                    (aref (soldiers-calm soldiers) i) 0
                    (aref (soldiers-stun soldiers) i) 0
                    (aref (soldiers-reload soldiers) i) 0
+                   (aref (soldiers-march soldiers) i) 0
                    (aref (soldiers-last-attacker soldiers) i) -1
                    (aref (soldiers-strike-tick soldiers) i) -1000000
                    (aref (soldiers-damage soldiers) i) 0f0
@@ -101,6 +115,8 @@ et s'ajoutent ici au fil des étapes :
     (loop for regiment across regiments
           do (update-engagement battle regiment)
              (update-regiment-slots regiment soldiers)
+             ;; Le rang qui a tiré gagne l'arrière par les intervalles (shooting.lisp).
+             (steer-countermarch regiment soldiers)
              ;; Après les emplacements (la poussée les recalcule à chaque tick),
              ;; avec les cibles et la grille du tick précédent.
              (loosen-formation battle regiment))

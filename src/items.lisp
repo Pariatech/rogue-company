@@ -60,7 +60,8 @@
   :slots '(:main) :hands 2 :weight 7 :price 40
   :attack '(:kind :ranged :volley t :range 80 :damage 20 :piercing 90
             :reload 20 :ready-time 1.0)
-  :modifiers '((:spacing :set 1.2))
+  ;; Six rangs : la contremarche laisse cinq rangs recharger pendant qu'un tire.
+  :modifiers '((:spacing :set 1.2) (:ranks :set 6))
   :tags '(:firearm)
   :forbids '(:mount))
 
@@ -68,7 +69,8 @@
   :slots '(:main) :hands 2 :weight 4.5 :price 30
   :attack '(:kind :ranged :volley t :range 60 :damage 20 :piercing 60 :accuracy 0.05
             :reload 15 :ready-time 1.0)
-  :modifiers '((:spacing :set 1.2))
+  ;; Six rangs : la contremarche laisse cinq rangs recharger pendant qu'un tire.
+  :modifiers '((:spacing :set 1.2) (:ranks :set 6))
   :tags '(:firearm))
 
 (define-item :crossbow "Arbalète"

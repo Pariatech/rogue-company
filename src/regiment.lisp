@@ -31,6 +31,20 @@
                    :documentation "Ennemis qui le visaient de dos au dernier tick.")
    (holding :initform nil :accessor regiment-holding-p
             :documentation "Au contact : la formation ne bouge plus.")
+   (drill :initarg :drill :initform nil :accessor regiment-drill
+          :documentation "Exercice de tir des salves (shooting.lisp) : :COUNTERMARCH,
+:FIRE-BY-RANK, ou NIL (feu à volonté).")
+   (volley-rank :initform 0 :accessor regiment-volley-rank :type fixnum
+                :documentation "Feu par rang : rang qui tire la prochaine salve.")
+   (crouch :initform 0 :accessor regiment-crouch :type fixnum
+           :documentation "Feu par rang : premiers rangs accroupis après avoir tiré.")
+   (volley-timer :initform 0 :accessor regiment-volley-timer :type fixnum
+                 :documentation "Ticks avant que le premier rang puisse tirer sa salve
+(contremarche, shooting.lisp).")
+   (countermarch-timer :initform -1 :accessor regiment-countermarch-timer :type fixnum
+                       :documentation "Ticks avant la fin de la salve : le rang qui vient de
+tirer passe à l'arrière (contremarche), ou tous se relèvent (feu par rang) ; -1
+sans salve en cours.")
    (fire-tick :initform -1000000 :accessor regiment-fire-tick :type fixnum
               :documentation "Dernier tick où il a tiré ou essuyé un tir (shooting.lisp) :
 le moral ne remonte pas sous le feu.")

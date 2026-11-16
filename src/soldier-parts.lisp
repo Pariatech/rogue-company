@@ -86,11 +86,13 @@
 ;;; Arquebuse : crosse de bois, canon d'acier. Une pose d'arquebuse : la crosse
 ;;; (avant, droite, hauteur), puis la bouche du canon, dans le repère du soldat.
 
-(defparameter *gun-rest* (pose 0.2 0.22 0.75 -0.25 0.28 1.95)
-  "Arquebuse au repos, sur l'épaule, canon en l'air.")
+(defparameter *gun-rest* (pose 0.28 0.18 0.8 -0.5 0.3 1.65)
+  "Arquebuse au repos, sur l'épaule, inclinée vers l'arrière.")
 (defparameter *gun-aim* (pose 0.05 0.18 1.0 1.15 0.12 1.08)
   "Arquebuse en joue, à l'épaule, canon vers l'ennemi.")
-(defparameter *gun-stock* 0.4f0 "Part de l'arquebuse en bois, depuis la crosse.")
+(defparameter *gun-stock* 0.7f0
+  "Part de l'arquebuse en bois, depuis la crosse : le fût court sous presque tout
+le canon, seule la bouche est d'acier.")
 (defparameter *gun-recoil* 0.12f0 "Recul de l'arquebuse au coup, en mètres.")
 (defparameter *gun-flash-seconds* 0.15f0 "Durée de l'éclair à la bouche du canon.")
 (defparameter *gun-smoke-seconds* 1.2f0 "Durée de la fumée d'un coup.")
@@ -247,6 +249,7 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (facings (soldiers-facing soldiers)) (prev-facings (soldiers-prev-facing soldiers))
          (strike-ticks (soldiers-strike-tick soldiers))
          (stuns (soldiers-stun soldiers))
+         (marches (soldiers-march soldiers))
          (recoil-distance (the single-float *stun-recoil*))
          (soldier-regiments (soldiers-regiment soldiers))
          (regiments (battle-regiments battle))
@@ -257,6 +260,8 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (regiment-weapons *regiment-weapons*)
          (regiment-shields *regiment-shields*)
          (regiment-guards *regiment-guards*)
+         (regiment-crouch *regiment-crouch*)
+         (crouch-height (the single-float *crouch-height*))
          (soldier-weapons (soldiers-weapon soldiers))
          (tick (battle-tick-count battle))
          (zoom (camera-zoom camera))
@@ -342,9 +347,10 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (brass-r (first brass)) (brass-g (second brass)) (brass-b (third brass)))
     (declare (type fixnum count tick)
              (type single-float recoil-distance)
-             (type fixnum-array order strike-ticks stuns soldier-regiments bearers lowered-ends
+             (type fixnum-array order strike-ticks stuns marches soldier-regiments bearers lowered-ends
                    regiment-starts regiment-files regiment-weapons regiment-shields
-                   regiment-guards soldier-weapons)
+                   regiment-guards regiment-crouch soldier-weapons)
+             (type single-float crouch-height)
              (type (simple-array single-float (6)) sword-rest sword-guard-pose sword-raised
                    sword-cut shield-rest shield-guard halberd-rest halberd-guard
                    halberd-raised halberd-cut gun-rest gun-aim)
@@ -401,7 +407,13 @@ dans le sens des aiguilles d'une montre à l'écran)."
                             0f0))
                  (swing (sin phase))
                  (lift (cos phase))
-                 (bob (if moving (* bob-height (abs lift)) 0f0))
+                 ;; Accroupi après sa salve (feu par rang) : corps, tête et mains
+                 ;; plus bas, les pieds restent au sol.
+                 (crouched (< (floor (- i (aref regiment-starts regiment-index))
+                                     (max 1 (aref regiment-files regiment-index)))
+                              (aref regiment-crouch regiment-index)))
+                 (bob (- (if moving (* bob-height (abs lift)) 0f0)
+                         (if crouched crouch-height 0f0)))
                  (color (side-color (regiment-side (aref regiments regiment-index))))
                  (team-r (first color)) (team-g (second color)) (team-b (third color))
                  ;; Mains et perche (pique ou hampe) : extrémités A (pied) et B
@@ -565,7 +577,8 @@ dans le sens des aiguilles d'une montre à l'écran)."
                       ((= weapon 4)
                        ;; Arquebuse : en joue sous un ordre d'attaque, sur l'épaule
                        ;; sinon ; le coup la fait reculer et relever.
-                       (let* ((aim (and (not stunned) (= 1 (aref regiment-guards regiment-index))))
+                       (let* ((aim (and (not stunned) (zerop (aref marches i))
+                                        (= 1 (aref regiment-guards regiment-index))))
                               (pose (if aim gun-aim gun-rest))
                               (age (+ alpha (float (min 1000000 (- tick (aref strike-ticks i))) 1f0)))
                               (kick (if (and aim (< age smoke-ticks))
