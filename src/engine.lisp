@@ -5,7 +5,8 @@
 taille en plein écran.")
 (defvar *window-height* 800)
 (defparameter *start-fullscreen* t
-  "Ouvrir en plein écran fenêtré (sans bordure, à la taille du moniteur). F11 bascule.")
+  "Ouvrir en plein écran : natif sous macOS (bureau à part), fenêtré sans bordure
+ailleurs. F11 bascule.")
 (defvar *windowed-geometry* nil
   "Position et taille de la fenêtre avant le plein écran fenêtré, (x y largeur
 hauteur), ou NIL hors plein écran.")
@@ -177,7 +178,7 @@ le chemin absolu. À appeler pendant WITH-DRAWING, depuis le thread principal."
 ;;; en fait sur macOS une fenêtre plein écran posée au-dessus de toutes les
 ;;; autres : on ne pouvait plus rien ouvrir par-dessus le jeu.
 
-(defun toggle-fullscreen-window ()
+(defun toggle-borderless-window ()
   "Bascule entre le plein écran fenêtré et la fenêtre d'avant. Thread principal."
   (if *windowed-geometry*
       (destructuring-bind (x y width height) *windowed-geometry*
@@ -204,15 +205,52 @@ le chemin absolu. À appeler pendant WITH-DRAWING, depuis le thread principal."
             (raylib:set-window-size (raylib:get-monitor-width monitor)
                                     (- (raylib:get-monitor-height monitor) below)))))))
 
+;;; Plein écran natif de macOS : la fenêtre part sur son propre bureau (Space),
+;;; comme avec le bouton vert ; Cmd+Tab ou un glissé à quatre doigts ramènent
+;;; aux autres apps. GLFW ne l'offre pas : on envoie toggleFullScreen: à la
+;;; NSWindow que donne GetWindowHandle. macOS ne le permet qu'à une fenêtre
+;;; redimensionnable.
+
+(defvar *fullscreen-pending* nil
+  "Vrai quand le plein écran du démarrage reste à demander : macOS ignore la
+bascule tant que la fenêtre n'est pas affichée.")
+
+(defparameter *fullscreen-delay-frames* 2
+  "Images dessinées avant de demander le plein écran du démarrage.")
+
+(defun objc-send (object selector &optional (result-type :void))
+  "Envoie le message SELECTOR, avec NIL pour seul argument, à l'objet
+Objective-C OBJECT. RESULT-TYPE : :VOID ou :UNSIGNED-LONG."
+  (let ((selector (cffi:foreign-funcall "sel_registerName" :string selector :pointer)))
+    (ecase result-type
+      (:void (cffi:foreign-funcall "objc_msgSend" :pointer object :pointer selector
+                                                  :pointer (cffi:null-pointer) :void))
+      (:unsigned-long (cffi:foreign-funcall "objc_msgSend" :pointer object :pointer selector
+                                                           :pointer (cffi:null-pointer)
+                                                           :unsigned-long)))))
+
+(defun native-fullscreen-p ()
+  "Vrai si la fenêtre est en plein écran natif (NSWindowStyleMaskFullScreen)."
+  (logbitp 14 (objc-send (raylib:get-window-handle) "styleMask" :unsigned-long)))
+
+(defun toggle-fullscreen-window ()
+  "Bascule le plein écran : natif sous macOS, fenêtré sans bordure ailleurs.
+Thread principal."
+  #+darwin (objc-send (raylib:get-window-handle) "toggleFullScreen:")
+  #-darwin (toggle-borderless-window))
+
 (defun run-frame ()
   (let ((start (get-internal-real-time))
         (consed (sb-ext:get-bytes-consed)))
     (begin-frame-timing)
-    (when (key-pressed-p :key-f11)
+    (timed (:jobs) (run-pending-jobs :max 8))
+    ;; Après les tâches : une touche simulée par game_input y est déposée.
+    (when (or (key-pressed-p :key-f11)
+              (and *fullscreen-pending* (>= *frame* *fullscreen-delay-frames*)))
+      (setf *fullscreen-pending* nil)
       (toggle-fullscreen-window))
     (setf *window-width* (raylib:get-screen-width)
           *window-height* (raylib:get-screen-height))
-    (timed (:jobs) (run-pending-jobs :max 8))
     ;; La console tourne aussi en pause ; après une erreur de sa part, elle attend
     ;; la correction pour ne pas la répéter à chaque image.
     (unless (console-error-p)
@@ -246,9 +284,11 @@ le chemin absolu. À appeler pendant WITH-DRAWING, depuis le thread principal."
            (raylib:set-target-fps 60)
            ;; Échap sert au jeu (retour au menu) : la fenêtre se ferme par son bouton.
            (raylib:set-exit-key :key-null)
-           (setf *windowed-geometry* nil)
-           (when *start-fullscreen*
-             (toggle-fullscreen-window))
+           (setf *windowed-geometry* nil
+                 *fullscreen-pending* *start-fullscreen*)
+           ;; Le plein écran natif de macOS demande une fenêtre redimensionnable.
+           #+darwin (raylib:set-window-state :flag-window-resizable)
+           (raylib:set-window-min-size 640 400)
            (loop until (raylib:window-should-close)
                  do (run-frame))))
     (stop-mcp-server)))
