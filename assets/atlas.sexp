@@ -21,4 +21,5 @@
   (:part-foot :row 24 :frames 1 :width 6 :height 4)
   (:part-hand :row 26 :frames 1 :width 5 :height 5)
   (:part-head :row 28 :frames 5 :width 14 :height 13)
-  (:solid :row 30 :frames 1 :width 4 :height 4))) 
+  (:part-shield :row 30 :frames 3 :width 12 :height 12)
+  (:solid :row 32 :frames 1 :width 4 :height 4))) 

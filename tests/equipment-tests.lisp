@@ -102,3 +102,10 @@
                                              :attack '(:kind :magic)))
   (signals error (rogue-company::define-man :test-bad "x" :hit-points 10))
   (is (null (gethash :test-bad rogue-company::*item-templates*))))
+
+(test stats-keep-their-loadout
+  "Les stats gardent l'équipement d'où elles viennent : le dessin y lit l'arme
+et le bouclier."
+  (let ((loadout (rogue-company::stats-loadout (rogue-company::dotation-stats :rodeleros))))
+    (is (eq :sword (getf loadout :main)))
+    (is (eq :rodela (getf loadout :shield)))))

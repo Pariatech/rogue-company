@@ -40,9 +40,11 @@
 ;;; Bataille de démonstration : deux régiments dispersés qui rejoignent leur formation.
 
 (defun demo (&rest args &key (scatter 12) &allow-other-keys)
-  "La bataille de démonstration, soldats dispersés à SCATTER mètres de leur
-emplacement : les tests éprouvent le regroupement et les collisions."
-  (apply #'rogue-company::make-demo-battle :scatter scatter args))
+  "Deux régiments de 160 piquiers face à face, soldats dispersés à SCATTER
+mètres de leur emplacement : les tests éprouvent le regroupement et les
+collisions."
+  (apply #'rogue-company::make-demo-battle :scatter scatter
+         :red '((:pikemen 160)) :blue '((:pikemen 160)) args))
 
 (defun regiments (battle)
   (coerce (rogue-company::battle-regiments battle) 'list))
@@ -158,3 +160,14 @@ pendant les 10 premières secondes."
          (limit (/ (rogue-company::stats-turn-rate (rogue-company::dotation-stats :pikemen)) 30)))
     (run-ticks b 1)
     (is (near limit (abs (facing-of b)) 1f-5))))
+
+(test demo-crosses-pikes-and-swords
+  "Dans la démonstration, C lance chaque régiment sur l'arme opposée : les
+piquiers sur les rodeleros, les rodeleros sur les piquiers."
+  (let ((b (rogue-company::make-demo-battle)))
+    (rogue-company::order-charge b)
+    (dolist (r (regiments b))
+      (let ((target (aref (rogue-company::battle-regiments b)
+                          (second (rogue-company::regiment-orders r)))))
+        (is (/= (rogue-company::regiment-weapon-look r)
+                (rogue-company::regiment-weapon-look target)))))))

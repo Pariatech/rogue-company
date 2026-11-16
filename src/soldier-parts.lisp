@@ -43,6 +43,44 @@
 (defparameter *bearer-pole-height* 2.6f0 "Hampe du porteur, en mètres.")
 (defparameter *bearer-pole-lean* 0.15f0 "Hampe du porteur : avance du sommet, en mètres.")
 (defparameter *finial-color* '(232 190 64))
+;;; Épée et rondache : l'épée est un trait (lame d'acier, garde dorée) tenu par
+;;; la main droite, la rondache un morceau tenu par la main gauche. Une pose
+;;; est un tableau de 6 nombres : la main (avant, droite, hauteur), puis la
+;;; direction de la lame dans le même repère.
+
+(defun pose (&rest values)
+  (make-array 6 :element-type 'single-float
+                :initial-contents (mapcar (lambda (v) (float v 1f0)) values)))
+
+(defparameter *sword-length* 0.8f0 "Lame de l'épée, en mètres.")
+(defparameter *dagger-length* 0.3f0 "Lame de la dague des piquiers, en mètres.")
+(defparameter *sword-guard* 0.07f0 "Demi-largeur de la garde, en mètres.")
+(defparameter *sword-guard-color* '(196 150 64))
+(defparameter *sword-strike-seconds* 0.45f0
+  "Durée d'un coup d'épée : armer, frapper, revenir en garde.")
+(defparameter *sword-rest* (pose 0.12 0.3 0.5 0.2 0.05 1.0)
+  "Épée au repos : portée droite, le long du corps.")
+(defparameter *sword-guard-pose* (pose 0.32 0.24 0.75 0.9 -0.15 0.45)
+  "Épée en garde, pointe vers l'ennemi.")
+(defparameter *sword-raised* (pose 0.15 0.28 1.05 -0.3 0.1 1.0)
+  "Coup d'épée armé, lame levée en arrière.")
+(defparameter *sword-cut* (pose 0.5 0.05 0.6 0.75 -0.35 -0.55)
+  "Fin du coup, lame abattue en avant.")
+(defparameter *shield-rest* (pose 0.12 -0.3 0.62 0 0 0)
+  "Rondache au repos, au bout du bras gauche (seules les trois premières valeurs servent).")
+(defparameter *shield-guard* (pose 0.38 -0.18 0.78 0 0 0)
+  "Rondache en garde, devant le corps.")
+(defparameter *shield-facing-threshold* 0.4f0
+  "Sinus de l'orientation au-delà duquel on voit la rondache de face (vers
+l'écran) ou de dos ; entre les deux, de profil.")
+
+(defparameter *part-depth-squash* 0.5f0
+  "Vue de trois quarts : part de la profondeur au sol (vers le haut ou le bas de
+l'écran) que gardent les décalages du corps (mains, pieds, épée, rondache,
+pique dressée). Sans elle, la main gauche d'un soldat tourné vers l'ouest
+tombe de toute la largeur de l'épaule. Les piques croisées et les positions des
+soldats gardent toute la profondeur : leur pointe doit atteindre l'ennemi.")
+
 (defparameter *part-cull-margin* 6f0
   "Marge hors écran, en mètres, sous laquelle un soldat se dessine encore : une
 pique croisée dépasse de lui.")
@@ -54,7 +92,7 @@ porteur au sol en X, Y (écran) regardant vers FACING."
          (f (+ *part-upright-forward* *bearer-pole-lean*))
          (r *part-upright-side*))
     (values (+ x (* zoom (- (* f c) (* r s))))
-            (+ y (* zoom (- (+ (* f s) (* r c)) *bearer-pole-height*))))))
+            (+ y (* zoom (- (* *part-depth-squash* (+ (* f s) (* r c))) *bearer-pole-height*))))))
 
 ;;; Quads du lot des morceaux. Ces macros lisent dans la portée de l'appel :
 ;;; SCALE (pixels d'écran par pixel de sprite), CELL-U, CELL-V, TEXEL-U,
@@ -125,21 +163,27 @@ dans le sens des aiguilles d'une montre à l'écran)."
         (multiple-value-bind (foot-row foot-frames foot-w foot-h) (atlas-overlay atlas :part-foot)
           (declare (ignore foot-frames))
           (multiple-value-bind (solid-row) (atlas-overlay atlas :solid)
-            (unless (and body-row head-row hand-row foot-row solid-row)
-              (error "Morceaux absents de l'atlas : lancer scripts/draw-parts.lisp puis build-atlas."))
-            (draw-parts-batch battle alpha camera atlas
-                              body-row (float body-w 1f0) (float body-h 1f0)
-                              head-row (float head-w 1f0) (float head-h 1f0)
-                              hand-row (float hand-w 1f0) (float hand-h 1f0)
-                              foot-row (float foot-w 1f0) (float foot-h 1f0)
-                              solid-row)))))))
+            (multiple-value-bind (shield-row shield-frames shield-w shield-h)
+                (atlas-overlay atlas :part-shield)
+              (declare (ignore shield-frames))
+              (unless (and body-row head-row hand-row foot-row solid-row shield-row)
+                (error "Morceaux absents de l'atlas : lancer scripts/draw-parts.lisp puis build-atlas."))
+              (draw-parts-batch battle alpha camera atlas
+                                body-row (float body-w 1f0) (float body-h 1f0)
+                                head-row (float head-w 1f0) (float head-h 1f0)
+                                hand-row (float hand-w 1f0) (float hand-h 1f0)
+                                foot-row (float foot-w 1f0) (float foot-h 1f0)
+                                solid-row
+                                shield-row (float shield-w 1f0) (float shield-h 1f0)))))))))
 
 (defun draw-parts-batch (battle alpha camera atlas
                          body-row body-w body-h head-row head-w head-h
-                         hand-row hand-w hand-h foot-row foot-w foot-h solid-row)
+                         hand-row hand-w hand-h foot-row foot-w foot-h solid-row
+                         shield-row shield-w shield-h)
   (declare (optimize (speed 3) (safety 1))
-           (type single-float alpha body-w body-h head-w head-h hand-w hand-h foot-w foot-h)
-           (type fixnum body-row head-row hand-row foot-row solid-row))
+           (type single-float alpha body-w body-h head-w head-h hand-w hand-h foot-w foot-h
+                 shield-w shield-h)
+           (type fixnum body-row head-row hand-row foot-row solid-row shield-row))
   (let* ((soldiers (battle-soldiers battle))
          (atlas-w (float (the fixnum (atlas-width atlas)) 1f0))
          (atlas-h (float (the fixnum (atlas-height atlas)) 1f0))
@@ -160,6 +204,10 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (lowered-ends *lowered-ends*)
          (regiment-starts *regiment-starts*)
          (regiment-files *regiment-files*)
+         (regiment-weapons *regiment-weapons*)
+         (regiment-shields *regiment-shields*)
+         (regiment-guards *regiment-guards*)
+         (soldier-weapons (soldiers-weapon soldiers))
          (tick (battle-tick-count battle))
          (zoom (camera-zoom camera))
          (scale (the single-float (camera-sprite-scale camera)))
@@ -168,6 +216,7 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (origin-x (- (* 0.5f0 width) (* zoom (the single-float (camera-x camera)))))
          (origin-y (- (* 0.5f0 height) (* zoom (the single-float (camera-y camera)))))
          (margin (* zoom (the single-float *part-cull-margin*)))
+         (squash (the single-float *part-depth-squash*))
          (strips *direction-strips*)
          (mirrored *direction-mirrored*)
          (eighth (/ (float pi 1f0) 4f0))
@@ -210,18 +259,35 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (pole-lean (the single-float *bearer-pole-lean*))
          (finial (the single-float *finial-length*))
          (half-line (* 0.5f0 scale (the single-float *pike-width*)))
+         (sword-length (the single-float *sword-length*))
+         (dagger-length (the single-float *dagger-length*))
+         (sword-guard (the single-float *sword-guard*))
+         (strike-ticks-sword (* (the single-float *sword-strike-seconds*)
+                                (float +ticks-per-second+ 1f0)))
+         (sword-rest *sword-rest*) (sword-guard-pose *sword-guard-pose*)
+         (sword-raised *sword-raised*) (sword-cut *sword-cut*)
+         (shield-rest *shield-rest*) (shield-guard *shield-guard*)
+         (shield-threshold (the single-float *shield-facing-threshold*))
          (wood *pike-wood*) (steel *pike-steel*) (gold *finial-color*)
+         (brass *sword-guard-color*)
          (wood-r (first wood)) (wood-g (second wood)) (wood-b (third wood))
          (steel-r (first steel)) (steel-g (second steel)) (steel-b (third steel))
-         (gold-r (first gold)) (gold-g (second gold)) (gold-b (third gold)))
+         (gold-r (first gold)) (gold-g (second gold)) (gold-b (third gold))
+         (brass-r (first brass)) (brass-g (second brass)) (brass-b (third brass)))
     (declare (type fixnum count tick)
              (type fixnum-array order strike-ticks soldier-regiments bearers lowered-ends
-                   regiment-starts regiment-files)
+                   regiment-starts regiment-files regiment-weapons regiment-shields
+                   regiment-guards soldier-weapons)
+             (type (simple-array single-float (6)) sword-rest sword-guard-pose sword-raised
+                   sword-cut shield-rest shield-guard)
+             (type single-float sword-length dagger-length sword-guard strike-ticks-sword
+                   shield-threshold)
+             (type (integer 0 255) brass-r brass-g brass-b)
              (type float-array xs ys prev-xs prev-ys facings prev-facings)
              (type simple-vector strips mirrored)
              (type vector regiments)
              (type single-float cell cell-u cell-v texel-u texel-v solid-u solid-v zoom scale
-                   width height origin-x origin-y margin eighth two-pi pi-f threshold2 walk-cycles
+                   width height origin-x origin-y margin squash eighth two-pi pi-f threshold2 walk-cycles
                    body-height head-height foot-height foot-side stride foot-lift bob-height
                    hand-height hand-side hand-swing pike-length pike-head pike-lean pike-hand
                    pike-rise pike-behind pike-thrust thrust-ticks pike-side rear-hand front-hand
@@ -266,21 +332,50 @@ dans le sens des aiguilles d'une montre à l'écran)."
                  (hand2-x 0f0) (hand2-y 0f0) (hand2-depth 0f0)
                  (pole nil)
                  (ax 0f0) (ay 0f0) (mx 0f0) (my 0f0) (cx 0f0) (cy 0f0) (bx 0f0) (by 0f0)
-                 (rear-behind nil) (front-behind nil))
+                 (rear-behind nil) (front-behind nil)
+                 (weapon (aref regiment-weapons regiment-index))
+                 ;; Lame tenue par la main droite (HAND2) : poignée H, pointe T,
+                 ;; garde de G1 à G2. Rondache tenue par la main gauche (HAND1).
+                 (blade nil)
+                 (hilt-x 0f0) (hilt-y 0f0) (tip-x 0f0) (tip-y 0f0)
+                 (guard1-x 0f0) (guard1-y 0f0) (guard2-x 0f0) (guard2-y 0f0)
+                 (shield (and (= 1 (aref regiment-shields regiment-index)) (not bearer)))
+                 (shield-frame (cond ((> s shield-threshold) 0)
+                                     ((< s (- shield-threshold)) 2)
+                                     (t 1))))
             (declare (type single-float pf facing c s phase swing lift bob
                            hand1-x hand1-y hand1-depth hand2-x hand2-y hand2-depth
-                           ax ay mx my cx cy bx by)
-                     (type fixnum direction frame regiment-index)
+                           ax ay mx my cx cy bx by hilt-x hilt-y tip-x tip-y
+                           guard1-x guard1-y guard2-x guard2-y)
+                     (type fixnum direction frame regiment-index weapon shield-frame)
                      (type (integer 0 255) team-r team-g team-b))
             (macrolet ((project (f r h)
                          ;; Écran x, écran y et profondeur (vers l'écran) d'un point
-                         ;; du repère du soldat.
+                         ;; du repère du soldat, profondeur écrasée (*PART-DEPTH-SQUASH*).
+                         `(let ((ground-x (- (* ,f c) (* ,r s)))
+                                (ground-y (+ (* ,f s) (* ,r c))))
+                            (values (+ sx (* zoom ground-x))
+                                    (- (+ sy (* zoom squash ground-y)) (* zoom ,h))
+                                    ground-y)))
+                       (project-flat (f r h)
+                         ;; Comme PROJECT, avec toute la profondeur : pique croisée.
                          `(let ((ground-x (- (* ,f c) (* ,r s)))
                                 (ground-y (+ (* ,f s) (* ,r c))))
                             (values (+ sx (* zoom ground-x))
                                     (- (+ sy (* zoom ground-y)) (* zoom ,h))
                                     ground-y)))
                        (hand (x y) `(part-quad hand-row 0 hand-w hand-h ,x ,y nil 255 255 255))
+                       (blade-part (behind)
+                         ;; La lame et la garde, du côté BEHIND du corps.
+                         `(when (and blade (eq (< hand2-depth 0f0) ,behind))
+                            (line-quad hilt-x hilt-y tip-x tip-y steel-r steel-g steel-b)
+                            (line-quad guard1-x guard1-y guard2-x guard2-y brass-r brass-g brass-b)))
+                       (shield-part (behind)
+                         `(when (and shield (eq (< hand1-depth 0f0) ,behind))
+                            (part-quad shield-row shield-frame shield-w shield-h hand1-x hand1-y
+                                       nil 255 255 255)
+                            (part-quad (1+ shield-row) shield-frame shield-w shield-h
+                                       hand1-x hand1-y nil team-r team-g team-b)))
                        (pole-part (behind)
                          ;; Les parties de la perche du côté BEHIND du corps.
                          `(when pole
@@ -311,9 +406,66 @@ dans le sens des aiguilles d'une montre à l'écran)."
                               (setf mx hand1-x my hand1-y
                                     rear-behind (< hand1-depth 0f0)
                                     front-behind rear-behind))))
+                (macrolet ((hold-blade (from to amount length)
+                             ;; Main droite et lame entre les poses FROM et TO.
+                             `(let* ((from ,from) (to ,to) (amount ,amount) (length ,length))
+                                (declare (type (simple-array single-float (6)) from to)
+                                         (type single-float amount length))
+                                (macrolet ((at (k) `(+ (aref from ,k)
+                                                       (* amount (- (aref to ,k) (aref from ,k))))))
+                                  (let* ((hf (at 0)) (hr (at 1)) (hh (+ (at 2) bob))
+                                         (df (at 3)) (dr (at 4)) (dh (at 5))
+                                         (norm (/ length (max 0.001f0 (sqrt (+ (* df df) (* dr dr)
+                                                                                (* dh dh)))))))
+                                    (declare (type single-float hf hr hh df dr dh norm))
+                                    (setf blade t)
+                                    (multiple-value-setq (hand2-x hand2-y hand2-depth)
+                                      (project hf hr hh))
+                                    (setf hilt-x hand2-x hilt-y hand2-y)
+                                    (multiple-value-setq (tip-x tip-y)
+                                      (project (+ hf (* df norm)) (+ hr (* dr norm))
+                                               (+ hh (* dh norm))))
+                                    (multiple-value-setq (guard1-x guard1-y)
+                                      (project hf (- hr sword-guard) hh))
+                                    (multiple-value-setq (guard2-x guard2-y)
+                                      (project hf (+ hr sword-guard) hh))))))
+                           (strike-blade (guard length)
+                             ;; Coup en trois temps après STRIKE-TICK : armer, frapper,
+                             ;; revenir. Sinon, en garde (GUARD) ou au repos.
+                             `(let* ((age (+ alpha (float (min 1000000 (- tick (aref strike-ticks i)))
+                                                          1f0)))
+                                     (u (/ age strike-ticks-sword)))
+                                (declare (type single-float age u))
+                                (cond ((not ,guard) (hold-blade sword-rest sword-rest 0f0 ,length))
+                                      ((< u 0.3f0) (hold-blade sword-guard-pose sword-raised
+                                                               (/ u 0.3f0) ,length))
+                                      ((< u 0.55f0) (hold-blade sword-raised sword-cut
+                                                                (/ (- u 0.3f0) 0.25f0) ,length))
+                                      ((< u 1f0) (hold-blade sword-cut sword-guard-pose
+                                                             (/ (- u 0.55f0) 0.45f0) ,length))
+                                      (t (hold-blade sword-guard-pose sword-guard-pose 0f0
+                                                     ,length))))))
                 (cond (bearer
                        (upright upright-forward pole-lean pole-height))
-                      ((and pikes (< i (aref lowered-ends regiment-index)))
+                      ((and pikes (= weapon 1) (= 1 (aref soldier-weapons i)))
+                       ;; Piquier à la dague : pique dressée de la main gauche,
+                       ;; dague en garde dans la droite.
+                       (upright upright-forward pike-lean
+                                (sqrt (- (* pike-length pike-length) (* pike-lean pike-lean))))
+                       (strike-blade t dagger-length))
+                      ((= weapon 2)
+                       (strike-blade (= 1 (aref regiment-guards regiment-index)) sword-length)
+                       (let ((pose (if (= 1 (aref regiment-guards regiment-index))
+                                       shield-guard
+                                       shield-rest)))
+                         (declare (type (simple-array single-float (6)) pose))
+                         (if shield
+                             (multiple-value-setq (hand1-x hand1-y hand1-depth)
+                               (project (aref pose 0) (aref pose 1) (+ (aref pose 2) bob)))
+                             (multiple-value-setq (hand1-x hand1-y hand1-depth)
+                               (project (* (- hand-swing) swing) (- hand-side)
+                                        (+ hand-height bob))))))
+                      ((and pikes (= weapon 1) (< i (aref lowered-ends regiment-index)))
                        ;; Pique croisée, à hauteur d'épaule selon le rang ; le coup
                        ;; la pousse en avant, les mains en suivent une part.
                        (let* ((rank (floor (- i (aref regiment-starts regiment-index))
@@ -328,18 +480,18 @@ dans le sens des aiguilles d'une montre à l'écran)."
                               (depth 0f0))
                          (declare (type fixnum rank) (type single-float h age thrust grip butt depth))
                          (setf pole t)
-                         (multiple-value-setq (ax ay depth) (project butt pike-side h))
+                         (multiple-value-setq (ax ay depth) (project-flat butt pike-side h))
                          (setf rear-behind (< depth 0f0))
-                         (multiple-value-setq (mx my) (project thrust pike-side h))
-                         (multiple-value-setq (cx cy) (project (+ butt (- pike-length pike-head))
+                         (multiple-value-setq (mx my) (project-flat thrust pike-side h))
+                         (multiple-value-setq (cx cy) (project-flat (+ butt (- pike-length pike-head))
                                                                pike-side h))
-                         (multiple-value-setq (bx by depth) (project (+ butt pike-length) pike-side h))
+                         (multiple-value-setq (bx by depth) (project-flat (+ butt pike-length) pike-side h))
                          (setf front-behind (< depth 0f0))
                          (multiple-value-setq (hand1-x hand1-y hand1-depth)
-                           (project (+ grip rear-hand) pike-side h))
+                           (project-flat (+ grip rear-hand) pike-side h))
                          (multiple-value-setq (hand2-x hand2-y hand2-depth)
-                           (project (+ grip front-hand) pike-side h))))
-                      (pikes
+                           (project-flat (+ grip front-hand) pike-side h))))
+                      ((and pikes (= weapon 1))
                        (upright upright-forward pike-lean
                                 (sqrt (- (* pike-length pike-length) (* pike-lean pike-lean)))))
                       (t
@@ -363,8 +515,10 @@ dans le sens des aiguilles d'une montre à l'écran)."
                              (part-quad foot-row 0 foot-w foot-h left-x left-y nil 255 255 255)))))
               ;; Derrière le corps.
               (pole-part t)
+              (blade-part t)
               (when (< hand1-depth 0f0) (hand hand1-x hand1-y))
               (when (< hand2-depth 0f0) (hand hand2-x hand2-y))
+              (shield-part t)
               ;; Corps et son masque, puis la tête.
               (let ((body-y (- sy (* zoom (+ body-height bob))))
                     (head-y (- sy (* zoom (+ head-height bob)))))
@@ -374,8 +528,10 @@ dans le sens des aiguilles d'une montre à l'écran)."
                 (part-quad head-row frame head-w head-h sx head-y mirror 255 255 255))
               ;; Devant le corps.
               (pole-part nil)
+              (blade-part nil)
               (when (>= hand1-depth 0f0) (hand hand1-x hand1-y))
-              (when (>= hand2-depth 0f0) (hand hand2-x hand2-y)))))))
+              (when (>= hand2-depth 0f0) (hand hand2-x hand2-y))
+              (shield-part nil)))))))
     (rlgl:end)
     (rlgl:set-texture 0)))
 
@@ -416,20 +572,29 @@ dans le sens des aiguilles d'une montre à l'écran)."
         (multiple-value-bind (foot-row foot-frames foot-w foot-h) (atlas-overlay atlas :part-foot)
           (declare (ignore foot-frames))
           (multiple-value-bind (solid-row) (atlas-overlay atlas :solid)
-            (when (and body-row head-row hand-row foot-row solid-row)
-              (draw-corpses-batch battle alpha camera atlas
-                                  body-row (float body-w 1f0) (float body-h 1f0)
-                                  head-row (float head-w 1f0) (float head-h 1f0)
-                                  hand-row (float hand-w 1f0) (float hand-h 1f0)
-                                  foot-row (float foot-w 1f0) (float foot-h 1f0)
-                                  solid-row))))))))
+            (multiple-value-bind (shield-row shield-frames shield-w shield-h)
+                (atlas-overlay atlas :part-shield)
+              (declare (ignore shield-frames))
+              (when (and body-row head-row hand-row foot-row solid-row shield-row)
+                (update-bearers battle)
+                (draw-corpses-batch battle alpha camera atlas
+                                    body-row (float body-w 1f0) (float body-h 1f0)
+                                    head-row (float head-w 1f0) (float head-h 1f0)
+                                    hand-row (float hand-w 1f0) (float hand-h 1f0)
+                                    foot-row (float foot-w 1f0) (float foot-h 1f0)
+                                    solid-row
+                                    shield-row (float shield-w 1f0) (float shield-h 1f0))))))))))
 
 (defun draw-corpses-batch (battle alpha camera atlas
                            body-row body-w body-h head-row head-w head-h
-                           hand-row hand-w hand-h foot-row foot-w foot-h solid-row)
+                           hand-row hand-w hand-h foot-row foot-w foot-h solid-row
+                           shield-row shield-w shield-h)
+  "Dessine les morts. Les tampons par régiment (*REGIMENT-WEAPONS*,
+*REGIMENT-SHIELDS*) doivent être à jour : voir UPDATE-BEARERS."
   (declare (optimize (speed 3) (safety 1))
-           (type single-float alpha body-w body-h head-w head-h hand-w hand-h foot-w foot-h)
-           (type fixnum body-row head-row hand-row foot-row solid-row))
+           (type single-float alpha body-w body-h head-w head-h hand-w hand-h foot-w foot-h
+                 shield-w shield-h)
+           (type fixnum body-row head-row hand-row foot-row solid-row shield-row))
   (let* ((log (battle-deaths battle))
          (total (death-count log))
          (capacity (death-log-capacity log))
@@ -437,6 +602,13 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (oldest (if (> total capacity) (mod total capacity) 0))
          (xs (death-x log)) (ys (death-y log)) (facings (death-facing log))
          (sides (death-side log)) (ticks (death-tick log)) (ranks (death-rank log))
+         (death-regiments (death-regiment log))
+         (regiment-weapons *regiment-weapons*)
+         (regiment-shields *regiment-shields*)
+         (known-regiments (length (battle-regiments battle)))
+         (sword-length (the single-float *sword-length*))
+         (sword-guard (the single-float *sword-guard*))
+         (brass *sword-guard-color*)
          (now (+ (float (the fixnum (battle-tick-count battle)) 1f0) alpha))
          (fall-ticks (* (the single-float *death-fall-seconds*) (float +ticks-per-second+ 1f0)))
          (atlas-w (float (the fixnum (atlas-width atlas)) 1f0))
@@ -459,6 +631,7 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (pi-f (float pi 1f0))
          (half-pi (* 0.5f0 (float pi 1f0)))
          (spread (the single-float *death-fall-spread*))
+         (squash (the single-float *part-depth-squash*))
          (corpse-shade (the fixnum *corpse-shade*))
          (lying (the single-float *corpse-height*))
          (hand-drop (the single-float *corpse-hand-drop*))
@@ -485,10 +658,12 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (wood *pike-wood*) (steel *pike-steel*))
     (declare (type fixnum total capacity n oldest corpse-shade lowered-ranks)
              (type float-array xs ys facings)
-             (type fixnum-array sides ticks ranks)
+             (type fixnum-array sides ticks ranks death-regiments regiment-weapons regiment-shields)
+             (type fixnum known-regiments)
+             (type single-float sword-length sword-guard)
              (type simple-vector strips mirrored)
              (type single-float now fall-ticks cell cell-u cell-v texel-u texel-v solid-u solid-v
-                   zoom scale width height origin-x origin-y margin eighth pi-f half-pi spread
+                   zoom scale width height origin-x origin-y margin eighth pi-f half-pi spread squash
                    lying hand-drop hand-scatter body-height head-height foot-height foot-side
                    hand-height hand-side pike-length pike-head pike-hand pike-rise pike-behind
                    pike-side upright-side upright-tilt head-fraction half-line))
@@ -525,12 +700,20 @@ dans le sens des aiguilles d'une montre à l'écran)."
                    (color (side-color (aref sides slot)))
                    (team-r (floor (* (the fixnum (first color)) light) 255))
                    (team-g (floor (* (the fixnum (second color)) light) 255))
-                   (team-b (floor (* (the fixnum (third color)) light) 255)))
+                   (team-b (floor (* (the fixnum (third color)) light) 255))
+                   (regiment (aref death-regiments slot))
+                   (weapon (if (< regiment known-regiments) (aref regiment-weapons regiment) 0))
+                   (shield (and (< regiment known-regiments)
+                                (= 1 (aref regiment-shields regiment)))))
               (declare (type single-float facing c s progress fall tilt sin-tilt cos-tilt
                              fall-angle gdx gdy turn turn-cos turn-sin)
-                       (type fixnum direction frame light team-r team-g team-b))
+                       (type fixnum direction frame light team-r team-g team-b regiment weapon))
               (macrolet ((ground (wx wy h)
-                           ;; Écran d'un point décalé de WX, WY au sol et à la hauteur H.
+                           ;; Écran d'un point décalé de WX, WY au sol et à la hauteur H,
+                           ;; profondeur écrasée comme pour les vivants.
+                           `(values (+ sx (* zoom ,wx)) (- (+ sy (* zoom squash ,wy)) (* zoom ,h))))
+                         (ground-flat (wx wy h)
+                           ;; Avec toute la profondeur : la pique.
                            `(values (+ sx (* zoom ,wx)) (- (+ sy (* zoom ,wy)) (* zoom ,h))))
                          (axis (h)
                            ;; Point du corps à la hauteur H debout, basculé.
@@ -538,7 +721,7 @@ dans le sens des aiguilles d'une montre à l'écran)."
                                     (+ (* ,h cos-tilt) (* lying sin-tilt)))))
                 ;; Pique : elle s'abat vers l'avant si elle était croisée, sinon
                 ;; du côté où tombe le soldat.
-                (when pikes
+                (when (and pikes (= weapon 1))
                   (let* ((rank (aref ranks slot))
                          (lowered (< rank lowered-ranks))
                          (angle (if lowered
@@ -556,9 +739,9 @@ dans le sens des aiguilles d'une montre à l'écran)."
                                     (- 1f0 fall))))
                           (declare (type single-float h))
                           (multiple-value-setq (ax ay)
-                            (ground (- base-x (* pdx pike-behind)) (- base-y (* pdy pike-behind)) h))
+                            (ground-flat (- base-x (* pdx pike-behind)) (- base-y (* pdy pike-behind)) h))
                           (multiple-value-setq (bx by)
-                            (ground (+ base-x (* pdx (- pike-length pike-behind)))
+                            (ground-flat (+ base-x (* pdx (- pike-length pike-behind)))
                                     (+ base-y (* pdy (- pike-length pike-behind))) h)))
                         (let* ((lean (+ upright-tilt (* fall (- half-pi upright-tilt))))
                                (reach (if settled pike-length (* pike-length (sin lean))))
@@ -586,6 +769,7 @@ dans le sens des aiguilles d'une montre à l'écran)."
                   (declare (type single-float x y))
                   (part-quad foot-row 0 foot-w foot-h x y nil light light light))
                 ;; Mains : elles tombent et roulent un peu, chacune de son côté.
+                ;; L'épée tombe avec la main droite, la rondache avec la gauche.
                 (macrolet ((dropped-hand (sign salt)
                              `(let* ((roll (* hand-scatter (death-jitter serial ,salt)))
                                      (start-x (- (* ,sign hand-side s)))
@@ -594,11 +778,48 @@ dans le sens des aiguilles d'une montre à l'écran)."
                                      (wy (+ start-y (* progress (+ (* start-y roll) (* gdy roll)))))
                                      (h (+ (* hand-height (- 1f0 fall)) (* hand-drop fall))))
                                 (declare (type single-float roll start-x start-y wx wy h))
-                                (multiple-value-bind (x y) (ground wx wy h)
-                                  (declare (type single-float x y))
-                                  (part-quad hand-row 0 hand-w hand-h x y nil light light light)))))
-                  (dropped-hand -1f0 3)
-                  (dropped-hand 1f0 4))
+                                (values wx wy h))))
+                  (multiple-value-bind (wx wy h) (dropped-hand 1f0 4)
+                    (declare (type single-float wx wy h))
+                    (when (= weapon 2)
+                      (let* ((angle (+ facing (* 1.2f0 (- (* 2f0 (death-jitter serial 5)) 1f0))))
+                             (bdx (cos angle)) (bdy (sin angle)))
+                        (declare (type single-float angle bdx bdy))
+                        (multiple-value-bind (hx hy) (ground wx wy h)
+                          (declare (type single-float hx hy))
+                          (multiple-value-bind (tx ty)
+                              (ground (+ wx (* bdx sword-length)) (+ wy (* bdy sword-length)) h)
+                            (declare (type single-float tx ty))
+                            (line-quad hx hy tx ty
+                                       (floor (* (the fixnum (first steel)) light) 255)
+                                       (floor (* (the fixnum (second steel)) light) 255)
+                                       (floor (* (the fixnum (third steel)) light) 255)))
+                          (multiple-value-bind (g1x g1y)
+                              (ground (- wx (* bdy sword-guard)) (+ wy (* bdx sword-guard)) h)
+                            (declare (type single-float g1x g1y))
+                            (multiple-value-bind (g2x g2y)
+                                (ground (+ wx (* bdy sword-guard)) (- wy (* bdx sword-guard)) h)
+                              (declare (type single-float g2x g2y))
+                              (line-quad g1x g1y g2x g2y
+                                         (floor (* (the fixnum (first brass)) light) 255)
+                                         (floor (* (the fixnum (second brass)) light) 255)
+                                         (floor (* (the fixnum (third brass)) light) 255)))))))
+                    (multiple-value-bind (x y) (ground wx wy h)
+                      (declare (type single-float x y))
+                      (part-quad hand-row 0 hand-w hand-h x y nil light light light)))
+                  (multiple-value-bind (wx wy h) (dropped-hand -1f0 3)
+                    (declare (type single-float wx wy h))
+                    (multiple-value-bind (x y) (ground wx wy h)
+                      (declare (type single-float x y))
+                      (part-quad hand-row 0 hand-w hand-h x y nil light light light)
+                      (when shield
+                        ;; À plat au sol : de face ou de dos, au hasard.
+                        (let ((shield-frame (if (< (death-jitter serial 6) 0.5f0) 0 2)))
+                          (declare (type fixnum shield-frame))
+                          (part-quad shield-row shield-frame shield-w shield-h x y nil
+                                     light light light)
+                          (part-quad (1+ shield-row) shield-frame shield-w shield-h x y nil
+                                     team-r team-g team-b))))))
                 ;; Corps, son masque, puis la tête.
                 (multiple-value-bind (x y) (axis body-height)
                   (declare (type single-float x y))

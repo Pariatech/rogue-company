@@ -113,6 +113,9 @@ l'écart d'un single-float converti."
    (ranks :reader stats-ranks :type fixnum :documentation "Profondeur par défaut de la formation.")
    (primary :initarg :primary :reader stats-primary :type attack-profile)
    (secondary :initarg :secondary :reader stats-secondary :type attack-profile)
+   (loadout :initarg :loadout :initform nil :reader stats-loadout
+            :documentation "Équipement d'où viennent ces stats (plist emplacement -> objet) :
+le dessin y lit l'arme et le bouclier, la simulation ne s'en sert pas.")
    (traits :initarg :traits :reader stats-traits
            :documentation "Comportements apportés par l'équipement et les améliorations."))
   (:documentation "Stats effectives d'un régiment, en lecture seule pour la simulation."))
@@ -121,10 +124,10 @@ l'écart d'un single-float converti."
   "Nom du slot de REGIMENT-STATS pour la stat commune KEY."
   (intern (symbol-name key) '#:rogue-company))
 
-(defun make-regiment-stats (values primary secondary traits)
+(defun make-regiment-stats (values primary secondary traits &optional loadout)
   "Stats depuis VALUES, une table des stats communes."
   (let ((stats (make-instance 'regiment-stats :primary primary :secondary secondary
-                                              :traits traits)))
+                                              :traits traits :loadout loadout)))
     (dolist (key *common-stats* stats)
       (let ((value (gethash key values 0)))
         (setf (slot-value stats (stat-slot key))

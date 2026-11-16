@@ -239,4 +239,5 @@ l'équipement est refusé."
      (make-attack-profile (getf secondary-attack :kind) (getf secondary-attack :volley) secondary)
      (remove-duplicates (append (loop for (nil . item) in items append (item-traits item))
                                 traits)
-                        :from-end t))))
+                        :from-end t)
+     (copy-list loadout))))

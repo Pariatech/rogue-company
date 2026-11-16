@@ -3,7 +3,8 @@
 ;;; Journal des morts d'une bataille : un mort est retiré des tableaux de
 ;;; soldats par échange (remove-soldier), son indice resservant aussitôt. Le
 ;;; journal garde ce qu'il faut pour le dessiner tomber puis gisant : position,
-;;; orientation, camp, tick de la mort et rang qu'il occupait.
+;;; orientation, camp, régiment (pour son équipement), tick de la mort et rang
+;;; qu'il occupait.
 ;;;
 ;;; Tampon circulaire de taille fixe, alloué une fois : au-delà, les morts les
 ;;; plus anciens sont oubliés. Écrit par apply-damage (combat.lisp), sans
@@ -17,6 +18,8 @@
    (y :initarg :y :reader death-y :type float-array)
    (facing :initarg :facing :reader death-facing :type float-array)
    (side :initarg :side :reader death-side :type fixnum-array)
+   (regiment :initarg :regiment :reader death-regiment :type fixnum-array
+             :documentation "Indice du régiment du mort dans BATTLE-REGIMENTS.")
    (tick :initarg :tick :reader death-tick :type fixnum-array)
    (rank :initarg :rank :reader death-rank :type fixnum-array
          :documentation "Rang du mort dans sa formation, depuis 0 au front.")
@@ -27,19 +30,21 @@
   (flet ((floats () (make-array size :element-type 'single-float :initial-element 0f0))
          (fixnums () (make-array size :element-type 'fixnum :initial-element 0)))
     (make-instance 'death-log :x (floats) :y (floats) :facing (floats)
-                              :side (fixnums) :tick (fixnums) :rank (fixnums))))
+                              :side (fixnums) :regiment (fixnums) :tick (fixnums)
+                              :rank (fixnums))))
 
 (defun death-log-capacity (log)
   (length (the float-array (death-x log))))
 
-(defun record-death (log x y facing side tick rank)
+(defun record-death (log x y facing side tick rank &optional (regiment 0))
   "Ajoute un mort au journal, à la place du plus ancien s'il est plein."
-  (declare (type single-float x y facing) (type fixnum side tick rank))
+  (declare (type single-float x y facing) (type fixnum side tick rank regiment))
   (let ((slot (mod (death-count log) (death-log-capacity log))))
     (setf (aref (the float-array (death-x log)) slot) x
           (aref (the float-array (death-y log)) slot) y
           (aref (the float-array (death-facing log)) slot) facing
           (aref (the fixnum-array (death-side log)) slot) side
+          (aref (the fixnum-array (death-regiment log)) slot) regiment
           (aref (the fixnum-array (death-tick log)) slot) tick
           (aref (the fixnum-array (death-rank log)) slot) rank)
     (incf (death-count log))
@@ -54,4 +59,5 @@
                   (aref (soldiers-x soldiers) i) (aref (soldiers-y soldiers) i)
                   (aref (soldiers-facing soldiers) i)
                   (regiment-side regiment) (battle-tick-count battle)
-                  (floor (- i (regiment-start regiment)) files))))
+                  (floor (- i (regiment-start regiment)) files)
+                  (regiment-index regiment))))

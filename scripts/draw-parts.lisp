@@ -6,7 +6,7 @@
 ;;; Écrit assets/overlays/part-<morceau>/frame_NNN.png. Le corps et la tête ont
 ;;; une image par direction stockée, dans l'ordre de l'atlas : est, sud-est,
 ;;; sud, nord-est, nord (l'ouest se dessine en miroir). La main et le pied n'en
-;;; ont qu'une. L'écharpe et les culottes sont cramoisies : scripts/build-atlas.lisp
+;;; ont qu'une ; la rondache, trois (de face, de profil, de dos). L'écharpe et les culottes sont cramoisies : scripts/build-atlas.lisp
 ;;; en tire le masque teint de la couleur du camp.
 ;;;
 ;;; Vue de trois quarts, comme les sprites PixelLab : 18 pixels par mètre.
@@ -162,6 +162,40 @@ coins restent vides, ce qui arrondit les formes)."
          (r 4 7 9 9 *hair*) (r 5 10 8 10 *skin-shade*))))
     (outline canvas)))
 
+;;; Rondache : bouclier rond d'acier de 10 px (environ 0,55 m), vu de face (le
+;;; soldat regarde vers l'écran), de profil, ou de dos (doublure cramoisie,
+;;; teinte du camp, et poignée). 12 × 12 px.
+
+(defun disc-p (x y rx ry)
+  "Vrai si le pixel X, Y est dans l'ellipse de demi-axes RX, RY centrée sur la toile de 12 px."
+  (<= (+ (expt (/ (- x 5.5) rx) 2) (expt (/ (- y 5.5) ry) 2)) 1))
+
+(defun shield (view)
+  (let ((canvas (make-canvas 12 12)))
+    (dotimes (y 12)
+      (dotimes (x 12)
+        (ecase view
+          (:face
+           (when (disc-p x y 4.7 4.7)
+             (put canvas x y
+                  (cond ((not (disc-p x y 3.6 3.6)) *steel-dark*)
+                        ((and (<= 5 x 6) (<= 5 y 6)) (if (= x y 5) *steel-light* *steel*))
+                        ((< (+ x y) 9) *steel-light*)
+                        (t *steel*)))))
+          (:side
+           (when (disc-p x y 1.7 4.7)
+             (put canvas x y (cond ((< x 5) *steel-light*)
+                                   ((< x 7) *steel*)
+                                   (t *steel-dark*)))))
+          (:back
+           (when (disc-p x y 4.7 4.7)
+             (put canvas x y
+                  (cond ((not (disc-p x y 3.6 3.6)) *steel-dark*)
+                        ((<= 5 x 6) *leather*)
+                        ((< (+ x y) 9) *crimson*)
+                        (t *crimson-shade*))))))))
+    (outline canvas)))
+
 ;;; Main : un poing de 3 × 3 px. Pied : une botte de 4 × 2 px.
 
 (defun hand ()
@@ -203,4 +237,5 @@ coins restent vides, ce qui arrondit les formes)."
 (write-part "head" (mapcar #'head *views*))
 (write-part "hand" (list (hand)))
 (write-part "foot" (list (foot)))
+(write-part "shield" (mapcar #'shield '(:face :side :back)))
 (format t "Morceaux dans assets/overlays/part-*/~%")

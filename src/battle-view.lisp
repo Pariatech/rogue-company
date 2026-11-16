@@ -105,9 +105,33 @@ Réutilisé d'une image à l'autre, agrandi seulement quand des régiments s'ajo
 (defvar *regiment-files* (make-array 0 :element-type 'fixnum)
   "Files de chaque régiment, pour le rang d'un soldat. Même usage que *BEARERS*.")
 
+(defvar *regiment-weapons* (make-array 0 :element-type 'fixnum)
+  "Arme dessinée de chaque régiment, d'après son arme principale : 0 aucune,
+1 pique, 2 épée (REGIMENT-WEAPON-LOOK). Même usage que *BEARERS*.")
+
+(defvar *regiment-shields* (make-array 0 :element-type 'fixnum)
+  "1 si le régiment porte une rondache, sinon 0. Même usage que *BEARERS*.")
+
+(defvar *regiment-guards* (make-array 0 :element-type 'fixnum)
+  "1 si le régiment a un ordre d'attaque : il tient son arme en garde. Même
+usage que *BEARERS*.")
+
+(defun regiment-weapon-look (regiment)
+  "Arme à dessiner pour REGIMENT : 1 pique, 2 épée, 0 rien."
+  (case (getf (stats-loadout (regiment-stats regiment)) :main)
+    (:pike 1)
+    (:sword 2)
+    (t 0)))
+
 (defun update-bearers (battle)
   "Remplit les tampons par régiment pour l'image, et renvoie *BEARERS*."
   (let ((regiments (battle-regiments battle)))
+    (when (< (length *regiment-weapons*) (length regiments))
+      (setf *regiment-weapons* (make-array (length regiments) :element-type 'fixnum)))
+    (when (< (length *regiment-shields*) (length regiments))
+      (setf *regiment-shields* (make-array (length regiments) :element-type 'fixnum)))
+    (when (< (length *regiment-guards*) (length regiments))
+      (setf *regiment-guards* (make-array (length regiments) :element-type 'fixnum)))
     (when (< (length *bearers*) (length regiments))
       (setf *bearers* (make-array (length regiments) :element-type 'fixnum)))
     (when (< (length *lowered-ends*) (length regiments))
@@ -117,12 +141,18 @@ Réutilisé d'une image à l'autre, agrandi seulement quand des régiments s'ajo
             *regiment-files* (make-array (length regiments) :element-type 'fixnum)))
     (loop for regiment across regiments
           for k from 0
-          do (setf (aref *regiment-starts* k) (regiment-start regiment)
+          do (setf (aref *regiment-weapons* k) (regiment-weapon-look regiment)
+                   (aref *regiment-shields* k)
+                   (if (getf (stats-loadout (regiment-stats regiment)) :shield) 1 0)
+                   (aref *regiment-guards* k)
+                   (if (eq (first (regiment-orders regiment)) :attack) 1 0))
+             (setf (aref *regiment-starts* k) (regiment-start regiment)
                    (aref *regiment-files* k) (formation-files (regiment-formation regiment)
                                                               (max 1 (regiment-alive regiment)))
                    (aref *bearers* k) (regiment-bearer regiment)
                    (aref *lowered-ends* k)
-                   (if (eq (first (regiment-orders regiment)) :attack)
+                   (if (and (eq (first (regiment-orders regiment)) :attack)
+                            (= 1 (aref *regiment-weapons* k)))
                        (+ (regiment-start regiment)
                           (* *pike-lowered-ranks*
                              (formation-files (regiment-formation regiment)
@@ -208,6 +238,7 @@ lambeaux, 3 pendant (débandade)."
            (lowered-ends *lowered-ends*)
            (regiment-starts *regiment-starts*)
            (regiment-files *regiment-files*)
+           (regiment-weapons *regiment-weapons*)
            (pike-rise (the single-float *pike-rank-rise*))
            (pikes (and *draw-pikes* solid-row t))
            (pike-length (the single-float *pike-length*))
@@ -243,7 +274,7 @@ lambeaux, 3 pendant (débandade)."
            (eighth (/ (float pi 1f0) 4f0)))
       (declare (type fixnum count walk-phase attack-row attack-frames tick)
                (type fixnum-array order soldier-regiments strike-ticks bearers lowered-ends
-                     regiment-starts regiment-files)
+                     regiment-starts regiment-files regiment-weapons)
                (type single-float pike-rise)
                (type single-float pike-length pike-head pike-half-width pike-lean pike-hand
                      pike-behind pike-thrust thrust-ticks solid-u solid-v pi-f)
@@ -306,7 +337,7 @@ lambeaux, 3 pendant (débandade)."
                 (let ((red (first color)) (green (second color)) (blue (third color)))
                   (declare (type (integer 0 255) red green blue))
                   (quad red green blue v1 mask-v1)))
-              (when (and pikes (not bearer))
+              (when (and pikes (not bearer) (= 1 (aref regiment-weapons regiment-index)))
                 (let* ((sx (+ left foot-x)) (sy (+ top foot-y))
                        (fx (cos facing)) (fy (sin facing))
                        (age (+ alpha (float (min 1000000 (- tick (aref strike-ticks i))) 1f0)))
