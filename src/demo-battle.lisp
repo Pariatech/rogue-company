@@ -1,21 +1,39 @@
 (in-package #:rogue-company)
 
-;;; Bataille de démonstration, en attendant la partie. Par défaut, les piquiers
-;;; des deux camps se font face au centre ; les rodeleros de chaque camp
-;;; attendent sur une aile, assez près des piquiers ennemis pour que C les lance
-;;; sur leur flanc pendant que les piques s'affrontent de face. Les tests
-;;; prennent leurs propres régiments (REGIMENTS) et dispersent les soldats au
-;;; départ (SCATTER) pour éprouver le regroupement et les collisions.
+;;; Bataille de démonstration, en attendant la partie : celle que lance « Start
+;;; Battle », et que C fait charger. Par défaut, le combat du test
+;;; OUTNUMBERED-RODELEROS-STILL-LOSE, 160 piquiers contre 120 rodeleros, avec sa
+;;; graine, pour le revoir à l'identique. *FLANK-DEMO-REGIMENTS* garde la
+;;; démonstration des flancs. Les tests prennent leurs propres régiments
+;;; (REGIMENTS) et dispersent les soldats au départ (SCATTER) pour éprouver le
+;;; regroupement et les collisions.
 
 (defparameter *demo-scatter* 0
   "Dispersion initiale des soldats, en mètres : 0, ils partent à leur emplacement.")
 
+(defparameter *demo-seed* 1
+  "Graine de la bataille de démonstration lancée par la scène.")
+
+(defparameter *flank-demo-regiments*
+  '((0 :pikemen 160 -25 -12 0)
+    (0 :pikemen 160 -25 12 0)
+    (1 :pikemen 160 25 -12 180)
+    (1 :pikemen 160 25 12 180)
+    (0 :rodeleros 120 0 -60 90)
+    (1 :rodeleros 120 0 60 -90))
+  "Démonstration des flancs : deux régiments de piquiers de chaque camp face à
+face au centre, et les rodeleros de chaque camp sur une aile, plus près des
+piquiers ennemis que de tout autre régiment, pour que C les lance sur leur flanc
+pendant que les piques s'affrontent de face.")
+
 (defparameter *demo-regiments*
-  '((0 :pikemen 160 -25 0 0)
-    (1 :pikemen 160 25 0 180)
-    (0 :rodeleros 120 0 -45 90)
-    (1 :rodeleros 120 0 45 -90))
-  "Régiments de la démonstration : (camp dotation effectif x y orientation en degrés).")
+  '((0 :pikemen 160 -25 -25 0)
+    (1 :rodeleros 120 25 -25 180)
+    (0 :pikemen 160 -25 25 0)
+    (1 :pikemen 160 25 25 180))
+  "Régiments de la démonstration : (camp dotation effectif x y orientation en degrés).
+Deux duels côte à côte, que C lance chacun sur l'ennemi le plus proche : piques
+contre rodeleros au nord, piques contre piques au sud.")
 
 (defparameter *demo-names* '((:pikemen . "Piquiers") (:rodeleros . "Rodeleros")
                               (:musketeers . "Mousquetaires"))

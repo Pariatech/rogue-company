@@ -48,11 +48,15 @@ de sa formation : il fuit en désordre, pas en rangs.")
     (* *loss-morale* (/ 100f0 (regiment-capacity regiment))
        (- 1.5f0 (stats-discipline stats)))))
 
-(defun regiment-push-force (regiment)
-  "Soldats au contact (à leur distance d'arrêt) × masse × moral. Seuls ceux au
-contact poussent : les rangs de piques qui frappent par-dessus le premier n'y
-ajoutent rien."
-  (* (regiment-closed regiment) (stats-mass (regiment-stats regiment))
+(defun regiment-push-force (regiment enemy)
+  "Soldats au contact (REGIMENT-CONTACT) × masse × moral. Seuls ceux au contact
+poussent : les rangs de piques qui frappent par-dessus le premier n'y ajoutent
+rien. Leur nombre ne dépasse pas les files d'ENEMY, la largeur de son front :
+des soldats en ordre lâche qui débordent sur les flancs pèsent par le moral de
+flanc (flanks.lisp), pas par la poussée."
+  (* (min (regiment-contact regiment)
+          (formation-files (regiment-formation enemy) (max 1 (regiment-alive enemy))))
+     (stats-mass (regiment-stats regiment))
      (max 0f0 (regiment-morale regiment))))
 
 (defun opponent (battle regiment)
@@ -73,15 +77,38 @@ ajoutent rien."
               do (incf (aref xs i) dx)
                  (incf (aref ys i) dy))))))
 
+(defparameter *push-max-lag* 0.25f0
+  "Le vainqueur d'une poussée n'avance sa formation que si son premier rang est
+en moyenne à moins de cette distance derrière ses emplacements, en mètres :
+sinon les rangs de derrière, qui suivent leurs emplacements, s'entassent sur le
+premier, resté au contact.")
+
+(defun front-lag (regiment soldiers)
+  "Retard moyen, le long du front, du premier rang de REGIMENT sur ses emplacements."
+  (let* ((formation (regiment-formation regiment))
+         (alive (regiment-alive regiment))
+         (files (min alive (formation-files formation (max 1 alive))))
+         (fx (cos (formation-facing formation)))
+         (fy (sin (formation-facing formation)))
+         (start (regiment-start regiment))
+         (lag 0f0))
+    (if (plusp files)
+        (progn
+          (loop for i from start below (+ start files)
+                do (incf lag (+ (* fx (- (aref (soldiers-slot-x soldiers) i) (aref (soldiers-x soldiers) i)))
+                                (* fy (- (aref (soldiers-slot-y soldiers) i) (aref (soldiers-y soldiers) i))))))
+          (/ lag files))
+        0f0)))
+
 (defun push-regiment (battle regiment)
   "Compare la force de REGIMENT à celle de l'ennemi qu'il attaque, s'ils sont au
 contact, et le fait reculer ou avancer d'autant."
   (let ((enemy (opponent battle regiment)))
     (when (and enemy (regiment-holding-p regiment)
-               (plusp (regiment-closed regiment)) (plusp (regiment-closed enemy))
+               (plusp (regiment-contact regiment)) (plusp (regiment-contact enemy))
                (not (regiment-routed-p enemy)))
-      (let* ((own (regiment-push-force regiment))
-             (other (regiment-push-force enemy))
+      (let* ((own (regiment-push-force regiment enemy))
+             (other (regiment-push-force enemy regiment))
              (total (+ own other)))
         (when (plusp total)
           (let* ((balance (/ (- own other) total)) ; -1 écrasé, 1 écrasant
@@ -93,7 +120,8 @@ contact, et le fait reculer ou avancer d'autant."
                    (shift-regiment regiment (battle-soldiers battle) dx dy)
                    (lose-morale regiment (/ (* *push-morale-loss* (- balance))
                                             +ticks-per-second+)))
-                  ((plusp balance)
+                  ((and (plusp balance)
+                        (< (front-lag regiment (battle-soldiers battle)) *push-max-lag*))
                    (shift-regiment regiment (battle-soldiers battle) dx dy
                                    :soldiers-too nil)))))))))
 

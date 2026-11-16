@@ -164,7 +164,8 @@ pendant les 10 premières secondes."
 (test demo-sends-rodeleros-on-the-flanks
   "Dans la démonstration, C lance les piquiers l'un sur l'autre, et les
 rodeleros de chaque camp sur les piquiers ennemis."
-  (let ((b (rogue-company::make-demo-battle)))
+  (let ((b (rogue-company::make-demo-battle
+            :regiments rogue-company::*flank-demo-regiments*)))
     (rogue-company::order-charge b)
     (dolist (r (regiments b))
       (let ((target (aref (rogue-company::battle-regiments b)

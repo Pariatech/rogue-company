@@ -54,7 +54,7 @@ se débande et les régiments."
 face se débandent bien avant ceux d'un duel de front, et avec moins de pertes."
   (multiple-value-bind (frontal frontal-regiments) (pike-duel)
     (multiple-value-bind (flanked flanked-regiments) (pike-duel :flank t)
-      (is (< flanked 90 frontal))
+      (is (< flanked (* 0.6 frontal)))
       (let ((blue (second flanked-regiments)))
         (is-true (rogue-company::regiment-routed-p blue))
         (is (> (rogue-company::regiment-alive blue)

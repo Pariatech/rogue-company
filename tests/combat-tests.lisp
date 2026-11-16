@@ -72,11 +72,11 @@ moins de rangs, il est au milieu du dernier ; un homme seul n'en a pas."
     (run-ticks b (* 30 seconds))))
 
 (test front-ranks-stay-in-contact-as-depth-is-lost
-  "Après plus d'une minute de mêlée, chaque régiment a perdu des rangs, mais ses
+  "Après 45 s de mêlée, chaque régiment a perdu des rangs, mais ses
 premiers rangs restent au contact : les fronts, de centre à centre, restent à
 moins d'un mètre de plus que la distance d'arrêt (4 m de bord à bord, 4,6 m
 de centre à centre)."
-  (let* ((b (charged-demo :seconds 90))
+  (let* ((b (charged-demo :seconds 45))
          (s (rogue-company::battle-soldiers b))
          (fronts (loop for r in (regiments b)
                        collect (let ((files (rogue-company::formation-files
@@ -130,7 +130,7 @@ vient de frapper peut glisser à la place du porteur."
     (is (= 0 struck))))
 
 (test charge-makes-casualties
-  (let* ((b (charged-demo))
+  (let* ((b (charged-demo :seconds 40))
          (rs (regiments b))
          (deaths (loop for r in rs sum (- (rogue-company::regiment-capacity r)
                                            (rogue-company::regiment-alive r)))))

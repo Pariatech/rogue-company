@@ -68,6 +68,13 @@
   "Fin du coup, lame abattue en avant.")
 (defparameter *shield-rest* (pose 0.12 -0.3 0.62 0 0 0)
   "Rondache au repos, au bout du bras gauche (seules les trois premières valeurs servent).")
+(defparameter *stun-recoil* 0.2f0
+  "Pas en arrière, en mètres, d'un soldat étourdi (dessin seulement).")
+
+(defparameter *stun-recoil-ticks* 6f0
+  "Ticks d'étourdissement restants sous lesquels le soldat revient de son pas en
+arrière.")
+
 (defparameter *shield-guard* (pose 0.38 -0.18 0.78 0 0 0)
   "Rondache en garde, devant le corps.")
 (defparameter *shield-facing-threshold* 0.4f0
@@ -198,6 +205,8 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (prev-xs (soldiers-prev-x soldiers)) (prev-ys (soldiers-prev-y soldiers))
          (facings (soldiers-facing soldiers)) (prev-facings (soldiers-prev-facing soldiers))
          (strike-ticks (soldiers-strike-tick soldiers))
+         (stuns (soldiers-stun soldiers))
+         (recoil-distance (the single-float *stun-recoil*))
          (soldier-regiments (soldiers-regiment soldiers))
          (regiments (battle-regiments battle))
          (bearers (update-bearers battle))
@@ -275,7 +284,8 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (gold-r (first gold)) (gold-g (second gold)) (gold-b (third gold))
          (brass-r (first brass)) (brass-g (second brass)) (brass-b (third brass)))
     (declare (type fixnum count tick)
-             (type fixnum-array order strike-ticks soldier-regiments bearers lowered-ends
+             (type single-float recoil-distance)
+             (type fixnum-array order strike-ticks stuns soldier-regiments bearers lowered-ends
                    regiment-starts regiment-files regiment-weapons regiment-shields
                    regiment-guards soldier-weapons)
              (type (simple-array single-float (6)) sword-rest sword-guard-pose sword-raised
@@ -309,6 +319,15 @@ dans le sens des aiguilles d'une montre à l'écran)."
           (let* ((pf (aref prev-facings i))
                  (facing (+ pf (* alpha (wrap-angle (- (aref facings i) pf)))))
                  (c (cos facing)) (s (sin facing))
+                 ;; Étourdi par un coup : un pas en arrière, garde baissée.
+                 (stunned (plusp (aref stuns i)))
+                 (recoil (if stunned
+                             (* zoom recoil-distance
+                                (min 1f0 (/ (float (aref stuns i) 1f0)
+                                        (the single-float *stun-recoil-ticks*))))
+                             0f0))
+                 (sx (- sx (* recoil c)))
+                 (sy (- sy (* recoil squash s)))
                  (direction (mod (the fixnum (round facing eighth)) 8))
                  (frame (the fixnum (svref strips direction)))
                  (mirror (eql 1 (svref mirrored direction)))
@@ -343,7 +362,7 @@ dans le sens des aiguilles d'une montre à l'écran)."
                  (shield-frame (cond ((> s shield-threshold) 0)
                                      ((< s (- shield-threshold)) 2)
                                      (t 1))))
-            (declare (type single-float pf facing c s phase swing lift bob
+            (declare (type single-float pf facing c s recoil sx sy phase swing lift bob
                            hand1-x hand1-y hand1-depth hand2-x hand2-y hand2-depth
                            ax ay mx my cx cy bx by hilt-x hilt-y tip-x tip-y
                            guard1-x guard1-y guard2-x guard2-y)
@@ -454,8 +473,9 @@ dans le sens des aiguilles d'une montre à l'écran)."
                                 (sqrt (- (* pike-length pike-length) (* pike-lean pike-lean))))
                        (strike-blade t dagger-length))
                       ((= weapon 2)
-                       (strike-blade (= 1 (aref regiment-guards regiment-index)) sword-length)
-                       (let ((pose (if (= 1 (aref regiment-guards regiment-index))
+                       (strike-blade (and (not stunned) (= 1 (aref regiment-guards regiment-index)))
+                                     sword-length)
+                       (let ((pose (if (and (not stunned) (= 1 (aref regiment-guards regiment-index)))
                                        shield-guard
                                        shield-rest)))
                          (declare (type (simple-array single-float (6)) pose))

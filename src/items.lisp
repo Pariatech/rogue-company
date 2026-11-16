@@ -18,7 +18,7 @@
 
 (define-item :pike "Pique"
   :slots '(:main) :hands 2 :weight 5 :price 20
-  :attack '(:kind :melee :min-reach 1.5 :reach 4.5 :damage 12 :penetration 2
+  :attack '(:kind :melee :min-reach 1.5 :reach 4.5 :damage 30 :penetration 2
             :cooldown 1.5 :ready-time 0.5)
   :modifiers '((:ranks :set 8))
   :forbids '(:mount))
@@ -77,7 +77,10 @@
 
 (define-item :rodela "Rondache"
   :slots '(:shield) :hands 1 :weight 4 :price 15
-  :modifiers '((:defense :add 0.15) (:cover :add 0.1)))
+  ;; Épée et rondache : infanterie légère, qui marche plus vite que les blocs de
+  ;; piques et se bat en ordre lâche, chacun cherchant son homme.
+  :modifiers '((:defense :add 0.15) (:cover :add 0.1) (:speed :add 0.4))
+  :traits '(:loose-order))
 
 (define-item :pavise "Pavise"
   :slots '(:shield) :hands 0 :weight 12 :price 20

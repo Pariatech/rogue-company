@@ -74,6 +74,7 @@ SCATTER mètres de son emplacement, sur chaque axe. Renvoie le régiment."
                    (aref (soldiers-switch-timer soldiers) i) 0
                    (aref (soldiers-cooldown soldiers) i) -1
                    (aref (soldiers-calm soldiers) i) 0
+                   (aref (soldiers-stun soldiers) i) 0
                    (aref (soldiers-last-attacker soldiers) i) -1
                    (aref (soldiers-strike-tick soldiers) i) -1000000
                    (aref (soldiers-damage soldiers) i) 0f0
@@ -85,7 +86,8 @@ SCATTER mètres de son emplacement, sur chaque axe. Renvoie le régiment."
   "Avance BATTLE d'un tick. Les systèmes s'exécutent toujours dans cet ordre,
 et s'ajoutent ici au fil des étapes :
   1. copie des positions courantes dans les positions précédentes ;
-  2. régiments : engagement (avance ou arrêt au contact), puis emplacements ;
+  2. régiments : engagement (avance ou arrêt au contact), puis emplacements,
+     rompus pour les régiments en ordre lâche au contact (combat.lisp) ;
   3. soldats : déplacement vers leur emplacement (ou face à leur cible), puis
      grille spatiale et collisions ;
   4. combat (combat.lisp) : ciblage par régiment, attaques de flanc et de dos
@@ -97,7 +99,10 @@ et s'ajoutent ici au fil des étapes :
     (copy-previous-positions soldiers)
     (loop for regiment across regiments
           do (update-engagement battle regiment)
-             (update-regiment-slots regiment soldiers))
+             (update-regiment-slots regiment soldiers)
+             ;; Après les emplacements (la poussée les recalcule à chaque tick),
+             ;; avec les cibles et la grille du tick précédent.
+             (loosen-formation battle regiment))
     (loop for regiment across regiments
           do (move-regiment regiment soldiers))
     (rebuild-grid (battle-grid battle) soldiers)

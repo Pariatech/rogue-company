@@ -10,11 +10,22 @@
 ;;; dépend pas de l'ordre de parcours, et la bataille se rejoue.
 ;;;
 ;;; La masse partage la séparation : un cheval bouscule un fantassin bien plus
-;;; qu'il n'est bousculé.
+;;; qu'il n'est bousculé. Un soldat étourdi compte pour *STUN-MASS* fois sa masse.
 
 (defparameter *collision-stiffness* 0.5f0
   "Part du chevauchement corrigée par tick. 1 sépare d'un coup mais fait vibrer
 les foules serrées.")
+
+(defparameter *stun-mass* 8f0
+  "Facteur de masse d'un soldat étourdi (combat.lisp) dans les collisions : figé
+par le coup, il n'est plus poussé par ceux qui le suivent, qui butent sur lui.")
+
+(declaim (inline collision-mass))
+(defun collision-mass (masses stuns i)
+  (declare (type float-array masses) (type fixnum-array stuns) (type fixnum i))
+  (if (plusp (aref stuns i))
+      (* (aref masses i) (the single-float *stun-mass*))
+      (aref masses i)))
 
 (defun resolve-collisions (soldiers grid max-radius)
   "Sépare les soldats qui se chevauchent. MAX-RADIUS est le plus grand rayon de
@@ -24,6 +35,7 @@ la bataille : il fixe jusqu'où chercher les voisins."
   (let* ((count (soldiers-count soldiers))
          (xs (soldiers-x soldiers)) (ys (soldiers-y soldiers))
          (radii (soldiers-radius soldiers)) (masses (soldiers-mass soldiers))
+         (stuns (soldiers-stun soldiers))
          (push-xs (soldiers-push-x soldiers)) (push-ys (soldiers-push-y soldiers))
          (columns (grid-columns grid))
          (cell-size (grid-cell-size grid))
@@ -34,12 +46,12 @@ la bataille : il fixe jusqu'où chercher les voisins."
     (declare (type fixnum count columns)
              (type float-array xs ys radii masses push-xs push-ys)
              (type single-float cell-size stiffness)
-             (type fixnum-array start sorted soldier-cell))
+             (type fixnum-array start sorted soldier-cell stuns))
     (fill push-xs 0f0 :end count)
     (fill push-ys 0f0 :end count)
     (dotimes (i count)
       (let* ((xi (aref xs i)) (yi (aref ys i))
-             (ri (aref radii i)) (mi (aref masses i))
+             (ri (aref radii i)) (mi (collision-mass masses stuns i))
              (cell (aref soldier-cell i))
              ;; Un mort (case -1) ne pousse personne : sa ligne et ses colonnes
              ;; sont vides, la boucle ne trouve aucun voisin.
@@ -67,7 +79,7 @@ la bataille : il fixe jusqu'où chercher les voisins."
                                                 (d2 (+ (* dx dx) (* dy dy))))
                                            (declare (type single-float dx dy reach d2))
                                            (when (< d2 (* reach reach))
-                                             (let* ((mj (aref masses j))
+                                             (let* ((mj (collision-mass masses stuns j))
                                                     (distance (sqrt (the (single-float 0f0) d2)))
                                                     ;; Deux soldats au même point : séparés le long de x.
                                                     (nx (if (> distance 1f-6) (/ dx distance) 1f0))

@@ -16,7 +16,7 @@
 (defclass battle-scene (scene)
   ;; Des initforms plutôt que SCENE-ENTER : une scène neuve a une bataille neuve,
   ;; et une instance existante reçoit ses nouveaux slots au rechargement.
-  ((battle :initform (make-demo-battle) :reader scene-battle)
+  ((battle :initform (make-demo-battle :seed *demo-seed*) :reader scene-battle)
    (orders-rng :initform (make-rng 7 99) :reader scene-orders-rng
                :documentation "Tire les ordres de R, sans toucher au générateur de la bataille.")
    (clock :initform (make-fixed-clock) :reader scene-clock)

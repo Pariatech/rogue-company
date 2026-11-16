@@ -64,24 +64,29 @@ flanc, 2 de dos."
 
 (defun count-flank-attacks (battle)
   "Compte, pour chaque régiment, les soldats ennemis qui le visent de flanc et
-de dos à ce tick. Séquentiel : écrit dans les régiments visés."
+de dos à ce tick, et pour chaque soldat, ceux qui le visent. Séquentiel : écrit
+dans les régiments et les soldats visés."
   (declare (optimize (speed 3) (safety 1)))
   (let* ((soldiers (battle-soldiers battle))
          (regiments (battle-regiments battle))
          (targets (soldiers-target soldiers))
+         (attackers (soldiers-attackers soldiers))
          (soldier-regiments (soldiers-regiment soldiers))
          (xs (soldiers-x soldiers)) (ys (soldiers-y soldiers)))
     (declare (type vector regiments)
-             (type fixnum-array targets soldier-regiments)
+             (type fixnum-array targets attackers soldier-regiments)
              (type float-array xs ys))
     (loop for regiment across regiments
           do (setf (regiment-flank-attackers regiment) 0
-                   (regiment-rear-attackers regiment) 0))
+                   (regiment-rear-attackers regiment) 0)
+             (fill (the fixnum-array attackers) 0
+                   :start (regiment-start regiment) :end (regiment-end regiment)))
     (loop for attacker across regiments
           unless (regiment-routed-p attacker)
             do (loop for i of-type fixnum from (regiment-start attacker) below (regiment-end attacker)
                      do (let ((target (aref targets i)))
                           (when (>= target 0)
+                            (incf (aref attackers target))
                             (let* ((defender (aref regiments (aref soldier-regiments target)))
                                    (facing (formation-facing (regiment-formation defender)))
                                    (sector (attack-sector (cos facing) (sin facing)

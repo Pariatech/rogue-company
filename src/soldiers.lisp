@@ -18,7 +18,8 @@
   "Slots de SOLDIERS qui sont des tableaux de single-float.")
 
 (defparameter *soldier-fixnum-arrays*
-  '(regiment side walking target weapon switch-timer cooldown calm last-attacker strike-tick)
+  '(regiment side walking target weapon switch-timer cooldown calm last-attacker strike-tick
+    attackers stun)
   "Slots de SOLDIERS qui sont des tableaux de fixnums.")
 
 (defparameter *walk-start-distance* 2f0
@@ -81,6 +82,16 @@ coup est alors décalé au hasard.")
                 :type fixnum-array
                 :documentation "Tick de son dernier coup, pour l'animation d'attaque ; très
 négatif s'il n'a jamais frappé.")
+   (attackers :initform (make-array 0 :element-type 'fixnum) :reader soldiers-attackers
+              :type fixnum-array
+              :documentation "Ennemis qui le visent, comptés à chaque tick après le
+ciblage (COUNT-FLANK-ATTACKS) : l'ordre lâche répartit ses soldats sur les moins
+attaqués.")
+   (stun :initform (make-array 0 :element-type 'fixnum) :reader soldiers-stun
+         :type fixnum-array
+         :documentation "Ticks pendant lesquels le soldat, touché au corps à corps, ne
+bouge plus (combat.lisp, STRIKE) : sous les piques, chaque coup qui porte brise
+l'élan.")
    (damage :initform (make-float-array 0) :reader soldiers-damage :type float-array
            :documentation "Dégâts reçus pendant le tick, appliqués ensemble.")))
 
@@ -136,7 +147,8 @@ doublant la capacité pour que des ajouts successifs restent bon marché."
 et les tourne d'au plus TURN-STEP radians : vers leur destination s'ils en sont
 loin, vers FRONT, l'orientation de la formation, s'ils en sont près. Un soldat
 dont la cible est à moins de HOLD-DISTANCE (de bord à bord) ne bouge plus : il
-se tourne vers elle."
+se tourne vers elle. Un soldat étourdi (STUN) ne bouge pas ; son compte baisse
+d'un tick."
   (declare (optimize (speed 3) (safety 1))
            (type fixnum start end)
            (type single-float step front turn-step hold-distance))
@@ -145,12 +157,13 @@ se tourne vers elle."
         (facings (soldiers-facing soldiers))
         (walking (soldiers-walking soldiers))
         (targets (soldiers-target soldiers))
+        (stuns (soldiers-stun soldiers))
         (hps (soldiers-hp soldiers))
         (radii (soldiers-radius soldiers))
         (start-distance *walk-start-distance*)
         (stop-distance *walk-stop-distance*))
     (declare (type float-array xs ys slot-xs slot-ys facings hps radii)
-             (type fixnum-array walking targets)
+             (type fixnum-array walking targets stuns)
              (type single-float start-distance stop-distance))
     (flet ((turn-toward (i angle)
              (declare (type fixnum i) (type single-float angle))
@@ -160,16 +173,20 @@ se tourne vers elle."
       (declare (inline turn-toward))
       (loop for i of-type fixnum from start below end
             do (let ((target (aref targets i)))
-                 (if (and (>= target 0) (plusp (aref hps target))
+                 (cond
+                   ;; Étourdi par un coup : sur place, sans même se tourner.
+                   ((plusp (aref stuns i))
+                    (decf (aref stuns i)))
+                   ((and (>= target 0) (plusp (aref hps target))
                           (let ((tx (- (aref xs target) (aref xs i)))
                                 (ty (- (aref ys target) (aref ys i))))
                             (<= (- (sqrt (the (single-float 0f0) (+ (* tx tx) (* ty ty))))
                                    (aref radii i) (aref radii target))
                                 hold-distance)))
-                     (progn
-                       (setf (aref walking i) 0)
+                     (setf (aref walking i) 0)
                        (turn-toward i (atan (- (aref ys target) (aref ys i))
                                             (- (aref xs target) (aref xs i)))))
+                   (t
                      (let* ((dx (- (aref slot-xs i) (aref xs i)))
                             (dy (- (aref slot-ys i) (aref ys i)))
                             (distance (sqrt (the (single-float 0f0) (+ (* dx dx) (* dy dy))))))
@@ -185,7 +202,7 @@ se tourne vers elle."
                                  (aref ys i) (aref slot-ys i))
                            (let ((ratio (/ step distance)))
                              (incf (aref xs i) (* dx ratio))
-                             (incf (aref ys i) (* dy ratio)))))))))))
+                             (incf (aref ys i) (* dy ratio))))))))))))
 
 (defun slot-distance (soldiers i)
   (let ((dx (- (aref (soldiers-slot-x soldiers) i) (aref (soldiers-x soldiers) i)))
