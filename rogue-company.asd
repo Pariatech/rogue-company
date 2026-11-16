@@ -30,6 +30,7 @@
                (:file "deaths")
                (:file "flanks")
                (:file "combat")
+               (:file "shooting")
                (:file "morale")
                (:file "demo-battle")
                (:file "camera")

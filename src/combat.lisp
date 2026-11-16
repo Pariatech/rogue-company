@@ -145,7 +145,9 @@ d'arrêt ; en ordre lâche, dont le premier rang se disperse, les soldats engag�
   "Fait avancer un régiment qui attaque, ou le fige au contact."
   (let ((orders (regiment-orders regiment))
         (soldiers (battle-soldiers battle)))
-    (when (and (eq (first orders) :attack) (plusp (regiment-alive regiment)))
+    (when (and (eq (first orders) :attack) (plusp (regiment-alive regiment))
+               ;; Des tireurs s'arrêtent à portée de tir (shooting.lisp).
+               (not (update-fire-position battle regiment)))
       (let* ((enemy (aref (battle-regiments battle) (second orders)))
              (formation (regiment-formation regiment))
              (files (formation-files formation (regiment-alive regiment)))
@@ -249,6 +251,9 @@ premier rang qui sont au contact (cible à la distance d'arrêt)."
       (multiple-value-bind (s-min s-reach) (melee-reaches secondary)
         (declare (ignore s-min))
         (let* ((p-usable (and p-reach t))
+               ;; Arme principale à reprendre après le contact : de mêlée, ou de
+               ;; tir (sans cible de mêlée, elle ne vise rien ici : shooting.lisp).
+               (p-returns (or p-usable (eq (attack-kind primary) :ranged)))
                (s-usable (and s-reach t))
                (p-min (if p-usable (the single-float p-min) 0f0))
                (p-reach (if p-usable (the single-float p-reach) -1f0))
@@ -266,7 +271,7 @@ premier rang qui sont au contact (cible à la distance d'arrêt)."
               (loop for i of-type fixnum from start below end
                     do (setf (aref targets i) -1 (aref cooldowns i) -1)
                        (setf (aref calms i) (min 1000000 (1+ (aref calms i))))
-                       (when (and (= 1 (aref weapons i)) p-usable
+                       (when (and (= 1 (aref weapons i)) p-returns
                                   (>= (aref calms i) (the fixnum *primary-return-ticks*)))
                          (setf (aref weapons i) 0
                                (aref switch-timers i) (attack-ready-time primary))))
@@ -337,7 +342,7 @@ premier rang qui sont au contact (cible à la distance d'arrêt)."
                                                           (< (aref calms i) return-ticks))
                                                      1 0))
                                                 ((>= best-s 0) 1)
-                                                ((and (= weapon 1) p-usable
+                                                ((and (= weapon 1) p-returns
                                                       (>= (aref calms i) return-ticks))
                                                  0)
                                                 (t weapon)))
@@ -541,11 +546,12 @@ indices, avec le générateur de la bataille : la bataille se rejoue."
                                                                      (stats-defense defender))))))))
                                    (declare (type single-float facing chance) (type fixnum sector))
                                    (when (< (rng-float rng) chance)
-                                     (let ((armor (max 0f0 (- (the single-float (stats-armor defender))
-                                                              (the single-float
-                                                                   (attack-penetration attack))))))
-                                       (let ((damage (max 0f0 (- (the single-float (attack-damage attack))
-                                                                 armor))))
+                                     ;; L'armure réduit les dégâts ordinaires, jamais les
+                                     ;; perforants.
+                                     (let ((damage (+ (max 0f0 (- (the single-float (attack-damage attack))
+                                                                  (the single-float (stats-armor defender))))
+                                                      (the single-float (attack-piercing attack)))))
+                                       (progn
                                          (incf (aref damages target) damage)
                                          (setf (aref last-attackers target) index
                                                (aref stuns target)

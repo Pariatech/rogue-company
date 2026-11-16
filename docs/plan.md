@@ -378,7 +378,7 @@ stats communes + profil d'attaque principal + profil d'attaque secondaire
 | Profil de mêlée | Profil de tir |
 | --- | --- |
 | `min-reach`, `reach` | `range` (portée maximale ; la précision baisse avec la distance) |
-| `damage`, `penetration` | `damage`, `penetration` |
+| `damage` (réduit par l'armure), `piercing` (jamais réduit) | `damage`, `piercing` |
 | `accuracy` (s'ajoute à `melee-skill`) | `accuracy` (s'ajoute à `marksmanship`) |
 | `cooldown` | `reload` |
 | `charge-bonus` | `volley` (salve par rang possible ou non) |
@@ -406,9 +406,9 @@ La `min-reach` fait l'intérêt de la pique : elle ne sert à rien contre un enn
 Le corps à corps peut rater. Chaque coup se résout en deux temps :
 
 1. **Toucher :** chance = `melee-skill` + précision de l'arme − défense de la cible (bouclier, parade) − pénalité de fatigue, bornée entre un minimum et un maximum.
-2. **Blesser :** dégâts de l'arme, réduits par l'armure de la cible diminuée de la pénétration de l'arme (armure effective = max(0, armure − pénétration)).
+2. **Blesser :** dégâts ordinaires de l'arme réduits par l'armure de la cible, plus ses dégâts perforants, que l'armure ne réduit pas (max(0, dégâts − armure) + perforants).
 
-La pénétration donne sa valeur à chaque armure : une balle de mousquet à courte portée traverse un corselet, une épée glisse dessus. L'armure lourde vaut beaucoup contre la mêlée et moins contre le tir rapproché.
+Les dégâts perforants donnent sa valeur à chaque armure : une balle de mousquet à courte portée traverse un corselet, une épée glisse dessus. L'armure lourde vaut beaucoup contre la mêlée et moins contre le tir rapproché.
 
 Le tirage se fait dans la phase 2 du combat, séquentielle, avec le générateur de la bataille : l'ordre des tirages est fixe, la bataille se rejoue.
 
@@ -426,7 +426,7 @@ Un cuirassier en armure complète est redoutable au contact, mais s'épuise en c
 
 | Emplacement | Exemples | Apport |
 | --- | --- | --- |
-| Arme principale | Pique, mousquet, arquebuse, arbalète, hallebarde, épée, lance, pistolets | Portée, dégâts, pénétration, précision, cadence, tir ou non |
+| Arme principale | Pique, mousquet, arquebuse, arbalète, hallebarde, épée, lance, pistolets | Portée, dégâts, dégâts perforants, précision, cadence, tir ou non |
 | Arme secondaire | Épée courte, dague, pistolet | Remplace l'arme principale quand elle ne peut pas servir : le mousquetaire au contact, le piquier dans une mêlée trop serrée |
 | Bouclier | Rondache, pavise | Défense, surtout contre la mêlée ; couverture contre le tir pour la pavise |
 | Armure | Buffle, corselet, armure de cuirassier | Armure, poids |
@@ -532,7 +532,7 @@ Le principe : calculer le moins possible par soldat, et le plus possible par ré
   (let ((tgt (aref *target* i)))
     (when (and (>= tgt 0) (attack-ready-p i)
                (attack-hits-p i tgt rng))        ; chance de toucher, tirage à graine
-      (incf (aref *damage* tgt) (attack-damage i tgt)))))  ; armure moins pénétration
+      (incf (aref *damage* tgt) (attack-damage i tgt)))))  ; dégâts moins armure, plus perforants
 (remove-dead-soldiers)
 ```
 

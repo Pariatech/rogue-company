@@ -19,6 +19,9 @@
 
 (defparameter *rout-morale* 20f0 "Sous ce moral, le régiment se débande.")
 
+(defparameter *fire-calm-seconds* 3
+  "Secondes sans tirer ni essuyer de tir avant que le moral remonte.")
+
 (defparameter *morale-recovery* 0.5f0
   "Moral regagné par seconde sans aucun soldat engagé, jusqu'à la valeur de départ.")
 
@@ -162,7 +165,9 @@ contact, et le fait reculer ou avancer d'autant."
     (let ((loss (flank-morale-loss regiment)))
       (when (plusp loss)
         (lose-morale regiment (/ loss +ticks-per-second+))))
-    (when (zerop (regiment-engaged regiment))
+    (when (and (zerop (regiment-engaged regiment))
+               (> (- (battle-tick-count battle) (regiment-fire-tick regiment))
+                  (* *fire-calm-seconds* +ticks-per-second+)))
       (setf (regiment-morale regiment)
             (min (stats-morale (regiment-stats regiment))
                  (+ (regiment-morale regiment) (/ *morale-recovery* +ticks-per-second+)))))

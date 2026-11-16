@@ -17,7 +17,7 @@
 REGIMENT-STATS du même nom.")
 
 (defparameter *attack-stats*
-  '(:min-reach :reach :damage :penetration :accuracy :cooldown :charge-bonus :ready-time)
+  '(:min-reach :reach :damage :piercing :accuracy :cooldown :charge-bonus :ready-time)
   "Stats numériques d'un profil d'attaque. Pour une arme de tir, REACH est la
 portée et COOLDOWN le rechargement.")
 
@@ -43,9 +43,11 @@ l'écart d'un single-float converti."
               :documentation "En deçà, l'arme ne sert pas : un ennemi collé à une pique.")
    (reach :initarg :reach :reader attack-reach :type single-float
           :documentation "Portée de mêlée, ou portée maximale de tir.")
-   (damage :initarg :damage :reader attack-damage :type single-float)
-   (penetration :initarg :penetration :reader attack-penetration :type single-float
-                :documentation "Armure ignorée par chaque coup.")
+   (damage :initarg :damage :reader attack-damage :type single-float
+           :documentation "Dégâts ordinaires, réduits de l'armure de la cible.")
+   (piercing :initarg :piercing :reader attack-piercing :type single-float
+             :documentation "Dégâts perforants, ajoutés aux dégâts ordinaires, que
+l'armure ne réduit pas.")
    (accuracy :initarg :accuracy :reader attack-accuracy :type single-float
              :documentation "S'ajoute à MELEE-SKILL ou à MARKSMANSHIP.")
    (cooldown :initarg :cooldown :reader attack-cooldown :type fixnum
@@ -66,7 +68,7 @@ l'écart d'un single-float converti."
                    :min-reach (float (value :min-reach) 1f0)
                    :reach (float (value :reach) 1f0)
                    :damage (float (value :damage) 1f0)
-                   :penetration (float (value :penetration) 1f0)
+                   :piercing (float (value :piercing) 1f0)
                    :accuracy (float (value :accuracy) 1f0)
                    :cooldown (seconds->ticks (value :cooldown) 1)
                    :charge-bonus (float (value :charge-bonus) 1f0)
@@ -77,7 +79,7 @@ l'écart d'un single-float converti."
       "min_reach" (json-float (attack-min-reach attack))
       "reach" (json-float (attack-reach attack))
       "damage" (json-float (attack-damage attack))
-      "penetration" (json-float (attack-penetration attack))
+      "piercing" (json-float (attack-piercing attack))
       "accuracy" (json-float (attack-accuracy attack))
       "cooldown_seconds" (ticks->seconds (attack-cooldown attack))
       "charge_bonus" (json-float (attack-charge-bonus attack))
@@ -89,7 +91,7 @@ l'écart d'un single-float converti."
 (defclass regiment-stats ()
   ((hp :reader stats-hp :type single-float)
    (armor :reader stats-armor :type single-float
-          :documentation "Retirée des dégâts reçus, moins la pénétration de l'arme.")
+          :documentation "Retirée des dégâts ordinaires reçus ; les dégâts perforants la traversent.")
    (speed :reader stats-speed :type single-float :documentation "Marche, m/s.")
    (run-speed :reader stats-run-speed :type single-float :documentation "Course et charge, m/s.")
    (turn-rate :reader stats-turn-rate :type single-float

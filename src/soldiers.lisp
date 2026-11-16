@@ -19,7 +19,7 @@
 
 (defparameter *soldier-fixnum-arrays*
   '(regiment side walking target weapon switch-timer cooldown calm last-attacker strike-tick
-    attackers stun)
+    attackers stun reload)
   "Slots de SOLDIERS qui sont des tableaux de fixnums.")
 
 (defparameter *walk-start-distance* 2f0
@@ -92,6 +92,10 @@ attaqués.")
          :documentation "Ticks pendant lesquels le soldat, touché au corps à corps, ne
 bouge plus (combat.lisp, STRIKE) : sous les piques, chaque coup qui porte brise
 l'élan.")
+   (reload :initform (make-array 0 :element-type 'fixnum) :reader soldiers-reload
+           :type fixnum-array
+           :documentation "Ticks avant que l'arme de tir soit chargée ; 0 chargée
+(shooting.lisp). N'avance que l'arme de tir en main.")
    (damage :initform (make-float-array 0) :reader soldiers-damage :type float-array
            :documentation "Dégâts reçus pendant le tick, appliqués ensemble.")))
 

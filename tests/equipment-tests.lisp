@@ -68,8 +68,8 @@
 (test attack-designators
   (let ((s (stats '(:main :pistols :secondary :sword :mount :light-horse)
                   :modifiers '(((:melee :damage) :add 3) ((:primary :reach) :mul 2)))))
-    (is (= 17 (rogue-company::attack-damage (rogue-company::stats-secondary s))))
-    (is (= 50 (rogue-company::attack-damage (rogue-company::stats-primary s))))
+    (is (= 16 (rogue-company::attack-damage (rogue-company::stats-secondary s))))
+    (is (= 20 (rogue-company::attack-damage (rogue-company::stats-primary s))))
     (is (= 30 (rogue-company::attack-reach (rogue-company::stats-primary s))))))
 
 (test hands

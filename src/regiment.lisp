@@ -31,6 +31,9 @@
                    :documentation "Ennemis qui le visaient de dos au dernier tick.")
    (holding :initform nil :accessor regiment-holding-p
             :documentation "Au contact : la formation ne bouge plus.")
+   (fire-tick :initform -1000000 :accessor regiment-fire-tick :type fixnum
+              :documentation "Dernier tick où il a tiré ou essuyé un tir (shooting.lisp) :
+le moral ne remonte pas sous le feu.")
    (contact-lost :initform 0 :accessor regiment-contact-lost :type fixnum
                  :documentation "Ticks sans aucun soldat engagé, pendant un ordre d'attaque.")
    (min-x :initform 0f0 :accessor regiment-min-x :type single-float

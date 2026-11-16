@@ -66,6 +66,37 @@
   "Coup d'épée armé, lame levée en arrière.")
 (defparameter *sword-cut* (pose 0.5 0.05 0.6 0.75 -0.35 -0.55)
   "Fin du coup, lame abattue en avant.")
+;;; Hallebarde : hampe tenue à deux mains sur la droite, fer au bout (pointe,
+;;; hache vers l'avant, bec vers l'arrière). Une pose de hallebarde : la main
+;;; avant (avant, droite, hauteur), puis l'angle de la hampe au-dessus de
+;;; l'horizontale, vers l'avant (les deux dernières valeurs ne servent pas).
+
+(defparameter *halberd-length* 2.5f0 "Hallebarde, de bout en bout, en mètres.")
+(defparameter *halberd-head* 0.4f0 "Fer de la hallebarde (pointe et hache), en mètres.")
+(defparameter *halberd-grip* 0.85f0 "Du pied de la hampe à la main avant, en mètres.")
+(defparameter *halberd-hand-gap* 0.45f0 "Écart des deux mains sur la hampe, en mètres.")
+(defparameter *halberd-axe* 0.22f0 "Largeur de la hache, en mètres.")
+(defparameter *halberd-strike-seconds* 0.6f0
+  "Durée d'un coup de hallebarde : lever, abattre, revenir en garde.")
+(defparameter *halberd-rest* (pose 0.1 0.25 0.9 1.47 0 0) "Hallebarde au repos, dressée.")
+(defparameter *halberd-guard* (pose 0.35 0.22 1.0 0.9 0 0) "Hallebarde en garde, fer haut vers l'ennemi.")
+(defparameter *halberd-raised* (pose 0.2 0.22 1.15 1.75 0 0) "Coup armé, fer levé en arrière.")
+(defparameter *halberd-cut* (pose 0.5 0.15 0.85 -0.1 0 0) "Fin du coup, fer abattu en avant.")
+
+;;; Arquebuse : crosse de bois, canon d'acier. Une pose d'arquebuse : la crosse
+;;; (avant, droite, hauteur), puis la bouche du canon, dans le repère du soldat.
+
+(defparameter *gun-rest* (pose 0.2 0.22 0.75 -0.25 0.28 1.95)
+  "Arquebuse au repos, sur l'épaule, canon en l'air.")
+(defparameter *gun-aim* (pose 0.05 0.18 1.0 1.15 0.12 1.08)
+  "Arquebuse en joue, à l'épaule, canon vers l'ennemi.")
+(defparameter *gun-stock* 0.4f0 "Part de l'arquebuse en bois, depuis la crosse.")
+(defparameter *gun-recoil* 0.12f0 "Recul de l'arquebuse au coup, en mètres.")
+(defparameter *gun-flash-seconds* 0.15f0 "Durée de l'éclair à la bouche du canon.")
+(defparameter *gun-smoke-seconds* 1.2f0 "Durée de la fumée d'un coup.")
+(defparameter *gun-smoke-size* 0.9f0 "Taille finale d'une bouffée de fumée, en mètres.")
+(defparameter *gun-smoke-rise* 1.2f0 "Montée de la fumée, en mètres.")
+
 (defparameter *shield-rest* (pose 0.12 -0.3 0.62 0 0 0)
   "Rondache au repos, au bout du bras gauche (seules les trois premières valeurs servent).")
 (defparameter *stun-recoil* 0.2f0
@@ -157,6 +188,16 @@ dans le sens des aiguilles d'une montre à l'écran)."
      (rlgl:vertex-2f (+ ,x0 nx) (+ ,y0 ny))
      (rlgl:vertex-2f (+ ,x1 nx) (+ ,y1 ny))
      (rlgl:vertex-2f (- ,x1 nx) (- ,y1 ny))))
+
+(defmacro solid-quad (x0 y0 x1 y1 x2 y2 x3 y3 red green blue)
+  "Quadrilatère de couleur unie, sommets dans l'ordre du contour."
+  `(progn
+     (rlgl:color-4ub ,red ,green ,blue 255)
+     (rlgl::texcoord-2f solid-u solid-v)
+     (rlgl:vertex-2f ,x0 ,y0)
+     (rlgl:vertex-2f ,x1 ,y1)
+     (rlgl:vertex-2f ,x2 ,y2)
+     (rlgl:vertex-2f ,x3 ,y3)))
 
 (defun draw-soldier-parts (battle alpha camera atlas)
   (declare (optimize (speed 3) (safety 1))
@@ -276,6 +317,22 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (sword-rest *sword-rest*) (sword-guard-pose *sword-guard-pose*)
          (sword-raised *sword-raised*) (sword-cut *sword-cut*)
          (shield-rest *shield-rest*) (shield-guard *shield-guard*)
+         (halberd-length (the single-float *halberd-length*))
+         (halberd-head (the single-float *halberd-head*))
+         (halberd-grip (the single-float *halberd-grip*))
+         (halberd-gap (the single-float *halberd-hand-gap*))
+         (halberd-axe (the single-float *halberd-axe*))
+         (strike-ticks-halberd (* (the single-float *halberd-strike-seconds*)
+                                  (float +ticks-per-second+ 1f0)))
+         (gun-rest *gun-rest*) (gun-aim *gun-aim*)
+         (gun-stock (the single-float *gun-stock*))
+         (gun-recoil (the single-float *gun-recoil*))
+         (flash-ticks (* (the single-float *gun-flash-seconds*) (float +ticks-per-second+ 1f0)))
+         (smoke-ticks (* (the single-float *gun-smoke-seconds*) (float +ticks-per-second+ 1f0)))
+         (smoke-size (the single-float *gun-smoke-size*))
+         (smoke-rise (the single-float *gun-smoke-rise*))
+         (halberd-rest *halberd-rest*) (halberd-guard *halberd-guard*)
+         (halberd-raised *halberd-raised*) (halberd-cut *halberd-cut*)
          (shield-threshold (the single-float *shield-facing-threshold*))
          (wood *pike-wood*) (steel *pike-steel*) (gold *finial-color*)
          (brass *sword-guard-color*)
@@ -289,7 +346,11 @@ dans le sens des aiguilles d'une montre à l'écran)."
                    regiment-starts regiment-files regiment-weapons regiment-shields
                    regiment-guards soldier-weapons)
              (type (simple-array single-float (6)) sword-rest sword-guard-pose sword-raised
-                   sword-cut shield-rest shield-guard)
+                   sword-cut shield-rest shield-guard halberd-rest halberd-guard
+                   halberd-raised halberd-cut gun-rest gun-aim)
+             (type single-float gun-stock gun-recoil flash-ticks smoke-ticks smoke-size smoke-rise)
+             (type single-float halberd-length halberd-head halberd-grip halberd-gap
+                   halberd-axe strike-ticks-halberd)
              (type single-float sword-length dagger-length sword-guard strike-ticks-sword
                    shield-threshold)
              (type (integer 0 255) brass-r brass-g brass-b)
@@ -358,6 +419,12 @@ dans le sens des aiguilles d'une montre à l'écran)."
                  (blade nil)
                  (hilt-x 0f0) (hilt-y 0f0) (tip-x 0f0) (tip-y 0f0)
                  (guard1-x 0f0) (guard1-y 0f0) (guard2-x 0f0) (guard2-y 0f0)
+                 ;; Hache de la hallebarde : contour P1 E1 E2 P2, bec de P3 à K.
+                 (axe nil)
+                 ;; Âge du dernier coup de feu, en ticks, ou négatif : éclair et fumée.
+                 (shot-age -1f0)
+                 (p1x 0f0) (p1y 0f0) (e1x 0f0) (e1y 0f0) (e2x 0f0) (e2y 0f0)
+                 (p2x 0f0) (p2y 0f0) (p3x 0f0) (p3y 0f0) (kx 0f0) (ky 0f0)
                  (shield (and (= 1 (aref regiment-shields regiment-index)) (not bearer)))
                  (shield-frame (cond ((> s shield-threshold) 0)
                                      ((< s (- shield-threshold)) 2)
@@ -365,7 +432,8 @@ dans le sens des aiguilles d'une montre à l'écran)."
             (declare (type single-float pf facing c s recoil sx sy phase swing lift bob
                            hand1-x hand1-y hand1-depth hand2-x hand2-y hand2-depth
                            ax ay mx my cx cy bx by hilt-x hilt-y tip-x tip-y
-                           guard1-x guard1-y guard2-x guard2-y)
+                           guard1-x guard1-y guard2-x guard2-y
+                           p1x p1y e1x e1y e2x e2y p2x p2y p3x p3y kx ky shot-age)
                      (type fixnum direction frame regiment-index weapon shield-frame)
                      (type (integer 0 255) team-r team-g team-b))
             (macrolet ((project (f r h)
@@ -404,7 +472,11 @@ dans le sens des aiguilles d'une montre à l'écran)."
                               (line-quad mx my cx cy wood-r wood-g wood-b)
                               (if bearer
                                   (line-quad cx cy bx by gold-r gold-g gold-b)
-                                  (line-quad cx cy bx by steel-r steel-g steel-b))))))
+                                  (line-quad cx cy bx by steel-r steel-g steel-b))
+                              (when axe
+                                (solid-quad p1x p1y e1x e1y e2x e2y p2x p2y
+                                            steel-r steel-g steel-b)
+                                (line-quad p3x p3y kx ky steel-r steel-g steel-b))))))
               ;; Mains et perche.
               (macrolet ((upright (forward lean top-height)
                            ;; Perche dressée à droite du soldat, mains à deux hauteurs.
@@ -485,6 +557,106 @@ dans le sens des aiguilles d'une montre à l'écran)."
                              (multiple-value-setq (hand1-x hand1-y hand1-depth)
                                (project (* (- hand-swing) swing) (- hand-side)
                                         (+ hand-height bob))))))
+                      ((and (= weapon 4) (= 1 (aref soldier-weapons i)))
+                       ;; Tireur à l'épée, au contact.
+                       (strike-blade t sword-length)
+                       (multiple-value-setq (hand1-x hand1-y hand1-depth)
+                         (project (* (- hand-swing) swing) (- hand-side) (+ hand-height bob))))
+                      ((= weapon 4)
+                       ;; Arquebuse : en joue sous un ordre d'attaque, sur l'épaule
+                       ;; sinon ; le coup la fait reculer et relever.
+                       (let* ((aim (and (not stunned) (= 1 (aref regiment-guards regiment-index))))
+                              (pose (if aim gun-aim gun-rest))
+                              (age (+ alpha (float (min 1000000 (- tick (aref strike-ticks i))) 1f0)))
+                              (kick (if (and aim (< age smoke-ticks))
+                                        (* gun-recoil (max 0f0 (- 1f0 (/ age 6f0))))
+                                        0f0))
+                              (depth 0f0))
+                         (declare (type (simple-array single-float (6)) pose)
+                                  (type single-float age kick depth))
+                         (when (< age smoke-ticks) (setf shot-age age))
+                         (setf pole t)
+                         (macrolet ((along (u)
+                                      ;; Point de l'arquebuse à la part U depuis la crosse.
+                                      `(project (- (+ (aref pose 0) (* ,u (- (aref pose 3) (aref pose 0))))
+                                                   kick)
+                                                (+ (aref pose 1) (* ,u (- (aref pose 4) (aref pose 1))))
+                                                (+ (aref pose 2) bob (* ,u kick)
+                                                   (* ,u (- (aref pose 5) (aref pose 2)))))))
+                           (multiple-value-setq (ax ay depth) (along 0f0))
+                           (setf rear-behind (< depth 0f0))
+                           (multiple-value-setq (hand2-x hand2-y hand2-depth) (along 0.15f0))
+                           (setf mx hand2-x my hand2-y)
+                           (multiple-value-setq (cx cy) (along gun-stock))
+                           (multiple-value-setq (bx by depth) (along 1f0))
+                           (setf front-behind (< depth 0f0))
+                           (if aim
+                               (multiple-value-setq (hand1-x hand1-y hand1-depth) (along 0.5f0))
+                               (multiple-value-setq (hand1-x hand1-y hand1-depth)
+                                 (project (* (- hand-swing) swing) (- hand-side)
+                                          (+ hand-height bob)))))))
+                      ((= weapon 3)
+                       ;; Hallebarde : dressée au repos, en garde sous un ordre
+                       ;; d'attaque, coup de haut en bas en trois temps.
+                       (macrolet ((hold-halberd (from to amount)
+                                    `(let* ((from ,from) (to ,to) (amount ,amount))
+                                       (declare (type (simple-array single-float (6)) from to)
+                                                (type single-float amount))
+                                       (macrolet ((at (k) `(+ (aref from ,k)
+                                                              (* amount (- (aref to ,k)
+                                                                           (aref from ,k))))))
+                                         (let* ((hf (at 0)) (hr (at 1)) (hh (+ (at 2) bob))
+                                                (angle (at 3))
+                                                (df (cos angle)) (dh (sin angle))
+                                                ;; Pied de la hampe.
+                                                (bf (- hf (* halberd-grip df)))
+                                                (bh (- hh (* halberd-grip dh)))
+                                                (low (- halberd-length halberd-head))
+                                                (high (- halberd-length (* 0.45f0 halberd-head)))
+                                                (depth 0f0))
+                                           (declare (type single-float hf hr hh angle df dh bf bh
+                                                          low high depth))
+                                           (macrolet ((along (d &optional (out 0f0))
+                                                        ;; Point de la hampe à D du pied, décalé
+                                                        ;; de OUT vers l'avant du fer.
+                                                        `(project (+ bf (* ,d df) (* ,out dh)) hr
+                                                                  (- (+ bh (* ,d dh)) (* ,out df)))))
+                                             (setf pole t axe t)
+                                             (multiple-value-setq (ax ay depth) (along 0f0))
+                                             (setf rear-behind (< depth 0f0))
+                                             (multiple-value-setq (hand1-x hand1-y hand1-depth)
+                                               (along (- halberd-grip halberd-gap)))
+                                             (multiple-value-setq (hand2-x hand2-y hand2-depth)
+                                               (along halberd-grip))
+                                             (setf mx hand1-x my hand1-y)
+                                             (multiple-value-setq (cx cy) (along low))
+                                             (multiple-value-setq (bx by depth) (along halberd-length))
+                                             (setf front-behind (< depth 0f0))
+                                             (multiple-value-setq (p1x p1y) (along high))
+                                             (multiple-value-setq (e1x e1y)
+                                               (along (+ high 0.04f0) halberd-axe))
+                                             (multiple-value-setq (e2x e2y)
+                                               (along (- low 0.06f0) halberd-axe))
+                                             (multiple-value-setq (p2x p2y) (along low))
+                                             (multiple-value-setq (p3x p3y)
+                                               (along (* 0.5f0 (+ low high))))
+                                             (multiple-value-setq (kx ky)
+                                               (along (* 0.5f0 (+ low high))
+                                                      (* -0.6f0 halberd-axe)))))))))
+                         (let* ((guard (and (not stunned)
+                                            (= 1 (aref regiment-guards regiment-index))))
+                                (age (+ alpha (float (min 1000000 (- tick (aref strike-ticks i)))
+                                                     1f0)))
+                                (u (/ age strike-ticks-halberd)))
+                           (declare (type single-float age u))
+                           (cond ((not guard) (hold-halberd halberd-rest halberd-rest 0f0))
+                                 ((< u 0.35f0) (hold-halberd halberd-guard halberd-raised
+                                                             (/ u 0.35f0)))
+                                 ((< u 0.6f0) (hold-halberd halberd-raised halberd-cut
+                                                            (/ (- u 0.35f0) 0.25f0)))
+                                 ((< u 1f0) (hold-halberd halberd-cut halberd-guard
+                                                          (/ (- u 0.6f0) 0.4f0)))
+                                 (t (hold-halberd halberd-guard halberd-guard 0f0))))))
                       ((and pikes (= weapon 1) (< i (aref lowered-ends regiment-index)))
                        ;; Pique croisée, à hauteur d'épaule selon le rang ; le coup
                        ;; la pousse en avant, les mains en suivent une part.
@@ -551,7 +723,24 @@ dans le sens des aiguilles d'une montre à l'écran)."
               (blade-part nil)
               (when (>= hand1-depth 0f0) (hand hand1-x hand1-y))
               (when (>= hand2-depth 0f0) (hand hand2-x hand2-y))
-              (shield-part nil)))))))
+              (shield-part nil)
+              ;; Coup de feu : éclair à la bouche du canon, puis fumée qui monte,
+              ;; grossit et s'efface.
+              (when (>= shot-age 0f0)
+                (when (< shot-age flash-ticks)
+                  (let ((f (* 0.08f0 zoom)))
+                    (solid-quad (- bx f) by bx (- by f) (+ bx f) by bx (+ by f) 255 230 120)))
+                (let* ((u (/ shot-age smoke-ticks))
+                       (half (* 0.5f0 zoom smoke-size (+ 0.3f0 (* 0.7f0 u))))
+                       (px (+ bx (* zoom 0.15f0 u c)))
+                       (py (- by (* zoom smoke-rise u))))
+                  (declare (type single-float u half px py))
+                  (rlgl:color-4ub 215 215 210 (floor (* 170f0 (- 1f0 u))))
+                  (rlgl::texcoord-2f solid-u solid-v)
+                  (rlgl:vertex-2f (- px half) (- py half))
+                  (rlgl:vertex-2f (- px half) (+ py half))
+                  (rlgl:vertex-2f (+ px half) (+ py half))
+                  (rlgl:vertex-2f (+ px half) (- py half))))))))))
     (rlgl:end)
     (rlgl:set-texture 0)))
 
@@ -674,6 +863,8 @@ dans le sens des aiguilles d'une montre à l'écran)."
          ;; Pique dressée : inclinaison de départ, depuis la verticale.
          (upright-tilt (asin (min 1f0 (/ (the single-float *pike-lean*) pike-length))))
          (head-fraction (- 1f0 (/ pike-head pike-length)))
+         (halberd-length (the single-float *halberd-length*))
+         (halberd-head (the single-float *halberd-head*))
          (half-line (* 0.5f0 scale (the single-float *pike-width*)))
          (wood *pike-wood*) (steel *pike-steel*))
     (declare (type fixnum total capacity n oldest corpse-shade lowered-ranks)
@@ -741,9 +932,14 @@ dans le sens des aiguilles d'une montre à l'écran)."
                                     (+ (* ,h cos-tilt) (* lying sin-tilt)))))
                 ;; Pique : elle s'abat vers l'avant si elle était croisée, sinon
                 ;; du côté où tombe le soldat.
-                (when (and pikes (= weapon 1))
+                (when (and pikes (or (= weapon 1) (= weapon 3)))
                   (let* ((rank (aref ranks slot))
-                         (lowered (< rank lowered-ranks))
+                         (lowered (and (= weapon 1) (< rank lowered-ranks)))
+                         ;; Pique ou hallebarde, plus courte.
+                         (pike-length (if (= weapon 3) halberd-length pike-length))
+                         (head-fraction (if (= weapon 3)
+                                            (- 1f0 (/ halberd-head halberd-length))
+                                            head-fraction))
                          (angle (if lowered
                                     (+ facing (* 0.3f0 (- (* 2f0 (death-jitter serial 2)) 1f0)))
                                     (+ fall-angle (* 0.4f0 (- (* 2f0 (death-jitter serial 2)) 1f0)))))

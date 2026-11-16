@@ -27,15 +27,27 @@ piquiers ennemis que de tout autre régiment, pour que C les lance sur leur flan
 pendant que les piques s'affrontent de face.")
 
 (defparameter *demo-regiments*
-  '((0 :pikemen 160 -25 -25 0)
-    (1 :rodeleros 120 25 -25 180)
-    (0 :pikemen 160 -25 25 0)
-    (1 :pikemen 160 25 25 180))
+  '((0 :pikemen 160 -25 -100 0)
+    (1 :rodeleros 120 25 -100 180)
+    (0 :pikemen 160 -25 -60 0)
+    (1 :pikemen 160 25 -60 180)
+    (0 :halberdiers 120 -25 -20 0)
+    (1 :rodeleros 120 25 -20 180)
+    (0 :halberdiers 160 -25 20 0)
+    (1 :pikemen 160 25 20 180)
+    (0 :arquebusiers 120 -25 60 0)
+    (1 :rodeleros 120 25 60 180)
+    (0 :arquebusiers 120 -25 100 0)
+    (1 :pikemen 160 25 100 180))
   "Régiments de la démonstration : (camp dotation effectif x y orientation en degrés).
-Deux duels côte à côte, que C lance chacun sur l'ennemi le plus proche : piques
-contre rodeleros au nord, piques contre piques au sud.")
+Six duels côte à côte, du nord au sud, que C lance chacun sur l'ennemi le plus
+proche : piques contre rodeleros, piques contre piques, hallebardes contre
+rodeleros, hallebardes contre piques, arquebuses contre rodeleros, arquebuses
+contre piques.")
 
 (defparameter *demo-names* '((:pikemen . "Piquiers") (:rodeleros . "Rodeleros")
+                              (:halberdiers . "Hallebardiers")
+                              (:arquebusiers . "Arquebusiers")
                               (:musketeers . "Mousquetaires"))
   "Nom affiché de chaque dotation.")
 

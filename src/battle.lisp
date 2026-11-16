@@ -75,6 +75,7 @@ SCATTER mètres de son emplacement, sur chaque axe. Renvoie le régiment."
                    (aref (soldiers-cooldown soldiers) i) -1
                    (aref (soldiers-calm soldiers) i) 0
                    (aref (soldiers-stun soldiers) i) 0
+                   (aref (soldiers-reload soldiers) i) 0
                    (aref (soldiers-last-attacker soldiers) i) -1
                    (aref (soldiers-strike-tick soldiers) i) -1000000
                    (aref (soldiers-damage soldiers) i) 0f0
@@ -91,8 +92,8 @@ et s'ajoutent ici au fil des étapes :
   3. soldats : déplacement vers leur emplacement (ou face à leur cible), puis
      grille spatiale et collisions ;
   4. combat (combat.lisp) : ciblage par régiment, attaques de flanc et de dos
-     comptées (flanks.lisp), coups en séquence, puis dégâts appliqués et morts
-     retirés ;
+     comptées (flanks.lisp), coups en séquence, tirs (shooting.lisp), puis
+     dégâts appliqués et morts retirés ;
   5. poussée et moral (morale.lisp), débandade sous le seuil."
   (let ((soldiers (battle-soldiers battle))
         (regiments (battle-regiments battle)))
@@ -113,6 +114,7 @@ et s'ajoutent ici au fil des étapes :
           do (acquire-targets battle regiment))
     (count-flank-attacks battle)
     (strike battle)
+    (fire-shots battle)
     (apply-damage battle)
     (loop for regiment across regiments
           do (update-morale battle regiment)))

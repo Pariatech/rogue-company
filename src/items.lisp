@@ -6,6 +6,11 @@
 ;;;
 ;;; Distances en mètres, durées en secondes, poids en kilogrammes ; adresse,
 ;;; précision, défense et couverture en fractions.
+;;;
+;;; Dégâts d'un coup qui porte : DAMAGE moins l'armure de la cible (jamais sous
+;;; zéro), plus PIERCING, que l'armure ne réduit pas. Une épée taille fort mais
+;;; perfore peu ; une pointe, un bec ou une balle perforent. Une balle qui porte
+;;; met presque toujours un homme hors de combat.
 
 ;;; Hommes
 
@@ -18,29 +23,34 @@
 
 (define-item :pike "Pique"
   :slots '(:main) :hands 2 :weight 5 :price 20
-  :attack '(:kind :melee :min-reach 1.5 :reach 4.5 :damage 30 :penetration 2
+  :attack '(:kind :melee :min-reach 1.5 :reach 4.5 :damage 24 :piercing 8
             :cooldown 1.5 :ready-time 0.5)
   :modifiers '((:ranks :set 8))
   :forbids '(:mount))
 
 (define-item :halberd "Hallebarde"
   :slots '(:main) :hands 2 :weight 3.5 :price 25
-  :attack '(:kind :melee :min-reach 0.5 :reach 2.2 :damage 18 :penetration 4
-            :cooldown 1.8 :ready-time 0.5))
+  ;; Sans portée minimale : la hampe se raccourcit dans la main, la hallebarde
+  ;; frappe un ennemi collé (sinon les rodeleros la forcent à l'épée).
+  :attack '(:kind :melee :reach 2.8 :damage 20 :piercing 8
+            :cooldown 1.4 :ready-time 0.5)
+  ;; Ordre serré, plus profond qu'une troupe d'épées. La portée laisse le
+  ;; deuxième rang frapper par-dessus l'épaule du premier sur un ennemi au contact.
+  :modifiers '((:ranks :set 6)))
 
 (define-item :sword "Épée"
   :slots '(:main :secondary) :hands 1 :weight 1.5 :price 15
-  :attack '(:kind :melee :reach 1.1 :damage 14 :penetration 1 :accuracy 0.1
+  :attack '(:kind :melee :reach 1.1 :damage 13 :piercing 2 :accuracy 0.1
             :cooldown 1.0 :ready-time 1.0))
 
 (define-item :dagger "Dague"
   :slots '(:secondary) :hands 1 :weight 0.5 :price 5
-  :attack '(:kind :melee :reach 0.6 :damage 8 :accuracy 0.05
+  :attack '(:kind :melee :reach 0.6 :damage 6 :piercing 2 :accuracy 0.05
             :cooldown 0.8 :ready-time 0.5))
 
 (define-item :lance "Lance"
   :slots '(:main) :hands 1 :weight 3.5 :price 30
-  :attack '(:kind :melee :min-reach 1.0 :reach 3.0 :damage 20 :penetration 4
+  :attack '(:kind :melee :min-reach 1.0 :reach 3.0 :damage 16 :piercing 8
             :cooldown 3.0 :charge-bonus 40 :ready-time 1.0)
   :requires '(:mount))
 
@@ -48,7 +58,7 @@
 
 (define-item :musket "Mousquet"
   :slots '(:main) :hands 2 :weight 7 :price 40
-  :attack '(:kind :ranged :volley t :range 80 :damage 60 :penetration 6
+  :attack '(:kind :ranged :volley t :range 80 :damage 20 :piercing 90
             :reload 20 :ready-time 1.0)
   :modifiers '((:spacing :set 1.2))
   :tags '(:firearm)
@@ -56,20 +66,20 @@
 
 (define-item :arquebus "Arquebuse"
   :slots '(:main) :hands 2 :weight 4.5 :price 30
-  :attack '(:kind :ranged :volley t :range 60 :damage 40 :penetration 4 :accuracy 0.05
+  :attack '(:kind :ranged :volley t :range 60 :damage 20 :piercing 60 :accuracy 0.05
             :reload 15 :ready-time 1.0)
   :modifiers '((:spacing :set 1.2))
   :tags '(:firearm))
 
 (define-item :crossbow "Arbalète"
   :slots '(:main) :hands 2 :weight 4 :price 25
-  :attack '(:kind :ranged :range 70 :damage 45 :penetration 5 :accuracy 0.1
+  :attack '(:kind :ranged :range 70 :damage 20 :piercing 30 :accuracy 0.1
             :reload 18 :ready-time 1.0)
   :forbids '(:mount))
 
 (define-item :pistols "Pistolets"
   :slots '(:main) :hands 1 :weight 2.5 :price 35
-  :attack '(:kind :ranged :range 15 :damage 50 :penetration 5
+  :attack '(:kind :ranged :range 15 :damage 20 :piercing 60
             :reload 40 :ready-time 0.5)
   :tags '(:firearm))
 
@@ -129,6 +139,8 @@
   '((:pikemen :recruit (:main :pike :secondary :dagger :armor :corselet :helmet :morion))
     (:musketeers :recruit (:main :musket :secondary :sword :armor :buff-coat))
     (:rodeleros :recruit (:main :sword :shield :rodela :armor :corselet :helmet :morion))
+    (:arquebusiers :recruit (:main :arquebus :secondary :sword :armor :buff-coat :helmet :morion))
+    (:halberdiers :recruit (:main :halberd :secondary :sword :armor :corselet :helmet :morion))
     (:crossbowmen :recruit (:main :crossbow :secondary :sword :shield :pavise :helmet :morion))
     (:reiters :recruit (:main :pistols :secondary :sword :armor :buff-coat :mount :light-horse))
     (:lancers :recruit (:main :lance :secondary :sword :armor :cuirassier-armour
