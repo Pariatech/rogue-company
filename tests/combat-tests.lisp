@@ -248,3 +248,30 @@ de mêlée, et une position entre les deux régiments."
       (rogue-company::record-death log (float k 1f0) 0f0 0f0 0 k 0))
     (is (= 6 (rogue-company::death-count log)))
     (is (equalp #(4f0 5f0 2f0 3f0) (rogue-company::death-x log)))))
+
+(defun pikes-against-swords (rodeleros &key (seconds 240))
+  "160 piquiers chargés par RODELEROS rodeleros, jusqu'à la débandade d'un camp."
+  (let ((b (rogue-company::make-battle :seed 1)))
+    (rogue-company::add-regiment b (rogue-company::dotation-stats :pikemen) 160
+                                 :side 0 :x -25 :y 0 :facing 0)
+    (rogue-company::add-regiment b (rogue-company::dotation-stats :rodeleros) rodeleros
+                                 :side 1 :x 25 :y 0 :facing pi)
+    (rogue-company::order-charge b)
+    (loop repeat (* 30 seconds)
+          until (some #'rogue-company::regiment-routed-p (rogue-company::battle-regiments b))
+          do (rogue-company::battle-tick b))
+    (regiments b)))
+
+(test rodeleros-get-under-the-pikes
+  "À nombre égal, les rodeleros passés sous les piques l'emportent : collés au
+premier rang, ils n'ont plus en face que des dagues, les rangs de derrière ne
+pouvant plus abaisser leur pique sur eux."
+  (destructuring-bind (pikes swords) (pikes-against-swords 160)
+    (is-true (rogue-company::regiment-routed-p pikes))
+    (is-false (rogue-company::regiment-routed-p swords))))
+
+(test outnumbered-rodeleros-still-lose
+  "À 120 contre 160, les piquiers tiennent."
+  (destructuring-bind (pikes swords) (pikes-against-swords 120)
+    (is-false (rogue-company::regiment-routed-p pikes))
+    (is-true (rogue-company::regiment-routed-p swords))))

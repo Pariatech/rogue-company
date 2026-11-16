@@ -2,8 +2,8 @@
 
 ;;; Poussée et moral, au niveau du régiment, une fois par tick après le combat.
 ;;;
-;;; Poussée : deux régiments au contact comparent leur force, soldats engagés ×
-;;; masse × moral. Le plus faible recule (ses soldats sont repoussés, sa
+;;; Poussée : deux régiments au contact comparent leur force, soldats au contact
+;;; (à leur distance d'arrêt) × masse × moral. Le plus faible recule (ses soldats sont repoussés, sa
 ;;; formation aussi) et perd du moral ; le plus fort avance sa formation, et ses
 ;;; soldats suivent dès que l'ennemi n'est plus à leur distance d'arrêt.
 ;;;
@@ -49,7 +49,10 @@ de sa formation : il fuit en désordre, pas en rangs.")
        (- 1.5f0 (stats-discipline stats)))))
 
 (defun regiment-push-force (regiment)
-  (* (regiment-engaged regiment) (stats-mass (regiment-stats regiment))
+  "Soldats au contact (à leur distance d'arrêt) × masse × moral. Seuls ceux au
+contact poussent : les rangs de piques qui frappent par-dessus le premier n'y
+ajoutent rien."
+  (* (regiment-closed regiment) (stats-mass (regiment-stats regiment))
      (max 0f0 (regiment-morale regiment))))
 
 (defun opponent (battle regiment)
@@ -75,7 +78,7 @@ de sa formation : il fuit en désordre, pas en rangs.")
 contact, et le fait reculer ou avancer d'autant."
   (let ((enemy (opponent battle regiment)))
     (when (and enemy (regiment-holding-p regiment)
-               (plusp (regiment-engaged regiment)) (plusp (regiment-engaged enemy))
+               (plusp (regiment-closed regiment)) (plusp (regiment-closed enemy))
                (not (regiment-routed-p enemy)))
       (let* ((own (regiment-push-force regiment))
              (other (regiment-push-force enemy))

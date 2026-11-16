@@ -21,8 +21,9 @@
 (defparameter *hold-fraction* 0.25f0
   "Part des files qui doivent être à la distance d'arrêt pour que le régiment s'arrête.")
 
-(defparameter *contact-lost-ticks* 60
-  "Ticks sans aucun soldat engagé avant qu'un régiment figé reprenne son avance.")
+(defparameter *contact-lost-ticks* 30
+  "Ticks avec trop peu de soldats au contact (moins de *HOLD-FRACTION* des
+files) avant qu'un régiment figé reprenne son avance.")
 
 (defparameter *advance-period* 15
   "Ticks entre deux recalculs de la direction d'avance d'un régiment qui attaque.")
@@ -30,6 +31,13 @@
 (defparameter *primary-return-ticks* 30
   "Ticks sans ennemi à portée de l'arme secondaire avant de reprendre l'arme
 principale : évite d'alterner quand un ennemi oscille à la limite.")
+
+(defparameter *press-distance* 1.0f0
+  "Sous les piques : une arme à portée minimale (la pique) ne s'abaisse pas, depuis
+le deuxième rang ou plus loin, sur un ennemi à moins de cette distance (de bord
+à bord) de son propre premier rang. Collé au premier rang, l'ennemi n'a plus en
+face que lui : des rodeleros passés sous les pointes ne prennent plus les coups
+de quatre rangs de piques.")
 
 (defparameter *min-hit-chance* 0.05f0)
 (defparameter *max-hit-chance* 0.95f0)
@@ -84,7 +92,6 @@ orientation : le premier rang reste au contact, les autres se rangent derrière.
              (formation (regiment-formation regiment))
              (files (formation-files formation (regiment-alive regiment)))
              (needed (max 1 (floor (* *hold-fraction* files))))
-             (engaged (regiment-engaged regiment))
              (closed (regiment-closed regiment)))
         (cond ((or (zerop (regiment-alive enemy)) (regiment-routed-p enemy))
                ;; Ennemi détruit ou débandé : le régiment reste où il est.
@@ -97,10 +104,11 @@ orientation : le premier rang reste au contact, les autres se rangent derrière.
                  (setf (regiment-holding-p regiment) t)
                  (hold-in-place regiment soldiers)))
               ((regiment-holding-p regiment)
-               (if (plusp engaged)
-                   (setf (regiment-contact-lost regiment) 0)
-                   (when (> (incf (regiment-contact-lost regiment)) *contact-lost-ticks*)
-                     (setf (regiment-holding-p regiment) nil))))
+               ;; Repoussé ou séparé de l'ennemi : sans assez de soldats au contact
+               ;; pendant *CONTACT-LOST-TICKS*, il reprend son avance, même si des
+               ;; soldats ont encore une cible à portée.
+               (when (> (incf (regiment-contact-lost regiment)) *contact-lost-ticks*)
+                 (setf (regiment-holding-p regiment) nil)))
               ((zerop (mod (+ (battle-tick-count battle) (regiment-index regiment))
                            *advance-period*))
                ;; Avance : la formation vise le centre de l'ennemi, front tourné vers lui.
@@ -144,7 +152,8 @@ de REGIMENT : sinon, aucun de ses soldats ne peut avoir de cible."
 
 (defun acquire-targets (battle regiment)
   "Phase 1 pour les soldats de REGIMENT : arme en main, cible et minuteries.
-N'écrit que dans les cases de ces soldats, et compte les engagés."
+N'écrit que dans les cases de ces soldats, et compte les engagés, et ceux du
+premier rang qui sont au contact (cible à la distance d'arrêt)."
   (declare (optimize (speed 3) (safety 1)))
   (let* ((soldiers (battle-soldiers battle))
          (grid (battle-grid battle))
@@ -161,9 +170,16 @@ N'écrit que dans les cases de ces soldats, et compte les engagés."
          (calms (soldiers-calm soldiers))
          (max-radius (battle-max-radius battle))
          (hold-distance (regiment-hold-distance regiment))
+         ;; Le premier rang : seul lui compte au contact (poussée, arrêt).
+         (files (max 1 (formation-files (regiment-formation regiment)
+                                        (max 1 (regiment-alive regiment)))))
+         (front-end (+ start files))
+         (spacing (formation-spacing (regiment-formation regiment)))
+         (press (the single-float *press-distance*))
          (engaged 0)
          (closed 0))
-    (declare (type fixnum side start end engaged closed)
+    (declare (type fixnum side start end files front-end engaged closed)
+             (type single-float spacing press)
              (type single-float hold-distance)
              (type fixnum-array targets weapons switch-timers cooldowns calms)
              (type single-float max-radius))
@@ -212,8 +228,16 @@ N'écrit que dans les cases de ces soldats, et compte les engagés."
                                 (column (- cell (* row columns)))
                                 (span (min 8 (the fixnum (ceiling (+ search ri max-radius) cell-size))))
                                 (best-p -1) (best-p-d most-positive-single-float)
-                                (best-s -1) (best-s-d most-positive-single-float))
-                           (declare (type single-float xi yi ri best-p-d best-s-d)
+                                (best-s -1) (best-s-d most-positive-single-float)
+                                ;; Arme à portée minimale, hors du premier rang : un
+                                ;; ennemi doit être à PRESS au moins de notre premier
+                                ;; rang, à BEHIND mètres devant ce soldat.
+                                (behind (if (and (plusp p-min) (>= i front-end))
+                                            (+ (* spacing (float (floor (- i start) files) 1f0))
+                                               press)
+                                            0f0))
+                                (p-floor (max p-min behind)))
+                           (declare (type single-float xi yi ri best-p-d best-s-d behind p-floor)
                                     (type fixnum cell row column span best-p best-s))
                            (loop for r of-type fixnum from (max 0 (- row span))
                                    to (min (1- columns) (+ row span))
@@ -232,7 +256,7 @@ N'écrit que dans les cases de ces soldats, et compte les engagés."
                                                                                     (+ (* dx dx) (* dy dy))))
                                                                          ri (aref radii j))))
                                                               (declare (type single-float dx dy d))
-                                                              (when (and (<= p-min d p-reach) (< d best-p-d))
+                                                              (when (and (<= p-floor d p-reach) (< d best-p-d))
                                                                 (setf best-p j best-p-d d))
                                                               (when (and (<= d s-reach) (< d best-s-d))
                                                                 (setf best-s j best-s-d d)))))))))
@@ -263,7 +287,9 @@ N'écrit que dans les cases de ces soldats, et compte les engagés."
                                  (setf (aref cooldowns i) -1)
                                  (progn
                                    (incf engaged)
-                                   (when (<= (if (= wanted 0) best-p-d best-s-d) hold-distance)
+                                   (when (and (< i front-end)
+                                              (<= (if (= wanted 0) best-p-d best-s-d)
+                                                  hold-distance))
                                      (incf closed)))))))))
           (setf (regiment-engaged regiment) engaged
                 (regiment-closed regiment) closed))))))

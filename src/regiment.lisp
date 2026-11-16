@@ -24,7 +24,7 @@
    (engaged :initform 0 :accessor regiment-engaged :type fixnum
             :documentation "Soldats qui avaient une cible au dernier tick.")
    (closed :initform 0 :accessor regiment-closed :type fixnum
-           :documentation "Soldats dont la cible était à la distance d'arrêt.")
+           :documentation "Soldats du premier rang dont la cible était à la distance d'arrêt.")
    (holding :initform nil :accessor regiment-holding-p
             :documentation "Au contact : la formation ne bouge plus.")
    (contact-lost :initform 0 :accessor regiment-contact-lost :type fixnum
