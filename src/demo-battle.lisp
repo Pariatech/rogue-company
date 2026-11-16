@@ -1,42 +1,37 @@
 (in-package #:rogue-company)
 
-;;; Bataille de démonstration, en attendant la partie : chaque camp aligne ses
-;;; régiments du nord au sud, face à face. Par défaut, piquiers et rodeleros
-;;; (épée et rondache) croisés : les piquiers rouges font face aux rodeleros
-;;; bleus, et l'inverse, pour que C lance chaque arme contre l'autre. Les tests
-;;; dispersent les soldats au départ (SCATTER) pour éprouver le regroupement et
-;;; les collisions, et prennent leurs propres régiments (RED, BLUE).
+;;; Bataille de démonstration, en attendant la partie. Par défaut, les piquiers
+;;; des deux camps se font face au centre ; les rodeleros de chaque camp
+;;; attendent sur une aile, assez près des piquiers ennemis pour que C les lance
+;;; sur leur flanc pendant que les piques s'affrontent de face. Les tests
+;;; prennent leurs propres régiments (REGIMENTS) et dispersent les soldats au
+;;; départ (SCATTER) pour éprouver le regroupement et les collisions.
 
 (defparameter *demo-scatter* 0
   "Dispersion initiale des soldats, en mètres : 0, ils partent à leur emplacement.")
 
-(defparameter *demo-red* '((:pikemen 160) (:rodeleros 120))
-  "Régiments rouges de la démonstration, du nord au sud : (dotation effectif).")
-
-(defparameter *demo-blue* '((:rodeleros 120) (:pikemen 160))
-  "Régiments bleus de la démonstration, du nord au sud.")
+(defparameter *demo-regiments*
+  '((0 :pikemen 160 -25 0 0)
+    (1 :pikemen 160 25 0 180)
+    (0 :rodeleros 120 0 -45 90)
+    (1 :rodeleros 120 0 45 -90))
+  "Régiments de la démonstration : (camp dotation effectif x y orientation en degrés).")
 
 (defparameter *demo-names* '((:pikemen . "Piquiers") (:rodeleros . "Rodeleros")
                               (:musketeers . "Mousquetaires"))
   "Nom affiché de chaque dotation.")
 
-(defparameter *demo-gap* 44
-  "Écart nord-sud entre deux régiments d'un même camp, en mètres.")
-
 (defun make-demo-battle (&key (seed *battle-seed*) (scatter *demo-scatter*)
-                              (red *demo-red*) (blue *demo-blue*))
+                              (regiments *demo-regiments*))
   (let ((battle (make-battle :seed seed)))
-    (loop for (regiments side x facing name) in `((,red 0 -25 0 "rouges") (,blue 1 25 ,pi "bleus"))
-          do (loop for (dotation count) in regiments
-                   for k from 0
-                   do (add-regiment battle (dotation-stats dotation) count
-                                    :name (format nil "~a ~a"
-                                                  (or (cdr (assoc dotation *demo-names*))
-                                                      (string-capitalize dotation))
-                                                  name)
-                                    :side side :x x
-                                    :y (* *demo-gap* (- k (/ (1- (length regiments)) 2)))
-                                    :facing facing :scatter scatter)))
+    (loop for (side dotation count x y degrees) in regiments
+          do (add-regiment battle (dotation-stats dotation) count
+                           :name (format nil "~a ~a"
+                                         (or (cdr (assoc dotation *demo-names*))
+                                             (string-capitalize dotation))
+                                         (if (zerop side) "rouges" "bleus"))
+                           :side side :x x :y y :facing (* degrees (/ pi 180))
+                           :scatter scatter))
     battle))
 
 (defun order-random-moves (battle rng &key (half-width 30) (half-height 20))

@@ -250,7 +250,9 @@ Fait (partie C) :
 - **Débandade :** sous 20, le régiment fuit en courant à 150 m à l'opposé de l'ennemi, ses emplacements dispersés, et ne frappe plus. Le vainqueur s'arrête au lieu de poursuivre. Deux régiments de 160 piquiers égaux : un se débande après environ 124 s de mêlée, avec 30 % de pertes de chaque côté.
 - **Animation d'attaque :** un coup de pique en 6 images (PixelLab, mode libre, 5 générations), joué pendant 0,6 s à partir du tick du coup. Retirée avec le piquier sans pique : le coup passe par la pique dessinée (voir Rendu). Le code joue encore une animation `:attack` si un type en a une et que `*draw-pikes*` est faux.
 - **Porteur d'étendard (affichage) :** voir Rendu. Il ne frappe pas ; un régiment d'un seul homme n'en a pas.
-- **Pas encore :** flancs exposés, charges, ralliement, fatigue.
+- **Flancs (2026-11-16) :** le côté d'une attaque se mesure par rapport au front de la formation visée (de face sous 60°, de flanc jusqu'à 120°, de dos au-delà). De flanc, le défenseur ne garde que la moitié de sa défense, de dos plus rien ; une pique ne s'abaisse que vers l'avant de sa formation (pris de côté, le piquier se défend à la dague) ; un régiment attaqué de flanc perd jusqu'à 0,75 point de moral par seconde, de dos 1,5, à pleine pression dès 8 attaquants. Deux blocs de 160 piquiers au contact : débandade en 142 s de front, en 52 s environ quand 120 rodeleros chargent en même temps le flanc des bleus (17 pertes seulement). La démonstration montre ce rôle : piquiers face à face au centre, rodeleros de chaque camp sur une aile, que C lance sur le flanc des piquiers ennemis.
+  - **Plus tard :** les soldats d'un flanc attaqué qui se retournent (avec le temps de pivot), la poussée et le moral cumulés de plusieurs régiments au contact, les rodeleros glissés entre deux blocs de piques.
+- **Pas encore :** charges, ralliement, fatigue.
 
 **Validation :**
 

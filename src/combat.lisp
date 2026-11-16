@@ -176,10 +176,14 @@ premier rang qui sont au contact (cible à la distance d'arrêt)."
          (front-end (+ start files))
          (spacing (formation-spacing (regiment-formation regiment)))
          (press (the single-float *press-distance*))
+         ;; Une arme longue ne vise que devant sa formation (flanks.lisp).
+         (front-x (cos (formation-facing (regiment-formation regiment))))
+         (front-y (sin (formation-facing (regiment-formation regiment))))
+         (front-cos (the single-float *front-cos*))
          (engaged 0)
          (closed 0))
     (declare (type fixnum side start end files front-end engaged closed)
-             (type single-float spacing press)
+             (type single-float spacing press front-x front-y front-cos)
              (type single-float hold-distance)
              (type fixnum-array targets weapons switch-timers cooldowns calms)
              (type single-float max-radius))
@@ -252,11 +256,14 @@ premier rang qui sont au contact (cible à la distance d'arrêt)."
                                                           (unless (= (aref sides j) side)
                                                             (let* ((dx (- (aref xs j) xi))
                                                                    (dy (- (aref ys j) yi))
-                                                                   (d (- (sqrt (the (single-float 0f0)
-                                                                                    (+ (* dx dx) (* dy dy))))
-                                                                         ri (aref radii j))))
-                                                              (declare (type single-float dx dy d))
-                                                              (when (and (<= p-floor d p-reach) (< d best-p-d))
+                                                                   (center (sqrt (the (single-float 0f0)
+                                                                                      (+ (* dx dx) (* dy dy)))))
+                                                                   (d (- center ri (aref radii j))))
+                                                              (declare (type single-float dx dy center d))
+                                                              (when (and (<= p-floor d p-reach) (< d best-p-d)
+                                                                         (or (zerop p-min)
+                                                                             (>= (+ (* dx front-x) (* dy front-y))
+                                                                                 (* front-cos center))))
                                                                 (setf best-p j best-p-d d))
                                                               (when (and (<= d s-reach) (< d best-s-d))
                                                                 (setf best-s j best-s-d d)))))))))
@@ -313,10 +320,12 @@ indices, avec le générateur de la bataille : la bataille se rejoue."
          (strike-ticks (soldiers-strike-tick soldiers))
          (tick (battle-tick-count battle))
          (soldier-regiments (soldiers-regiment soldiers))
+         (xs (soldiers-x soldiers)) (ys (soldiers-y soldiers))
          (min-chance *min-hit-chance*)
          (max-chance *max-hit-chance*))
     (declare (type fixnum-array targets weapons switch-timers cooldowns last-attackers
                    strike-ticks soldier-regiments)
+             (type float-array xs ys)
              (type fixnum tick)
              (type float-array hps damages)
              (type vector regiments)
@@ -344,15 +353,21 @@ indices, avec le générateur de la bataille : la bataille se rejoue."
                                 (0
                                  (setf (aref cooldowns i) cooldown
                                        (aref strike-ticks i) tick)
-                                 (let* ((defender (regiment-stats
-                                                   (aref regiments (aref soldier-regiments target))))
+                                 (let* ((defending (aref regiments (aref soldier-regiments target)))
+                                        (defender (regiment-stats defending))
+                                        ;; De flanc ou de dos, la défense tombe (flanks.lisp).
+                                        (facing (formation-facing (regiment-formation defending)))
+                                        (sector (attack-sector (cos facing) (sin facing)
+                                                               (- (aref xs i) (aref xs target))
+                                                               (- (aref ys i) (aref ys target))))
                                         (chance (max min-chance
                                                      (min max-chance
                                                           (- (+ skill (the single-float
                                                                            (attack-accuracy attack)))
-                                                             (the single-float
-                                                                  (stats-defense defender)))))))
-                                   (declare (type single-float chance))
+                                                             (* (sector-defense sector)
+                                                                (the single-float
+                                                                     (stats-defense defender))))))))
+                                   (declare (type single-float facing chance) (type fixnum sector))
                                    (when (< (rng-float rng) chance)
                                      (let ((armor (max 0f0 (- (the single-float (stats-armor defender))
                                                               (the single-float

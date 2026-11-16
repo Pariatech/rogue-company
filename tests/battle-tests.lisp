@@ -44,7 +44,7 @@
 mètres de leur emplacement : les tests éprouvent le regroupement et les
 collisions."
   (apply #'rogue-company::make-demo-battle :scatter scatter
-         :red '((:pikemen 160)) :blue '((:pikemen 160)) args))
+         :regiments '((0 :pikemen 160 -25 0 0) (1 :pikemen 160 25 0 180)) args))
 
 (defun regiments (battle)
   (coerce (rogue-company::battle-regiments battle) 'list))
@@ -161,13 +161,12 @@ pendant les 10 premières secondes."
     (run-ticks b 1)
     (is (near limit (abs (facing-of b)) 1f-5))))
 
-(test demo-crosses-pikes-and-swords
-  "Dans la démonstration, C lance chaque régiment sur l'arme opposée : les
-piquiers sur les rodeleros, les rodeleros sur les piquiers."
+(test demo-sends-rodeleros-on-the-flanks
+  "Dans la démonstration, C lance les piquiers l'un sur l'autre, et les
+rodeleros de chaque camp sur les piquiers ennemis."
   (let ((b (rogue-company::make-demo-battle)))
     (rogue-company::order-charge b)
     (dolist (r (regiments b))
       (let ((target (aref (rogue-company::battle-regiments b)
                           (second (rogue-company::regiment-orders r)))))
-        (is (/= (rogue-company::regiment-weapon-look r)
-                (rogue-company::regiment-weapon-look target)))))))
+        (is (= 1 (rogue-company::regiment-weapon-look target)) "chacun vise des piquiers")))))

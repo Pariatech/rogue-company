@@ -25,6 +25,10 @@
             :documentation "Soldats qui avaient une cible au dernier tick.")
    (closed :initform 0 :accessor regiment-closed :type fixnum
            :documentation "Soldats du premier rang dont la cible était à la distance d'arrêt.")
+   (flank-attackers :initform 0 :accessor regiment-flank-attackers :type fixnum
+                    :documentation "Ennemis qui le visaient de flanc au dernier tick (flanks.lisp).")
+   (rear-attackers :initform 0 :accessor regiment-rear-attackers :type fixnum
+                   :documentation "Ennemis qui le visaient de dos au dernier tick.")
    (holding :initform nil :accessor regiment-holding-p
             :documentation "Au contact : la formation ne bouge plus.")
    (contact-lost :initform 0 :accessor regiment-contact-lost :type fixnum
@@ -154,6 +158,8 @@ aussi l'étendard."
                      (:rout (ht "kind" "rout"))
                      (t nil))
           "engaged" (regiment-engaged regiment)
+          "flank_attackers" (regiment-flank-attackers regiment)
+          "rear_attackers" (regiment-rear-attackers regiment)
           "holding" (if (regiment-holding-p regiment) t 'yason:false)
           "formation" (formation-snapshot (regiment-formation regiment) (regiment-alive regiment))
           "slot_distance_mean" (json-float mean)

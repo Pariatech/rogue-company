@@ -130,6 +130,10 @@ contact, et le fait reculer ou avancer d'autant."
   "Poussée, remontée du moral hors contact, et débandade sous le seuil."
   (when (and (plusp (regiment-alive regiment)) (not (regiment-routed-p regiment)))
     (push-regiment battle regiment)
+    ;; Attaqué de flanc ou de dos (flanks.lisp).
+    (let ((loss (flank-morale-loss regiment)))
+      (when (plusp loss)
+        (lose-morale regiment (/ loss +ticks-per-second+))))
     (when (zerop (regiment-engaged regiment))
       (setf (regiment-morale regiment)
             (min (stats-morale (regiment-stats regiment))
