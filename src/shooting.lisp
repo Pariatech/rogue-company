@@ -33,7 +33,11 @@
 ;;; se relèvent et rechargent sur place. Trois salves rapprochées, puis le
 ;;; silence du rechargement ; les rangs au-delà du troisième ne tirent pas.
 ;;;
-;;; Salve (:VOLLEY), l'exercice par défaut : les *VOLLEY-RANKS* premiers rangs
+;;; Feu à volonté (:AT-WILL), l'exercice de base : le premier rang tire, chacun
+;;; dès qu'il est chargé et immobile, sans attendre ses voisins. C'est aussi le
+;;; feu de tout régiment de tireurs en marche ou au contact.
+;;;
+;;; Salve (:VOLLEY) : les *VOLLEY-RANKS* premiers rangs
 ;;; tirent ensemble, le premier accroupi, le deuxième debout par-dessus, puis
 ;;; rechargent sur place. Le régiment se range sur ces seuls rangs (ADD-REGIMENT).
 ;;;
@@ -48,7 +52,9 @@
 ;;; Pas encore : ligne de tir (alliés ou relief entre les tireurs et leur
 ;;; cible), tir ami, fumée qui gêne la visée.
 
-(defparameter *firing-ranks* 3 "Rangs qui tirent à volonté, depuis le premier.")
+(defparameter *firing-ranks* 1
+  "Feu à volonté (exercice de base, et au contact pour tous) : rangs qui tirent,
+depuis le premier ; chacun dès qu'il est chargé, sans attendre ses voisins.")
 
 (defparameter *volley-ready* 0.9f0
   "Contremarche : part du premier rang qui doit être chargée et en place
@@ -211,8 +217,9 @@ place. Leur emplacement devient l'étape en cours."
       -1))
 
 (defun volley-fire-p (regiment)
-  "Vrai si REGIMENT tire en salves, selon son exercice (REGIMENT-DRILL)."
-  (and (regiment-drill regiment)
+  "Vrai si REGIMENT tire en salves, selon son exercice (REGIMENT-DRILL) ; faux au
+feu à volonté (:AT-WILL)."
+  (and (member (regiment-drill regiment) '(:volley :countermarch :fire-by-rank :salvo))
        (attack-volley-p (stats-primary (regiment-stats regiment)))
        (regiment-holding-p regiment)
        (zerop (regiment-engaged regiment))))

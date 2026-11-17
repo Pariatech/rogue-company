@@ -63,21 +63,29 @@ hallebardiers.")
 degrés [exercice de tir]). Trois duels d'arquebusiers, un par paire
 d'exercices, hors de portée de tir au départ, que C lance chacun sur l'ennemi
 le plus proche : salve contre contremarche, salve contre feu par rang,
-contremarche contre feu par rang. Sans exercice, la salve.")
+contremarche contre feu par rang. Sans exercice, le feu à volonté.")
 
-(defparameter *demo-regiments*
+(defparameter *salvo-demo-regiments*
   ;; 90 m entre les duels : à la salve, sur deux rangs, le front fait 72 m.
   '((0 :arquebusiers 120 -40 -90 0 :salvo)
-    (1 :arquebusiers 120 40 -90 180 :volley)
+    (1 :arquebusiers 120 40 -90 180 :at-will)
     (0 :arquebusiers 120 -40 0 0 :salvo)
     (1 :arquebusiers 120 40 0 180 :countermarch)
     (0 :arquebusiers 120 -40 90 0 :salvo)
     (1 :arquebusiers 120 40 90 180 :fire-by-rank))
+  "Trois duels d'arquebusiers : la salvée contre le feu à volonté (l'exercice
+de base), la contremarche et le feu par rang.")
+
+(defparameter *demo-regiments*
+  '((0 :arquebusiers 120 -40 0 0 nil :skirmish)
+    (0 :pikemen 160 -56 0 0 nil :chase)
+    (1 :rodeleros 120 40 0 180))
   "Régiments de la démonstration : (camp dotation effectif x y orientation en
-degrés [exercice de tir]). Trois duels d'arquebusiers, la salvée contre chacun
-des autres exercices (salve, contremarche, feu par rang), hors de portée de tir
-au départ, que C lance chacun sur l'ennemi le plus proche. Sans exercice, la
-salve.")
+degrés [exercice de tir] [posture]). Sans exercice (ou NIL), le feu à volonté
+pour une arme de tir ; sans posture, :HOLD. Des arquebusiers en tirailleurs
+devant un régiment de piques qui poursuit, contre des rodeleros, que C lance
+chacun sur l'ennemi le plus proche : les arquebusiers tirent, se replient à
+travers les piques quand les rodeleros approchent, puis tirent sur la mêlée.")
 
 (defparameter *demo-names* '((:pikemen . "Piquiers") (:rodeleros . "Rodeleros")
                               (:halberdiers . "Hallebardiers")
@@ -88,7 +96,7 @@ salve.")
 (defun make-demo-battle (&key (seed *battle-seed*) (scatter *demo-scatter*)
                               (regiments *demo-regiments*))
   (let ((battle (make-battle :seed seed)))
-    (loop for (side dotation count x y degrees . options) in regiments
+    (loop for (side dotation count x y degrees drill stance) in regiments
           do (add-regiment battle (dotation-stats dotation) count
                            :name (format nil "~a ~a"
                                          (or (cdr (assoc dotation *demo-names*))
@@ -96,10 +104,11 @@ salve.")
                                          (if (zerop side) "rouges" "bleus"))
                            :side side :x x :y y :facing (* degrees (/ pi 180))
                            :scatter scatter
-                           :drill (if options
-                                      (first options)
-                                      (and (attack-volley-p (stats-primary (dotation-stats dotation)))
-                                           :volley))))
+                           :stance (or stance :hold)
+                           :drill (or drill
+                                      (and (eq (attack-kind (stats-primary (dotation-stats dotation)))
+                                               :ranged)
+                                           :at-will))))
     battle))
 
 (defun order-random-moves (battle rng &key (half-width 30) (half-height 20))

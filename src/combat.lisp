@@ -56,6 +56,7 @@ l'ennemi doit traverser la portée sous les coups.")
   "Lance REGIMENT sur le régiment TARGET."
   (setf (regiment-orders regiment) (list :attack (regiment-index target))
         (regiment-holding-p regiment) nil
+        (regiment-chasing-p regiment) nil
         (regiment-contact-lost regiment) 0)
   regiment)
 
@@ -142,6 +143,36 @@ d'arrêt ; en ordre lâche, dont le premier rang se disperse, les soldats engag�
       (regiment-engaged regiment)
       (regiment-closed regiment)))
 
+(defun fought-regiment (battle regiment)
+  "Régiment ennemi le plus visé par les soldats de REGIMENT au dernier tick, et
+le nombre de ses soldats qui le visent ; NIL et 0 si aucun n'a de cible."
+  (let* ((soldiers (battle-soldiers battle))
+         (targets (soldiers-target soldiers))
+         (owners (soldiers-regiment soldiers))
+         (best nil) (best-count 0))
+    (loop for other across (battle-regiments battle)
+          when (and (/= (regiment-side other) (regiment-side regiment))
+                    (plusp (regiment-alive other)))
+            do (let ((count (loop for i from (regiment-start regiment) below (regiment-end regiment)
+                                  count (let ((target (aref targets i)))
+                                          (and (>= target 0)
+                                               (= (aref owners target) (regiment-index other)))))))
+                 (when (> count best-count)
+                   (setf best other best-count count))))
+    (values best best-count)))
+
+(defun retarget-fought (battle regiment)
+  "Un régiment au contact qui se bat surtout contre un autre régiment que celui
+qu'il attaque prend ce régiment pour cible : il ne le contourne pas pour
+atteindre sa cible (des rodeleros lancés sur des tireurs qui se replient
+derrière leurs piques se battent contre les piques, pas autour)."
+  (multiple-value-bind (fought count) (fought-regiment battle regiment)
+    (when (and fought
+               (/= (regiment-index fought) (second (regiment-orders regiment)))
+               (> (* 2 count) (regiment-engaged regiment))
+               (not (regiment-routed-p fought)))
+      (order-attack regiment fought))))
+
 (defun update-engagement (battle regiment)
   "Fait avancer un régiment qui attaque, ou le fige au contact."
   (let ((orders (regiment-orders regiment))
@@ -154,13 +185,18 @@ d'arrêt ; en ordre lâche, dont le premier rang se disperse, les soldats engag�
              (files (formation-files formation (regiment-alive regiment)))
              (needed (max 1 (floor (* *hold-fraction* files))))
              (closed (regiment-contact regiment)))
-        (cond ((or (zerop (regiment-alive enemy)) (regiment-routed-p enemy))
+        (cond ((and (eq (regiment-stance regiment) :chase)
+                    (plusp (regiment-alive enemy)) (regiment-routed-p enemy))
+               ;; Posture de poursuite : il court après les fuyards (stances.lisp).
+               (update-chase battle regiment enemy))
+              ((or (zerop (regiment-alive enemy)) (regiment-routed-p enemy))
                ;; Ennemi détruit ou débandé : le régiment reste où il est.
-               (setf (regiment-orders regiment) nil
-                     (regiment-holding-p regiment) nil)
-               (hold-in-place regiment soldiers))
+               (end-chase regiment soldiers))
               ((>= closed needed)
                (setf (regiment-contact-lost regiment) 0)
+               (when (zerop (mod (+ (battle-tick-count battle) (regiment-index regiment))
+                                 *advance-period*))
+                 (retarget-fought battle regiment))
                (unless (regiment-holding-p regiment)
                  (setf (regiment-holding-p regiment) t)
                  (hold-in-place regiment soldiers enemy)))
@@ -395,9 +431,10 @@ déplacement : cibles, compte des attaquants et grille sont ceux du tick
 précédent, et un indice de la grille peut désigner un soldat mort ou échangé
 depuis (il est ignoré s'il est mort)."
   (declare (optimize (speed 3) (safety 1)))
-  (when (and (loose-order-p regiment)
-             (regiment-holding-p regiment)
-             (eq (first (regiment-orders regiment)) :attack))
+  (when (and (eq (first (regiment-orders regiment)) :attack)
+             ;; Les poursuivants courent chacun après un fuyard (stances.lisp).
+             (or (regiment-chasing-p regiment)
+                 (and (loose-order-p regiment) (regiment-holding-p regiment))))
     (let* ((soldiers (battle-soldiers battle))
            (grid (battle-grid battle))
            (side (regiment-side regiment))

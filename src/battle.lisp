@@ -36,13 +36,14 @@ pour reproduire une bataille.")
 
 (defun add-regiment (battle stats count &key (name "Régiment") (side 0) (x 0) (y 0) (facing 0)
                                              (ranks (stats-ranks stats)) (scatter 0)
-                                             (drill (and (attack-volley-p (stats-primary stats))
-                                                         :volley)))
+                                             (stance :hold)
+                                             (drill (and (eq (attack-kind (stats-primary stats)) :ranged)
+                                                         :at-will)))
   "Ajoute un régiment de COUNT soldats aux STATS données, en formation autour de
 X, Y. Avec SCATTER, chaque soldat part d'un point tiré au hasard à au plus
 SCATTER mètres de son emplacement, sur chaque axe. DRILL : exercice de tir des
-salves (shooting.lisp), la salve des deux premiers rangs par défaut pour une
-arme :VOLLEY.
+salves (shooting.lisp), le feu à volonté du premier rang par défaut pour une
+arme de tir. STANCE : posture (stances.lisp), :HOLD par défaut.
 Renvoie le régiment."
   (let* ((soldiers (battle-soldiers battle))
          ;; Feu par rang et salve : autant de rangs que de rangs qui tirent.
@@ -64,7 +65,7 @@ Renvoie le régiment."
                                                                   (max (stats-spacing stats)
                                                                        *volley-file-spacing*)))
                                   :morale (stats-morale stats)
-                                  :drill drill
+                                  :drill drill :stance stance
                                   :start start :capacity count :alive count))
          (rng (battle-rng battle))
          (scatter (float scatter 1f0)))
@@ -105,7 +106,8 @@ Renvoie le régiment."
   "Avance BATTLE d'un tick. Les systèmes s'exécutent toujours dans cet ordre,
 et s'ajoutent ici au fil des étapes :
   1. copie des positions courantes dans les positions précédentes ;
-  2. régiments : engagement (avance ou arrêt au contact), puis emplacements,
+  2. régiments : posture (repli des tirailleurs, stances.lisp), files
+     ouvertes au passage d'un ami (open-files.lisp), engagement (avance ou arrêt au contact), puis emplacements,
      rompus pour les régiments en ordre lâche au contact (combat.lisp) ;
   3. soldats : déplacement vers leur emplacement (ou face à leur cible), puis
      grille spatiale et collisions ;
@@ -117,7 +119,9 @@ et s'ajoutent ici au fil des étapes :
         (regiments (battle-regiments battle)))
     (copy-previous-positions soldiers)
     (loop for regiment across regiments
-          do (update-engagement battle regiment)
+          do (update-skirmish battle regiment)
+             (update-open-files battle regiment)
+             (update-engagement battle regiment)
              (update-regiment-slots regiment soldiers)
              ;; Le rang qui a tiré gagne l'arrière par les intervalles (shooting.lisp).
              (steer-countermarch regiment soldiers)

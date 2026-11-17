@@ -20,7 +20,8 @@
             :documentation "0 frais, 1 épuisé. Reste à 0 jusqu'à la course et au combat.")
    (orders :initform nil :accessor regiment-orders
            :documentation "Ordre en cours : (:move x y facing), (:attack régiment),
-(:rout) pour un régiment débandé, ou NIL.")
+(:retreat x y facing) pour un repli de tirailleurs (stances.lisp), (:rout) pour
+un régiment débandé, ou NIL.")
    (engaged :initform 0 :accessor regiment-engaged :type fixnum
             :documentation "Soldats qui avaient une cible au dernier tick.")
    (closed :initform 0 :accessor regiment-closed :type fixnum
@@ -34,6 +35,21 @@
    (drill :initarg :drill :initform nil :accessor regiment-drill
           :documentation "Exercice de tir des salves (shooting.lisp) : :COUNTERMARCH,
 :FIRE-BY-RANK, ou NIL (feu à volonté).")
+   (stance :initarg :stance :initform :hold :accessor regiment-stance
+           :documentation "Posture (stances.lisp) : :HOLD s'arrête quand l'ennemi se
+débande, :CHASE le poursuit, :SKIRMISH se replie devant une mêlée qui approche.")
+   (resume-orders :initform nil :accessor regiment-resume-orders
+                  :documentation "Ordre d'attaque repris à la fin d'un repli (:skirmish).")
+   (retreat-ticks :initform 0 :accessor regiment-retreat-ticks :type fixnum
+                  :documentation "Ticks depuis le début du repli en cours.")
+   (chasing :initform nil :accessor regiment-chasing-p
+            :documentation "Poursuit un ennemi débandé (:chase).")
+   (chase-x :initform 0f0 :accessor regiment-chase-x :type single-float
+            :documentation "Centre du régiment au début de la poursuite.")
+   (chase-y :initform 0f0 :accessor regiment-chase-y :type single-float)
+   (open-until :initform -1 :accessor regiment-open-until :type fixnum
+               :documentation "Files ouvertes pour un ami jusqu'à ce tick (open-files.lisp) ;
+-1 en files normales.")
    (volley-rank :initform 0 :accessor regiment-volley-rank :type fixnum
                 :documentation "Feu par rang : rang qui tire la prochaine salve.")
    (crouch :initform 0 :accessor regiment-crouch :type fixnum
@@ -79,6 +95,7 @@ se recalculent au tick suivant."
           (formation-facing formation) (float facing 1f0)
           (regiment-orders regiment) (list :move (float x 1f0) (float y 1f0) (float facing 1f0))
           (regiment-holding-p regiment) nil
+          (regiment-chasing-p regiment) nil
           (regiment-slots-dirty-p regiment) t))
   regiment)
 
@@ -137,8 +154,10 @@ aussi l'étendard."
   "Avance les soldats de REGIMENT vers leur emplacement, au pas de marche."
   (let ((stats (regiment-stats regiment)))
     (move-toward-slots soldiers (regiment-start regiment) (regiment-end regiment)
-                       ;; Un régiment débandé court.
-                       (/ (if (eq (first (regiment-orders regiment)) :rout)
+                       ;; Un régiment débandé court, et qui le poursuit ou se
+                       ;; replie en tirailleurs aussi (stances.lisp).
+                       (/ (if (or (member (first (regiment-orders regiment)) '(:rout :retreat))
+                                  (regiment-chasing-p regiment))
                               (stats-run-speed stats)
                               (stats-speed stats))
                           #.(float +ticks-per-second+ 1f0))
@@ -173,7 +192,11 @@ aussi l'étendard."
                                   "facing_degrees" (json-float (* facing (/ 180 pi))))))
                      (:attack (ht "kind" "attack" "regiment" (second orders)))
                      (:rout (ht "kind" "rout"))
+                     (:retreat (ht "kind" "retreat" "x" (json-float (second orders))
+                                   "y" (json-float (third orders))))
                      (t nil))
+          "stance" (string-downcase (regiment-stance regiment))
+          "chasing" (if (regiment-chasing-p regiment) t 'yason:false)
           "engaged" (regiment-engaged regiment)
           "flank_attackers" (regiment-flank-attackers regiment)
           "rear_attackers" (regiment-rear-attackers regiment)
