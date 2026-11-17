@@ -52,12 +52,10 @@
 
 (defun record-soldier-death (battle regiment i)
   "Inscrit au journal le soldat I de REGIMENT, avant son retrait."
-  (let* ((soldiers (battle-soldiers battle))
-         (alive (regiment-alive regiment))
-         (files (max 1 (formation-files (regiment-formation regiment) alive))))
+  (let ((soldiers (battle-soldiers battle)))
     (record-death (battle-deaths battle)
                   (aref (soldiers-x soldiers) i) (aref (soldiers-y soldiers) i)
                   (aref (soldiers-facing soldiers) i)
                   (regiment-side regiment) (battle-tick-count battle)
-                  (floor (- i (regiment-start regiment)) files)
+                  (aref (soldiers-rank soldiers) i)
                   (regiment-index regiment))))

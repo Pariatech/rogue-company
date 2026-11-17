@@ -260,6 +260,7 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (prev-xs (soldiers-prev-x soldiers)) (prev-ys (soldiers-prev-y soldiers))
          (facings (soldiers-facing soldiers)) (prev-facings (soldiers-prev-facing soldiers))
          (strike-ticks (soldiers-strike-tick soldiers))
+         (soldier-ranks (soldiers-rank soldiers))
          (stuns (soldiers-stun soldiers))
          (marches (soldiers-march soldiers))
          (reloads (soldiers-reload soldiers))
@@ -268,8 +269,6 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (regiments (battle-regiments battle))
          (bearers (update-bearers battle))
          (lowered-ends *lowered-ends*)
-         (regiment-starts *regiment-starts*)
-         (regiment-files *regiment-files*)
          (regiment-weapons *regiment-weapons*)
          (regiment-shields *regiment-shields*)
          (regiment-guards *regiment-guards*)
@@ -367,8 +366,8 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (brass-r (first brass)) (brass-g (second brass)) (brass-b (third brass)))
     (declare (type fixnum count tick)
              (type single-float recoil-distance)
-             (type fixnum-array order strike-ticks stuns marches reloads soldier-regiments bearers lowered-ends
-                   regiment-starts regiment-files regiment-weapons regiment-shields
+             (type fixnum-array order strike-ticks soldier-ranks stuns marches reloads soldier-regiments bearers lowered-ends
+                   regiment-weapons regiment-shields
                    regiment-guards regiment-crouch regiment-stoop regiment-aim-ranks soldier-weapons)
              (type single-float crouch-height)
              (type (simple-array single-float (6)) sword-rest sword-guard-pose sword-raised
@@ -430,8 +429,7 @@ dans le sens des aiguilles d'une montre à l'écran)."
                  (lift (cos phase))
                  ;; Accroupi après sa salve (feu par rang) : corps, tête et mains
                  ;; plus bas, les pieds restent au sol.
-                 (rank (floor (- i (aref regiment-starts regiment-index))
-                              (max 1 (aref regiment-files regiment-index))))
+                 (rank (aref soldier-ranks i))
                  ;; Courbé (salvée) : à mi-hauteur.
                  (bob (- (if moving (* bob-height (abs lift)) 0f0)
                          (cond ((< rank (aref regiment-crouch regiment-index)) crouch-height)
@@ -725,11 +723,10 @@ dans le sens des aiguilles d'une montre à l'écran)."
                                  ((< u 1f0) (hold-halberd halberd-cut halberd-guard
                                                           (/ (- u 0.6f0) 0.4f0)))
                                  (t (hold-halberd halberd-guard halberd-guard 0f0))))))
-                      ((and pikes (= weapon 1) (< i (aref lowered-ends regiment-index)))
+                      ((and pikes (= weapon 1) (< (aref soldier-ranks i) (aref lowered-ends regiment-index)))
                        ;; Pique croisée, à hauteur d'épaule selon le rang ; le coup
                        ;; la pousse en avant, les mains en suivent une part.
-                       (let* ((rank (floor (- i (aref regiment-starts regiment-index))
-                                           (max 1 (aref regiment-files regiment-index))))
+                       (let* ((rank (aref soldier-ranks i))
                               (h (+ pike-hand (* pike-rise (float rank 1f0))))
                               (age (+ alpha (float (min 1000000 (- tick (aref strike-ticks i))) 1f0)))
                               (thrust (if (< age thrust-ticks)

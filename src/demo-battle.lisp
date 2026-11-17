@@ -85,7 +85,7 @@ devant un régiment de piques qui poursuit, contre des rodeleros, que C lance
 chacun sur l'ennemi le plus proche : les arquebusiers tirent, se replient à
 travers les piques quand les rodeleros approchent, puis tirent sur la mêlée.")
 
-(defparameter *demo-regiments*
+(defparameter *battle-demo-regiments*
   '((0 :pikemen 160 -62 -42 0)
     (0 :pikemen 160 -62 0 0)
     (0 :pikemen 160 -62 42 0)
@@ -102,12 +102,19 @@ travers les piques quand les rodeleros approchent, puis tirent sur la mêlée.")
     (1 :arquebusiers 120 44 42 180 :countermarch :skirmish)
     (1 :rodeleros 120 58 -90 180 nil :chase)
     (1 :rodeleros 120 58 90 180 nil :chase))
-  "Régiments de la démonstration : (camp dotation effectif x y orientation en
-degrés [exercice de tir] [posture]). Sans exercice (ou NIL), le feu à volonté
-pour une arme de tir ; sans posture, :HOLD. Bataille rangée, en miroir : pour
+  "Bataille rangée, en miroir : pour
 chaque camp, trois régiments de piques au centre, un régiment d'arquebusiers en
 tirailleurs et en contremarche devant chacun, et deux régiments de rodeleros en
 poursuite sur les ailes.")
+
+(defparameter *demo-regiments*
+  '((0 :arquebusiers 120 -40 0 0 :countermarch)
+    (1 :arquebusiers 120 40 0 180 :countermarch))
+  "Régiments de la démonstration : (camp dotation effectif x y orientation en
+degrés [exercice de tir] [posture]). Sans exercice (ou NIL), le feu à volonté
+pour une arme de tir ; sans posture, :HOLD. Duel de deux régiments
+d'arquebusiers en contremarche, hors de portée au départ, pour observer comment
+les pertes se comblent.")
 
 (defparameter *demo-names* '((:pikemen . "Piquiers") (:rodeleros . "Rodeleros")
                               (:halberdiers . "Hallebardiers")
@@ -145,9 +152,9 @@ est une commande du joueur, pas un tirage de la simulation."
                          (rng-range rng (- half-height) half-height)
                          (rng-range rng 0f0 (float (* 2 pi) 1f0))))))
 
-(defparameter *demo-charge-sides* '(1)
-  "Camps que C lance à l'attaque : les bleus seuls, les rouges attendent en
-défense. '(0 1) pour lancer les deux.")
+(defparameter *demo-charge-sides* '(0 1)
+  "Camps que C lance à l'attaque : les deux. '(1) pour les bleus seuls, les
+rouges attendant en défense.")
 
 (defun order-charge (battle &key (sides '(0 1)))
   "Lance chaque régiment des camps SIDES sur le régiment ennemi vivant le plus

@@ -19,7 +19,7 @@
 
 (defparameter *soldier-fixnum-arrays*
   '(regiment side walking target weapon switch-timer cooldown calm last-attacker strike-tick
-    attackers stun reload march)
+    attackers stun reload march rank file)
   "Slots de SOLDIERS qui sont des tableaux de fixnums.")
 
 (defparameter *walk-start-distance* 2f0
@@ -100,6 +100,14 @@ l'élan.")
           :type fixnum-array
           :documentation "Contremarche (shooting.lisp) : 0 à sa place, 1 pas de côté
 dans l'intervalle de sa file, 2 descente de l'intervalle vers l'arrière.")
+   (rank :initform (make-array 0 :element-type 'fixnum) :reader soldiers-rank
+         :type fixnum-array
+         :documentation "Rang du soldat dans sa formation, 0 au front (regiment.lisp). Il
+change au combat : la file avance quand un homme tombe devant.")
+   (file :initform (make-array 0 :element-type 'fixnum) :reader soldiers-file
+         :type fixnum-array
+         :documentation "File du soldat, 0 à gauche du front. Elle ne change pas au combat,
+seulement quand le régiment se reforme.")
    (damage :initform (make-float-array 0) :reader soldiers-damage :type float-array
            :documentation "Dégâts reçus pendant le tick, appliqués ensemble.")))
 

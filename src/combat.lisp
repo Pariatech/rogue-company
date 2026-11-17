@@ -52,12 +52,14 @@ l'ennemi doit traverser la portée sous les coups.")
 
 ;;; Ordres et engagement
 
-(defun order-attack (regiment target)
-  "Lance REGIMENT sur le régiment TARGET."
+(defun order-attack (regiment target &key (reform t))
+  "Lance REGIMENT sur le régiment TARGET. Un ordre du joueur (REFORM) le
+reforme ; un changement de cible en combat (riposte, ennemi qu'il combat) non."
   (setf (regiment-orders regiment) (list :attack (regiment-index target))
         (regiment-holding-p regiment) nil
         (regiment-chasing-p regiment) nil
         (regiment-contact-lost regiment) 0)
+  (when reform (setf (regiment-reform-pending-p regiment) t))
   regiment)
 
 (defun regiment-centroid (regiment soldiers)
@@ -77,30 +79,36 @@ elle ne laisse pas une partie de son front dans le vide."
   (let* ((formation (regiment-formation regiment))
          (alive (regiment-alive regiment))
          (files (formation-files formation alive))
-         (ranks (ceiling alive files))
          (start (regiment-start regiment))
-         (front-count (min files alive))
+         (ranks (soldiers-rank soldiers))
          (facing (formation-facing formation))
-         ;; Le premier rang est à cette distance devant le centre (place-formation).
-         (front (* 0.5f0 (formation-spacing formation) (float (1- ranks) 1f0)))
-         (sx 0f0) (sy 0f0))
+         ;; Le premier rang est à cette distance devant le centre (GRID-POINT).
+         (front (* 0.5f0 (formation-spacing formation) (float (1- (regiment-depth regiment)) 1f0)))
+         (sx 0f0) (sy 0f0) (front-count 0) (file-sum 0))
     (when (plusp alive)
-      ;; Le soldat n° k de la plage occupe l'emplacement n° k : les FILES premiers
-      ;; forment le premier rang.
-      (loop for i from start below (+ start front-count)
+      ;; Le premier rang est en tête de plage.
+      (loop for i from start below (+ start alive)
+            while (zerop (aref ranks i))
             do (incf sx (aref (soldiers-x soldiers) i))
-               (incf sy (aref (soldiers-y soldiers) i)))
-      (let ((x (- (/ sx front-count) (* front (cos facing))))
-            (y (- (/ sy front-count) (* front (sin facing)))))
-        (when (and enemy (plusp (regiment-alive enemy)))
-          ;; Décalage de côté (perpendiculaire au front) jusqu'au centre de l'ennemi.
-          (multiple-value-bind (ex ey) (regiment-centroid enemy soldiers)
-            (let ((side (- (* (- ey y) (cos facing)) (* (- ex x) (sin facing)))))
-              (setf x (- x (* side (sin facing)))
-                    y (+ y (* side (cos facing)))))))
-        (setf (formation-x formation) x
-              (formation-y formation) y
-              (regiment-slots-dirty-p regiment) t)))))
+               (incf sy (aref (soldiers-y soldiers) i))
+               (incf file-sum (aref (soldiers-file soldiers) i))
+               (incf front-count))
+      (when (plusp front-count)
+        (let* ((lateral (* (formation-lateral-spacing formation)
+                           (- (/ (float file-sum 1f0) front-count) (* 0.5f0 (float (1- files) 1f0)))))
+               ;; Centre de la grille : derrière le premier rang, décalé de ce
+               ;; que ses présents sont décentrés (une file vide d'un côté).
+               (x (- (/ sx front-count) (* front (cos facing)) (* lateral (- (sin facing)))))
+               (y (- (/ sy front-count) (* front (sin facing)) (* lateral (cos facing)))))
+          (when (and enemy (plusp (regiment-alive enemy)))
+            ;; Décalage de côté (perpendiculaire au front) jusqu'au centre de l'ennemi.
+            (multiple-value-bind (ex ey) (regiment-centroid enemy soldiers)
+              (let ((side (- (* (- ey y) (cos facing)) (* (- ex x) (sin facing)))))
+                (setf x (- x (* side (sin facing)))
+                      y (+ y (* side (cos facing)))))))
+          (setf (formation-x formation) x
+                (formation-y formation) y
+                (regiment-slots-dirty-p regiment) t))))))
 
 (defun attack-facing (regiment enemy soldiers)
   "Orientation de REGIMENT qui charge ENEMY : parallèle au côté de l'ennemi
@@ -313,10 +321,9 @@ premier rang qui sont au contact (cible à la distance d'arrêt)."
          (calms (soldiers-calm soldiers))
          (max-radius (battle-max-radius battle))
          (hold-distance (regiment-hold-distance regiment))
-         ;; Le premier rang : seul lui compte au contact (poussée, arrêt).
-         (files (max 1 (formation-files (regiment-formation regiment)
-                                        (max 1 (regiment-alive regiment)))))
-         (front-end (+ start files))
+         ;; Rang de chaque soldat : seul le premier compte au contact (poussée,
+         ;; arrêt).
+         (ranks (soldiers-rank soldiers))
          (spacing (formation-spacing (regiment-formation regiment)))
          (press (the single-float *press-distance*))
          ;; Une arme longue ne vise que devant sa formation (flanks.lisp).
@@ -325,10 +332,10 @@ premier rang qui sont au contact (cible à la distance d'arrêt)."
          (front-cos (the single-float *front-cos*))
          (engaged 0)
          (closed 0))
-    (declare (type fixnum side start end files front-end engaged closed)
+    (declare (type fixnum side start end engaged closed)
              (type single-float spacing press front-x front-y front-cos)
              (type single-float hold-distance)
-             (type fixnum-array targets weapons switch-timers cooldowns calms)
+             (type fixnum-array targets weapons switch-timers cooldowns calms ranks)
              (type single-float max-radius))
     (multiple-value-bind (p-min p-reach) (melee-reaches primary)
       (multiple-value-bind (s-min s-reach) (melee-reaches secondary)
@@ -382,8 +389,8 @@ premier rang qui sont au contact (cible à la distance d'arrêt)."
                                 ;; Arme à portée minimale, hors du premier rang : un
                                 ;; ennemi doit être à PRESS au moins de notre premier
                                 ;; rang, à BEHIND mètres devant ce soldat.
-                                (behind (if (and (plusp p-min) (>= i front-end))
-                                            (+ (* spacing (float (floor (- i start) files) 1f0))
+                                (behind (if (and (plusp p-min) (plusp (aref ranks i)))
+                                            (+ (* spacing (float (aref ranks i) 1f0))
                                                press)
                                             0f0))
                                 (p-floor (max p-min behind)))
@@ -440,7 +447,7 @@ premier rang qui sont au contact (cible à la distance d'arrêt)."
                                  (setf (aref cooldowns i) -1)
                                  (progn
                                    (incf engaged)
-                                   (when (and (< i front-end)
+                                   (when (and (zerop (aref ranks i))
                                               (<= (if (= wanted 0) best-p-d best-s-d)
                                                   hold-distance))
                                      (incf closed)))))))))
@@ -654,50 +661,44 @@ indices, avec le générateur de la bataille : la bataille se rejoue."
       (setf (aref array to) (aref array from)))))
 
 (defun remove-soldier (regiment soldiers i)
-  "Retire le soldat I de REGIMENT en comblant le trou au plus court :
-1. le soldat derrière lui avance d'un rang, et ainsi de suite dans sa file
-   jusqu'à l'avant-dernier rang ;
-2. le trou arrive dans l'avant-dernier rang : le soldat du dernier rang le plus
-   proche le comble ;
-3. le dernier rang se resserre d'une place vers le trou qu'il a laissé.
-Chaque déplacement va d'un indice plus grand vers un plus petit : un parcours
-croissant de la plage, qui revérifie l'indice I, voit tous les morts."
-  (let* ((start (regiment-start regiment))
-         (alive (regiment-alive regiment))
-         (formation (regiment-formation regiment))
-         (files (formation-files formation alive))
-         (ranks (ceiling alive files))
-         (last-rank (1- ranks))
-         (last-size (- alive (* last-rank files)))
-         (slot (- i start)))
-    (multiple-value-bind (rank file) (floor slot files)
-      ;; 1. La file avance, jusqu'à l'avant-dernier rang.
-      (loop while (< (1+ rank) last-rank)
-            do (move-soldier soldiers (+ start (* (1+ rank) files) file)
-                             (+ start (* rank files) file))
-               (incf rank))
-      ;; 2. Trou dans un rang complet : le soldat du dernier rang le plus proche
-      ;;    latéralement le comble (le dernier rang, incomplet, est centré).
-      (let ((hole-in-last
-              (if (< rank last-rank)
-                  (let ((nearest (max 0 (min (1- last-size)
-                                             (round (+ (- file (/ (1- files) 2))
-                                                       (/ (1- last-size) 2)))))))
-                    (move-soldier soldiers (+ start (* last-rank files) nearest)
-                                  (+ start (* rank files) file))
-                    nearest)
-                  file)))
-        ;; 3. Le dernier rang se resserre vers le trou.
-        (loop for j from hole-in-last below (1- last-size)
-              do (move-soldier soldiers (+ start (* last-rank files) j 1)
-                               (+ start (* last-rank files) j)))))
+  "Retire le soldat I de REGIMENT : sa file avance d'un rang derrière lui, chacun
+prenant la place de l'homme devant, et le trou finit en queue de file, où il
+reste jusqu'à ce que le régiment se reforme (UPDATE-REFORM). Personne ne change
+de file. La plage reste rangée par rang puis par file : chaque homme de la file
+prend l'indice de celui qu'il remplace, puis les indices suivant la queue de
+file se décalent d'un cran, sans que leurs soldats bougent. Chaque déplacement
+va d'un indice plus grand vers un plus petit : un parcours croissant de la
+plage, qui revérifie l'indice I, voit tous les morts."
+  (let* ((end (regiment-end regiment))
+         (ranks (soldiers-rank soldiers))
+         (files (soldiers-file soldiers))
+         (file (aref files i))
+         (hole i))
+    ;; La file avance : l'homme du rang suivant, dans la même file, prend
+    ;; l'indice (donc le rang) du trou.
+    (loop
+      (let* ((rank (aref ranks hole))
+             (next (loop for j from (1+ hole) below end
+                         when (and (= (aref ranks j) (1+ rank)) (= (aref files j) file))
+                           return j
+                         when (> (aref ranks j) (1+ rank))
+                           return nil)))
+        (unless next (return))
+        (move-soldier soldiers next hole)
+        (setf (aref ranks hole) rank
+              (aref files hole) file
+              hole next)))
+    ;; Le trou en queue de file disparaît de la plage : les suivants se
+    ;; décalent d'un indice, rang et file compris.
+    (loop for j from hole below (1- end)
+          do (move-soldier soldiers (1+ j) j))
     ;; La dernière case de la plage se libère : réservée, marquée morte.
-    (let ((freed (+ start alive -1)))
+    (let ((freed (1- end)))
       (setf (aref (soldiers-hp soldiers) freed) 0f0
             (aref (soldiers-target soldiers) freed) -1))
     (decf (regiment-alive regiment))
-    (lose-morale regiment (casualty-morale regiment))
-    (setf (regiment-slots-dirty-p regiment) t)))
+    (refresh-layout regiment soldiers)
+    (lose-morale regiment (casualty-morale regiment))))
 
 (defun apply-damage (battle)
   "Applique les dégâts du tick, puis retire les morts de chaque régiment."
@@ -723,13 +724,6 @@ croissant de la plage, qui revérifie l'indice I, voit tous les morts."
                               (record-soldier-death battle regiment i)
                               (remove-soldier regiment soldiers i))))
                (keep-front regiment ranks)))))
-
-(defun regiment-depth (regiment)
-  "Nombre de rangs de REGIMENT, le dernier compris même incomplet."
-  (let ((alive (regiment-alive regiment)))
-    (if (plusp alive)
-        (ceiling alive (formation-files (regiment-formation regiment) alive))
-        0)))
 
 (defun keep-front (regiment ranks-before)
   "Le centre de la formation est au milieu de sa profondeur : quand REGIMENT

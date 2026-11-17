@@ -89,19 +89,18 @@ premier, resté au contact.")
 
 (defun front-lag (regiment soldiers)
   "Retard moyen, le long du front, du premier rang de REGIMENT sur ses emplacements."
-  (let* ((formation (regiment-formation regiment))
-         (alive (regiment-alive regiment))
-         (files (min alive (formation-files formation (max 1 alive))))
-         (fx (cos (formation-facing formation)))
-         (fy (sin (formation-facing formation)))
-         (start (regiment-start regiment))
+  (let* ((start (regiment-start regiment))
+         (end (front-rank-end regiment soldiers))
+         (facing (formation-facing (regiment-formation regiment)))
+         (fx (cos facing))
+         (fy (sin facing))
          (lag 0f0))
-    (if (plusp files)
+    (if (> end start)
         (progn
-          (loop for i from start below (+ start files)
+          (loop for i from start below end
                 do (incf lag (+ (* fx (- (aref (soldiers-slot-x soldiers) i) (aref (soldiers-x soldiers) i)))
                                 (* fy (- (aref (soldiers-slot-y soldiers) i) (aref (soldiers-y soldiers) i))))))
-          (/ lag files))
+          (/ lag (- end start)))
         0f0)))
 
 (defun push-regiment (battle regiment)

@@ -1,10 +1,14 @@
 (in-package #:rogue-company)
 
 ;;; Formation d'un régiment : une grille d'emplacements, rangs et files, centrée
-;;; sur un point et tournée vers une direction. Le soldat n° I de la plage du
-;;; régiment va à l'emplacement n° I, rang par rang : les FILES premiers forment
-;;; le premier rang. Un régiment en bataille garde son front (FILES) et perd de
-;;; la profondeur : les pertes se comblent colonne par colonne (combat.lisp).
+;;; sur un point et tournée vers une direction. En bataille, chaque soldat a un
+;;; rang et une file (SOLDIERS-RANK, SOLDIERS-FILE, regiment.lisp), et sa place
+;;; en découle : la grille compte LAYOUT-FILES files et autant de rangs que le
+;;; rang du dernier soldat. Un soldat ne change pas de file au combat : une
+;;; perte se comble par la file qui avance (combat.lisp), et une file vide laisse
+;;; un trou jusqu'à ce que le régiment se reforme. Sans rangs ni files donnés,
+;;; PLACE-FORMATION place le soldat n° I à l'emplacement n° I, rang par rang, le
+;;; dernier rang incomplet centré.
 ;;;
 ;;; Repère du monde : mètres, x vers la droite, y vers le bas comme l'écran.
 ;;; FACING est l'angle de la direction vers laquelle le front regarde, depuis +x.
@@ -32,6 +36,10 @@ régiment à cet exercice (ADD-REGIMENT).")
           :documentation "Front fixé, ou NIL pour le déduire de RANKS.")
    (spacing :initarg :spacing :accessor formation-spacing :type single-float
             :documentation "Écart entre rangs, en mètres, et entre files sans FILE-SPACING.")
+   (layout-files :initform nil :accessor formation-layout-files
+                 :documentation "Files de la grille des soldats depuis la dernière
+reformation (regiment.lisp, LAYOUT-REGIMENT), ou NIL : FORMATION-FILES les
+déduit du nombre de soldats.")
    (file-spacing :initarg :file-spacing :initform nil :accessor formation-file-spacing
                  :documentation "Écart entre files, s'il diffère de SPACING : files ouvertes
 des tireurs, dont les intervalles servent à la contremarche.")))
@@ -46,21 +54,59 @@ des tireurs, dont les intervalles servent à la contremarche.")))
                             :files (and files (max 1 files))
                             :file-spacing (and file-spacing (float file-spacing 1f0))))
 
-(defun formation-files (formation count)
-  "Files pour COUNT soldats : le front fixé s'il y en a un (moins large si les
-soldats manquent), sinon assez de files pour tenir la profondeur voulue."
+(defun formation-dense-files (formation count)
+  "Files pour COUNT soldats en rangs pleins : le front fixé s'il y en a un (moins
+large si les soldats manquent), sinon assez de files pour tenir la profondeur
+voulue."
   (let ((files (formation-fixed-files formation)))
     (if files
         (max 1 (min files count))
         (max 1 (ceiling count (formation-ranks formation))))))
 
-(defun place-formation (formation count slot-x slot-y start)
+(defun formation-files (formation count)
+  "Files de la formation : celles de la grille des soldats depuis la dernière
+reformation, sinon celles de COUNT soldats en rangs pleins."
+  (or (formation-layout-files formation)
+      (formation-dense-files formation count)))
+
+(declaim (inline grid-point))
+(defun grid-point (formation depth rank file files)
+  "Emplacement du rang RANK et de la file FILE dans une grille de DEPTH rangs et
+FILES files, et le vecteur unitaire vers la droite du front."
+  (declare (type fixnum depth rank file files))
+  (let* ((spacing (formation-spacing formation))
+         (file-spacing (float (formation-lateral-spacing formation) 1f0))
+         (facing (formation-facing formation))
+         (forward-x (cos facing)) (forward-y (sin facing))
+         (right-x (- forward-y)) (right-y forward-x)
+         (lateral (* file-spacing (- (float file 1f0) (* 0.5f0 (float (1- files) 1f0)))))
+         (forward (- (* 0.5f0 spacing (float (1- depth) 1f0)) (* spacing (float rank 1f0)))))
+    (declare (type single-float spacing file-spacing facing forward-x forward-y right-x right-y
+                   lateral forward))
+    (values (+ (formation-x formation) (* forward-x forward) (* right-x lateral))
+            (+ (formation-y formation) (* forward-y forward) (* right-y lateral))
+            right-x right-y)))
+
+(defun place-formation (formation count slot-x slot-y start &optional ranks files)
   "Écrit dans SLOT-X et SLOT-Y, à partir de START, les emplacements des COUNT
-soldats. Le premier rang est devant ; le dernier, s'il est incomplet, est centré,
-sauf en files ouvertes, où chacun reste derrière sa file."
+soldats. Avec RANKS et FILES (tableaux des soldats), chacun à son rang et sa
+file, la grille ayant autant de rangs que le rang du dernier. Sinon, le soldat
+n° I à l'emplacement n° I : le premier rang devant, le dernier, s'il est
+incomplet, centré, sauf en files ouvertes, où chacun reste derrière sa file."
   (declare (optimize (speed 3) (safety 1))
            (type fixnum count start)
            (type (simple-array single-float (*)) slot-x slot-y))
+  (when (and ranks (plusp count))
+    (let ((ranks ranks) (files files)
+          (grid-files (formation-files formation count)))
+      (declare (type (simple-array fixnum (*)) ranks files) (type fixnum grid-files))
+      (let ((depth (1+ (aref ranks (+ start count -1)))))
+        (declare (type fixnum depth))
+        (loop for i of-type fixnum from start below (+ start count)
+              do (multiple-value-bind (x y)
+                     (grid-point formation depth (aref ranks i) (aref files i) grid-files)
+                   (setf (aref slot-x i) x (aref slot-y i) y)))))
+    (return-from place-formation))
   (when (plusp count)
     (let* ((files (formation-files formation count))
            (ranks (ceiling count files))
@@ -85,27 +131,6 @@ sauf en files ouvertes, où chacun reste derrière sa file."
             (declare (type fixnum in-rank) (type single-float lateral depth))
             (setf (aref slot-x (+ start i)) (+ center-x (* forward-x depth) (* right-x lateral))
                   (aref slot-y (+ start i)) (+ center-y (* forward-y depth) (* right-y lateral)))))))))
-
-(defun formation-slot (formation count k)
-  "Emplacement n° K (depuis 0) d'une formation de COUNT soldats, comme
-PLACE-FORMATION, et le vecteur unitaire vers la droite du front."
-  (let* ((files (formation-files formation count))
-         (ranks (ceiling count files))
-         (spacing (formation-spacing formation))
-         (file-spacing (formation-lateral-spacing formation))
-         (facing (formation-facing formation))
-         (forward-x (cos facing)) (forward-y (sin facing))
-         (right-x (- forward-y)) (right-y forward-x)
-         (front (* 0.5f0 spacing (float (1- ranks) 1f0))))
-    (multiple-value-bind (rank file) (floor k files)
-      (let* ((in-rank (if (formation-file-spacing formation)
-                          files
-                          (min files (- count (* rank files)))))
-             (lateral (* file-spacing (- (float file 1f0) (* 0.5f0 (float (1- in-rank) 1f0)))))
-             (depth (- front (* spacing (float rank 1f0)))))
-        (values (+ (formation-x formation) (* forward-x depth) (* right-x lateral))
-                (+ (formation-y formation) (* forward-y depth) (* right-y lateral))
-                right-x right-y)))))
 
 (defun formation-snapshot (formation count)
   (ht "x" (json-float (formation-x formation))

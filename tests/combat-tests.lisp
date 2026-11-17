@@ -58,13 +58,16 @@ moins de rangs, il est au milieu du dernier ; un homme seul n'en a pas."
   (let* ((b (demo))
          (r (first (regiments b)))
          (start (rogue-company::regiment-start r)))
-    (is (= (+ start 60 10) (rogue-company::regiment-bearer r)))
-    (setf (rogue-company::regiment-alive r) 45)
-    (is (= (+ start 40 2) (rogue-company::regiment-bearer r)) "3e rang, 5 hommes")
-    (setf (rogue-company::regiment-alive r) 5)
-    (is (= (+ start 2) (rogue-company::regiment-bearer r)))
-    (setf (rogue-company::regiment-alive r) 1)
-    (is (= -1 (rogue-company::regiment-bearer r)))))
+    (flet ((alive (n)
+             (setf (rogue-company::regiment-alive r) n)
+             (rogue-company::refresh-layout r (rogue-company::battle-soldiers b))))
+      (is (= (+ start 60 10) (rogue-company::regiment-bearer r)))
+      (alive 45)
+      (is (= (+ start 40 2) (rogue-company::regiment-bearer r)) "3e rang, 5 hommes")
+      (alive 5)
+      (is (= (+ start 2) (rogue-company::regiment-bearer r)))
+      (alive 1)
+      (is (= -1 (rogue-company::regiment-bearer r))))))
 
 (defun charged-demo (&key (seed rogue-company::*battle-seed*) (seconds 60))
   (let ((b (run-ticks (demo :seed seed) (* 30 30))))
@@ -275,3 +278,33 @@ pouvant plus abaisser leur pique sur eux."
   (destructuring-bind (pikes swords) (pikes-against-swords 120)
     (is-false (rogue-company::regiment-routed-p pikes))
     (is-true (rogue-company::regiment-routed-p swords))))
+
+(test loss-keeps-files
+  "Un mort au premier rang : sa file avance d'un rang derrière lui et le trou
+reste en queue de file. Aucun soldat ne change de file."
+  (let* ((b (rogue-company::make-battle))
+         (r (rogue-company::add-regiment b (rogue-company::dotation-stats :arquebusiers) 28
+                                         :drill :countermarch))
+         (so (rogue-company::battle-soldiers b))
+         (hp (rogue-company::soldiers-hp so))
+         (ranks (rogue-company::soldiers-rank so))
+         (files (rogue-company::soldiers-file so))
+         (start (rogue-company::regiment-start r))
+         (before (make-hash-table)))
+    ;; Étiquette de chaque soldat : son indice de départ + 1, dans ses points
+    ;; de vie ; 28 soldats sur 5 files, dernier rang de 3 centré (files 1 à 3).
+    (dotimes (k 28)
+      (setf (aref hp (+ start k)) (float (1+ k))
+            (gethash (1+ k) before) (aref files (+ start k))))
+    (is (equal '(1 2 3) (loop for k from 25 below 28 collect (aref files (+ start k)))))
+    ;; Mort en tête de la file 4 (n° 5) : 10, 15, 20, 25 avancent d'un rang.
+    (rogue-company::remove-soldier r so (+ start 4))
+    (is (= 27 (rogue-company::regiment-alive r)))
+    (is (equal '((0 10) (1 15) (2 20) (3 25))
+               (loop for i from start below (+ start 27)
+                     when (= 4 (aref files i))
+                       collect (list (aref ranks i) (round (aref hp i))))))
+    (is-true (loop for i from start below (+ start 27)
+                   always (= (aref files i) (gethash (round (aref hp i)) before)))
+             "personne ne change de file")
+    (is (= 6 (rogue-company::regiment-depth r)) "le dernier rang reste")))

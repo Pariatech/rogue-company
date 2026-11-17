@@ -128,51 +128,51 @@ premier tri (FIRE-DISTANCE ne peut pas être plus petite)."
     (let ((array (slot-value soldiers slot)))
       (rotatef (aref array i) (aref array j)))))
 
+(defun swap-soldier-data (soldiers i j)
+  "Échange les soldats I et J, mais pas leurs places (rang et file) : chacun prend
+la place de l'autre."
+  (dolist (slot *soldier-float-arrays*)
+    (let ((array (slot-value soldiers slot)))
+      (rotatef (aref array i) (aref array j))))
+  (dolist (slot *soldier-fixnum-arrays*)
+    (unless (member slot '(rank file))
+      (let ((array (slot-value soldiers slot)))
+        (rotatef (aref array i) (aref array j))))))
+
 (defun countermarch (regiment soldiers)
   "Dans chaque file de REGIMENT, l'homme du premier rang passe en queue de sa
-file, les autres avancent d'un rang : chaque colonne d'indices (F, F + FILES,
-F + 2 FILES…) tourne d'un cran (le soldat n° k occupe l'emplacement n° k).
-Chacun reste dans sa file, même avec un dernier rang incomplet. Une file dont
-l'homme de tête n'a pas tiré (encore chargé : il vient de remplacer un mort et
-n'était pas en place pour la salve) ne tourne pas : il tirera à la suivante. Le porteur
-d'étendard garde sa place. À faire en début de tick, avant le ciblage : les
-cibles et les dégâts du tick ne visent pas encore d'indice."
+file, les autres avancent d'un rang : chacun prend la place (rang) du suivant
+de sa file, sans changer de file, même si la file a perdu des hommes. Une file
+dont l'homme de tête n'a pas tiré (encore chargé : il vient de remplacer un
+mort et n'était pas en place pour la salve) ne tourne pas : il tirera à la
+suivante. Le porteur d'étendard garde sa place, la file tourne autour de lui.
+À faire en début de tick, avant le ciblage : les cibles et les dégâts du tick
+ne visent pas encore d'indice."
   (let* ((start (regiment-start regiment))
          (end (regiment-end regiment))
          (alive (regiment-alive regiment))
          (files (formation-files (regiment-formation regiment) (max 1 alive)))
+         (ranks (soldiers-rank soldiers))
+         (file-of (soldiers-file soldiers))
          (march (soldiers-march soldiers))
-         (reloads (soldiers-reload soldiers)))
-    (when (> alive files)
-      (let ((bearer (regiment-bearer regiment))
-            ;; Files dont l'homme de tête a tiré.
-            (fired (make-array files :element-type 'bit)))
-        (loop for f from 0 below files
-              do (setf (sbit fired f) (if (plusp (aref reloads (+ start f))) 1 0)))
-        (dolist (slot (append *soldier-float-arrays* *soldier-fixnum-arrays*))
-          (let ((array (slot-value soldiers slot)))
-            (loop for f from 0 below files
-                  for first = (+ start f)
-                  when (= 1 (sbit fired f))
-                    do (let ((front (aref array first))
-                             (k first))
-                         (loop while (< (+ k files) end)
-                               do (setf (aref array k) (aref array (+ k files)))
-                                  (incf k files))
-                         (setf (aref array k) front)))))
-        ;; La queue de chaque file qui a tourné : l'homme qui vient de tirer,
-        ;; qui gagne l'arrière par l'intervalle à droite de sa file
-        ;; (STEER-COUNTERMARCH).
-        (loop for f from 0 below files
-              for first = (+ start f)
-              when (= 1 (sbit fired f))
-                do (let ((k first))
-                     (loop while (< (+ k files) end) do (incf k files))
-                     (when (> k first) (setf (aref march k) 1))))
-        ;; Le porteur a avancé d'un rang avec sa file : il reprend sa place.
-        (when (and (>= bearer 0) (>= (- bearer files) start)
-                   (= 1 (sbit fired (mod (- bearer start) files))))
-          (swap-soldiers soldiers bearer (- bearer files))))
+         (reloads (soldiers-reload soldiers))
+         (bearer (regiment-bearer regiment)))
+    (when (> (regiment-depth regiment) 1)
+      (dotimes (f files)
+        (let ((head (loop for i from start below end
+                          when (= (aref file-of i) f) return i
+                          when (plusp (aref ranks i)) return nil)))
+          ;; HEAD : l'homme de tête de la file F, au premier rang. La file tourne
+          ;; s'il a tiré : il passe, d'échange en échange, à la place du dernier.
+          (when (and head (/= head bearer) (plusp (aref reloads head)))
+            (let ((tail head))
+              (loop for i from (1+ head) below end
+                    when (and (= (aref file-of i) f) (/= i bearer))
+                      do (swap-soldier-data soldiers tail i)
+                         (setf tail i))
+              ;; L'homme qui vient de tirer gagne l'arrière par l'intervalle à
+              ;; droite de sa file (STEER-COUNTERMARCH).
+              (when (> tail head) (setf (aref march tail) 1))))))
       (setf (regiment-slots-dirty-p regiment) t))))
 
 (defun steer-countermarch (regiment soldiers)
@@ -183,19 +183,19 @@ place. Leur emplacement devient l'étape en cours."
   (let ((march (soldiers-march soldiers))
         (xs (soldiers-x soldiers)) (ys (soldiers-y soldiers))
         (slot-xs (soldiers-slot-x soldiers)) (slot-ys (soldiers-slot-y soldiers))
-        (start (regiment-start regiment))
-        (alive (regiment-alive regiment))
+        (ranks (soldiers-rank soldiers)) (file-of (soldiers-file soldiers))
+        (depth (max 1 (regiment-depth regiment)))
+        (files (formation-files (regiment-formation regiment) (max 1 (regiment-alive regiment))))
         (formation (regiment-formation regiment)))
-    (loop for i from start below (regiment-end regiment)
+    (loop for i from (regiment-start regiment) below (regiment-end regiment)
           do (when (plusp (aref march i))
-               (let* ((k (- i start))
-                      (files (formation-files formation alive))
-                      (half (* 0.5f0 (formation-lateral-spacing formation))))
-                 (multiple-value-bind (fx fy right-x right-y) (formation-slot formation alive k)
+               (let ((half (* 0.5f0 (formation-lateral-spacing formation))))
+                 (multiple-value-bind (fx fy right-x right-y)
+                     (grid-point formation depth (aref ranks i) (aref file-of i) files)
                    (multiple-value-bind (ax ay)
                        (if (= 1 (aref march i))
                            ;; Hauteur du premier rang, dans la même file.
-                           (formation-slot formation alive (mod k files))
+                           (grid-point formation depth 0 (aref file-of i) files)
                            (values fx fy))
                      (let ((wx (+ ax (* half right-x)))
                            (wy (+ ay (* half right-y))))
@@ -281,10 +281,7 @@ debout au feu par rang). Hors des salves (en marche, au contact), tous debout."
   (when (plusp (regiment-volley-timer regiment))
     (decf (regiment-volley-timer regiment)))
   ;; Rang à tirer disparu (pertes) : le cycle reprend au premier.
-  (when (>= (regiment-volley-rank regiment)
-            (ceiling (max 1 (regiment-alive regiment))
-                     (formation-files (regiment-formation regiment)
-                                      (max 1 (regiment-alive regiment)))))
+  (when (>= (regiment-volley-rank regiment) (max 1 (regiment-depth regiment)))
     (setf (regiment-volley-rank regiment) 0
           (regiment-crouch regiment) 0))
   (if (volley-fire-p regiment)
@@ -311,9 +308,7 @@ le plus proche de ENEMY : l'écart que voient les tireurs, quelle que soit
 l'orientation des deux formations."
   (let* ((xs (soldiers-x soldiers)) (ys (soldiers-y soldiers))
          (start (regiment-start regiment))
-         (front (min (regiment-end regiment)
-                     (+ start (formation-files (regiment-formation regiment)
-                                               (max 1 (regiment-alive regiment))))))
+         (front (front-rank-end regiment soldiers))
          (n (max 1 (- front start)))
          (cx (/ (loop for i from start below front sum (aref xs i)) n))
          (cy (/ (loop for i from start below front sum (aref ys i)) n)))
@@ -401,6 +396,7 @@ STRIKE, appliqués ensuite par APPLY-DAMAGE."
          (weapons (soldiers-weapon soldiers))
          (switch-timers (soldiers-switch-timer soldiers))
          (reloads (soldiers-reload soldiers))
+         (ranks (soldiers-rank soldiers))
          (stuns (soldiers-stun soldiers))
          (strike-ticks (soldiers-strike-tick soldiers))
          (damages (soldiers-damage soldiers))
@@ -416,7 +412,7 @@ STRIKE, appliqués ensuite par APPLY-DAMAGE."
              (type fixnum tick firing-ranks)
              (type float-array xs ys prev-xs prev-ys damages)
              (type single-float still2)
-             (type fixnum-array weapons switch-timers reloads stuns strike-ticks last-attackers)
+             (type fixnum-array weapons switch-timers reloads ranks stuns strike-ticks last-attackers)
              (type single-float falloff jitter min-chance max-chance stun-rate))
     (loop for regiment across regiments
           do (when (and (ranged-regiment-p regiment)
@@ -429,8 +425,6 @@ STRIKE, appliqués ensuite par APPLY-DAMAGE."
                       (skill (+ (the single-float (stats-marksmanship stats))
                                 (the single-float (attack-accuracy attack))))
                       (start (regiment-start regiment))
-                      (files (max 1 (formation-files (regiment-formation regiment)
-                                                     (regiment-alive regiment))))
                       (bearer (regiment-bearer regiment))
                       (index (regiment-index regiment))
                       ;; Sous un ordre d'attaque, on ne tire qu'arrêté à portée.
@@ -449,10 +443,11 @@ STRIKE, appliqués ensuite par APPLY-DAMAGE."
                                       (:volley (the fixnum *volley-ranks*))
                                       (:salvo (the fixnum *rank-fire-ranks*))
                                       (t 1)))
-                      (rank-start (+ start (* volley-rank files)))
-                      (rank-end (min (+ rank-start (* volley-depth files)) (regiment-end regiment)))
+                      ;; Soldats des rangs de la salve.
+                      (rank-size (rank-count regiment soldiers volley-rank
+                                             (+ volley-rank volley-depth)))
                       (ready (and volley enemy
-                                  (< rank-start rank-end)
+                                  (plusp rank-size)
                                   ;; L'ennemi bien à portée de tout le rang : à la
                                   ;; limite, seuls quelques-uns trouveraient une
                                   ;; cible, tireraient seuls et passeraient à
@@ -461,14 +456,16 @@ STRIKE, appliqués ensuite par APPLY-DAMAGE."
                                       (* (the single-float *volley-range*) range))
                                   (zerop (regiment-volley-timer regiment))
                                   (minusp (regiment-countermarch-timer regiment))
-                                  (>= (loop for k of-type fixnum from rank-start below rank-end
-                                            count (and (zerop (aref reloads k))
+                                  (>= (loop for k of-type fixnum from start below (regiment-end regiment)
+                                            count (and (<= volley-rank (aref ranks k)
+                                                           (+ volley-rank volley-depth -1))
+                                                       (zerop (aref reloads k))
                                                        (= 0 (aref weapons k))
                                                        (< (+ (expt (- (aref xs k) (aref prev-xs k)) 2)
                                                              (expt (- (aref ys k) (aref prev-ys k)) 2))
                                                           still2)))
                                       (* (the single-float *volley-ready*)
-                                         (float (- rank-end rank-start) 1f0)))))
+                                         (float rank-size 1f0)))))
                       ;; Rangs qui tirent : de LOW à HIGH exclu.
                       (low (if volley volley-rank 0))
                       (high (cond ((not volley)
@@ -483,17 +480,20 @@ STRIKE, appliqués ensuite par APPLY-DAMAGE."
                                        firing-ranks))
                                   (ready (+ volley-rank volley-depth))
                                   (t volley-rank)))
-                      (shots 0))
+                      (shots 0)
+                      ;; Soldats exposés de l'ennemi : ses deux premiers rangs, en
+                      ;; tête de sa plage.
+                      (enemy-exposed (if enemy (rank-count enemy soldiers 0 2) 0)))
                  (declare (type single-float range skill)
-                          (type fixnum reload start files bearer index volley-rank volley-depth rank-start
-                                rank-end low high shots))
+                          (type fixnum reload start bearer index volley-rank volley-depth rank-size
+                                low high shots enemy-exposed))
                  (loop for i of-type fixnum from start below (regiment-end regiment)
                        do (when (= 0 (aref weapons i))
                             (when (plusp (aref reloads i))
                               (decf (aref reloads i)))
                             (when (and enemy
-                                       (<= low (floor (- i start) files))
-                                       (< (floor (- i start) files) high)
+                                       (<= low (aref ranks i))
+                                       (< (aref ranks i) high)
                                        (/= i bearer)
                                        (zerop (aref reloads i))
                                        (zerop (aref switch-timers i))
@@ -503,13 +503,10 @@ STRIKE, appliqués ensuite par APPLY-DAMAGE."
                                              (expt (- (aref ys i) (aref prev-ys i)) 2))
                                           still2))
                               (let* ((enemy-start (regiment-start enemy))
-                                     (enemy-files (max 1 (formation-files
-                                                          (regiment-formation enemy)
-                                                          (regiment-alive enemy))))
-                                     (exposed (min (regiment-alive enemy) (* 2 enemy-files)))
+                                     (exposed (max 1 enemy-exposed))
                                      (j enemy-start)
                                      (distance most-positive-single-float))
-                                (declare (type fixnum enemy-start enemy-files exposed j)
+                                (declare (type fixnum enemy-start exposed j)
                                          (type single-float distance))
                                 ;; Un ennemi exposé à portée : jusqu'à trois tirages
                                 ;; (de biais, les plus éloignés sont hors de portée).
@@ -549,14 +546,18 @@ STRIKE, appliqués ensuite par APPLY-DAMAGE."
                  ;; Salve tirée : la cible est ébranlée ; puis l'exercice.
                  (when (and volley (plusp shots))
                    (lose-morale enemy (* (the single-float *volley-shock*)
-                                         (/ (float shots 1f0) (float files 1f0))))
+                                         (/ (float shots 1f0)
+                                            (float (max 1 (formation-files
+                                                           (regiment-formation regiment)
+                                                           (regiment-alive regiment)))
+                                                   1f0))))
                    (case (regiment-drill regiment)
                      ;; Salve et salvée : rien à faire, chacun recharge sur place.
                      ((:volley :salvo))
                      (:fire-by-rank
                        (let ((interval (round (* (the single-float *rank-fire-interval*)
                                                  +ticks-per-second+)))
-                             (ranks (ceiling (regiment-alive regiment) files)))
+                             (ranks (regiment-depth regiment)))
                          (if (< (1+ volley-rank) (min (the fixnum *rank-fire-ranks*) ranks))
                              ;; Le rang s'accroupit, le suivant tirera par-dessus.
                              (setf (regiment-crouch regiment) (1+ volley-rank)

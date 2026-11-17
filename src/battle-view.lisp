@@ -96,14 +96,8 @@ compare chaque soldat à celui de son régiment sans rappeler REGIMENT-BEARER.
 Réutilisé d'une image à l'autre, agrandi seulement quand des régiments s'ajoutent.")
 
 (defvar *lowered-ends* (make-array 0 :element-type 'fixnum)
-  "Pour chaque régiment, l'indice qui suit le dernier soldat à pique croisée
-(-1 si aucun). Même usage que *BEARERS*.")
-
-(defvar *regiment-starts* (make-array 0 :element-type 'fixnum)
-  "Premier indice de chaque régiment, pour le rang d'un soldat. Même usage que *BEARERS*.")
-
-(defvar *regiment-files* (make-array 0 :element-type 'fixnum)
-  "Files de chaque régiment, pour le rang d'un soldat. Même usage que *BEARERS*.")
+  "Pour chaque régiment, le nombre de premiers rangs à pique croisée (0 si
+aucun). Même usage que *BEARERS*.")
 
 (defvar *regiment-weapons* (make-array 0 :element-type 'fixnum)
   "Arme dessinée de chaque régiment, d'après son arme principale : 0 aucune,
@@ -154,9 +148,6 @@ usage que *BEARERS*.")
       (setf *bearers* (make-array (length regiments) :element-type 'fixnum)))
     (when (< (length *lowered-ends*) (length regiments))
       (setf *lowered-ends* (make-array (length regiments) :element-type 'fixnum)))
-    (when (< (length *regiment-starts*) (length regiments))
-      (setf *regiment-starts* (make-array (length regiments) :element-type 'fixnum)
-            *regiment-files* (make-array (length regiments) :element-type 'fixnum)))
     (loop for regiment across regiments
           for k from 0
           do (setf (aref *regiment-weapons* k) (regiment-weapon-look regiment)
@@ -172,18 +163,12 @@ usage que *BEARERS*.")
                    (if (or (eq (first (regiment-orders regiment)) :attack)
                            (regiment-alert-p regiment))
                        1 0))
-             (setf (aref *regiment-starts* k) (regiment-start regiment)
-                   (aref *regiment-files* k) (formation-files (regiment-formation regiment)
-                                                              (max 1 (regiment-alive regiment)))
-                   (aref *bearers* k) (regiment-bearer regiment)
+             (setf (aref *bearers* k) (regiment-bearer regiment)
                    (aref *lowered-ends* k)
                    (if (and (= 1 (aref *regiment-guards* k))
                             (= 1 (aref *regiment-weapons* k)))
-                       (+ (regiment-start regiment)
-                          (* *pike-lowered-ranks*
-                             (formation-files (regiment-formation regiment)
-                                              (max 1 (regiment-alive regiment)))))
-                       -1)))
+                       *pike-lowered-ranks*
+                       0)))
     *bearers*))
 
 (defun draw-soldiers (battle alpha camera)
@@ -248,6 +233,7 @@ lambeaux, 3 pendant (débandade)."
            (attack-row (or attack-row 0))
            (attack-frames (or attack-frames 0))
            (strike-ticks (soldiers-strike-tick soldiers))
+           (soldier-ranks (soldiers-rank soldiers))
            (tick (battle-tick-count battle))
            ;; Images d'attaque par tick, pour l'âge du dernier coup.
            (attack-rate (/ (the single-float *attack-frames-per-second*)
@@ -262,8 +248,6 @@ lambeaux, 3 pendant (débandade)."
            (regiments (battle-regiments battle))
            (bearers (update-bearers battle))
            (lowered-ends *lowered-ends*)
-           (regiment-starts *regiment-starts*)
-           (regiment-files *regiment-files*)
            (regiment-weapons *regiment-weapons*)
            (pike-rise (the single-float *pike-rank-rise*))
            (pikes (and *draw-pikes* solid-row t))
@@ -299,8 +283,8 @@ lambeaux, 3 pendant (débandade)."
            (threshold2 (* threshold threshold))
            (eighth (/ (float pi 1f0) 4f0)))
       (declare (type fixnum count walk-phase attack-row attack-frames tick)
-               (type fixnum-array order soldier-regiments strike-ticks bearers lowered-ends
-                     regiment-starts regiment-files regiment-weapons)
+               (type fixnum-array order soldier-regiments strike-ticks soldier-ranks bearers lowered-ends
+                     regiment-weapons)
                (type single-float pike-rise)
                (type single-float pike-length pike-head pike-half-width pike-lean pike-hand
                      pike-behind pike-thrust thrust-ticks solid-u solid-v pi-f)
@@ -372,10 +356,9 @@ lambeaux, 3 pendant (débandade)."
                                    0f0))
                        (ax 0f0) (ay 0f0) (bx 0f0) (by 0f0))
                   (declare (type single-float sx sy fx fy age thrust ax ay bx by))
-                  (if (< i (aref lowered-ends regiment-index))
+                  (if (< (aref soldier-ranks i) (aref lowered-ends regiment-index))
                       ;; Croisée : horizontale à hauteur des mains, vers l'avant.
-                      (let* ((rank (floor (- i (aref regiment-starts regiment-index))
-                                          (max 1 (aref regiment-files regiment-index))))
+                      (let* ((rank (aref soldier-ranks i))
                              (hand-y (- sy (* zoom (+ pike-hand (* pike-rise (float rank 1f0))))))
                              (back (- thrust pike-behind)))
                         (declare (type fixnum rank) (type single-float hand-y back))
