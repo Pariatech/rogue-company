@@ -216,19 +216,58 @@ place. Leur emplacement devient l'étape en cours."
       1
       -1))
 
+(defparameter *volley-range* 0.95f0
+  "Une salve ne part que si l'ennemi est à moins de cette part de la portée, du
+centre du premier rang à son soldat le plus proche : tout le rang a une cible.")
+
+(defparameter *volley-steady* 0.5f0
+  "Un régiment sans ordre d'attaque tire en salves quand ses soldats sont en
+moyenne à moins de cette distance de leur emplacement, en mètres : arrivé, pas
+en marche.")
+
+(defun update-steady (regiment soldiers)
+  "REGIMENT-STEADY-P, en début de tick : arrêté à portée sous un ordre
+d'attaque, ou sans ordre d'attaque (aucun, ou un déplacement fini : soldats en
+moyenne à moins de *VOLLEY-STEADY* de leur place, hors du rang en contremarche) ;
+pas en repli ni en débandade."
+  (setf (regiment-steady-p regiment)
+        (case (first (regiment-orders regiment))
+          (:attack (regiment-holding-p regiment))
+          ((nil :move)
+           ;; Sans compter le rang qui gagne l'arrière par la contremarche.
+           (let ((marches (soldiers-march soldiers)) (total 0f0) (count 0))
+             (loop for i from (regiment-start regiment) below (regiment-end regiment)
+                   when (zerop (aref marches i))
+                     do (incf total (slot-distance soldiers i))
+                        (incf count))
+             (< total (* count *volley-steady*))))
+          (t nil))))
+
+(defun volley-drill-p (regiment)
+  "Vrai si REGIMENT est exercé aux salves (exercice autre que :AT-WILL, arme de
+salve)."
+  (and (member (regiment-drill regiment) '(:volley :countermarch :fire-by-rank :salvo))
+       (attack-volley-p (stats-primary (regiment-stats regiment)))))
+
 (defun volley-fire-p (regiment)
   "Vrai si REGIMENT tire en salves, selon son exercice (REGIMENT-DRILL) ; faux au
-feu à volonté (:AT-WILL)."
-  (and (member (regiment-drill regiment) '(:volley :countermarch :fire-by-rank :salvo))
-       (attack-volley-p (stats-primary (regiment-stats regiment)))
-       (regiment-holding-p regiment)
-       (zerop (regiment-engaged regiment))))
+feu à volonté (:AT-WILL). Arrêté en formation (REGIMENT-STEADY-P), avec ou sans
+ordre d'attaque, et aucun soldat en mêlée."
+  (and (volley-drill-p regiment)
+       (zerop (regiment-engaged regiment))
+       ;; Sous un ordre d'attaque, l'arrêt à portée du tick même : la valeur
+       ;; d'UPDATE-STEADY date du début du tick, avant UPDATE-FIRE-POSITION, et
+       ;; ferait tirer à volonté le premier rang au tick où le régiment s'arrête.
+       (if (eq (first (regiment-orders regiment)) :attack)
+           (regiment-holding-p regiment)
+           (regiment-steady-p regiment))))
 
 (defun regiment-firing-ranks (regiment)
-  "Rangs de REGIMENT qui peuvent tirer, comptés depuis le front, comme dans
-FIRE-SHOTS : ceux de la salve selon l'exercice, *FIRING-RANKS* au feu à
-volonté. Pour le dessin : seuls ceux-là sont en joue."
-  (if (volley-fire-p regiment)
+  "Rangs de REGIMENT qui tirent, comptés depuis le front : ceux de la salve
+selon l'exercice hors de la mêlée (même pendant un pas en avant, où il retient
+son feu), *FIRING-RANKS* au feu à volonté. Pour le dessin : seuls ceux-là sont
+en joue."
+  (if (and (volley-drill-p regiment) (zerop (regiment-engaged regiment)))
       (case (regiment-drill regiment)
         (:volley *volley-ranks*)
         ((:salvo :fire-by-rank) *rank-fire-ranks*)
@@ -238,6 +277,7 @@ volonté. Pour le dessin : seuls ceux-là sont en joue."
 (defun update-countermarch (regiment soldiers)
   "Minuteries des salves, en début de tick : fin de salve (contremarche, ou tous
 debout au feu par rang). Hors des salves (en marche, au contact), tous debout."
+  (update-steady regiment soldiers)
   (when (plusp (regiment-volley-timer regiment))
     (decf (regiment-volley-timer regiment)))
   ;; Rang à tirer disparu (pertes) : le cycle reprend au premier.
@@ -413,6 +453,12 @@ STRIKE, appliqués ensuite par APPLY-DAMAGE."
                       (rank-end (min (+ rank-start (* volley-depth files)) (regiment-end regiment)))
                       (ready (and volley enemy
                                   (< rank-start rank-end)
+                                  ;; L'ennemi bien à portée de tout le rang : à la
+                                  ;; limite, seuls quelques-uns trouveraient une
+                                  ;; cible, tireraient seuls et passeraient à
+                                  ;; l'arrière avant la vraie salve.
+                                  (<= (the single-float (fire-distance regiment enemy soldiers))
+                                      (* (the single-float *volley-range*) range))
                                   (zerop (regiment-volley-timer regiment))
                                   (minusp (regiment-countermarch-timer regiment))
                                   (>= (loop for k of-type fixnum from rank-start below rank-end
@@ -425,7 +471,16 @@ STRIKE, appliqués ensuite par APPLY-DAMAGE."
                                          (float (- rank-end rank-start) 1f0)))))
                       ;; Rangs qui tirent : de LOW à HIGH exclu.
                       (low (if volley volley-rank 0))
-                      (high (cond ((not volley) firing-ranks)
+                      (high (cond ((not volley)
+                                   ;; Exercé aux salves mais pas en place (un
+                                   ;; pas en avant après la contremarche, un
+                                   ;; repli) : il retient son feu. Le feu à
+                                   ;; volonté reste à l'exercice de base et à
+                                   ;; la mêlée.
+                                   (if (and (volley-drill-p regiment)
+                                            (zerop (regiment-engaged regiment)))
+                                       0
+                                       firing-ranks))
                                   (ready (+ volley-rank volley-depth))
                                   (t volley-rank)))
                       (shots 0))

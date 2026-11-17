@@ -76,16 +76,38 @@ contremarche contre feu par rang. Sans exercice, le feu à volonté.")
   "Trois duels d'arquebusiers : la salvée contre le feu à volonté (l'exercice
 de base), la contremarche et le feu par rang.")
 
-(defparameter *demo-regiments*
-  '((0 :arquebusiers 120 -40 0 0 nil :skirmish)
+(defparameter *skirmish-demo-regiments*
+  '((0 :arquebusiers 120 -40 0 0 :countermarch :skirmish)
     (0 :pikemen 160 -56 0 0 nil :chase)
     (1 :rodeleros 120 40 0 180))
-  "Régiments de la démonstration : (camp dotation effectif x y orientation en
-degrés [exercice de tir] [posture]). Sans exercice (ou NIL), le feu à volonté
-pour une arme de tir ; sans posture, :HOLD. Des arquebusiers en tirailleurs
+  "Des arquebusiers en tirailleurs, en contremarche,
 devant un régiment de piques qui poursuit, contre des rodeleros, que C lance
 chacun sur l'ennemi le plus proche : les arquebusiers tirent, se replient à
 travers les piques quand les rodeleros approchent, puis tirent sur la mêlée.")
+
+(defparameter *demo-regiments*
+  '((0 :pikemen 160 -62 -42 0)
+    (0 :pikemen 160 -62 0 0)
+    (0 :pikemen 160 -62 42 0)
+    (0 :arquebusiers 120 -44 -42 0 :countermarch :skirmish)
+    (0 :arquebusiers 120 -44 0 0 :countermarch :skirmish)
+    (0 :arquebusiers 120 -44 42 0 :countermarch :skirmish)
+    (0 :rodeleros 120 -58 -90 0 nil :chase)
+    (0 :rodeleros 120 -58 90 0 nil :chase)
+    (1 :pikemen 160 62 -42 180)
+    (1 :pikemen 160 62 0 180)
+    (1 :pikemen 160 62 42 180)
+    (1 :arquebusiers 120 44 -42 180 :countermarch :skirmish)
+    (1 :arquebusiers 120 44 0 180 :countermarch :skirmish)
+    (1 :arquebusiers 120 44 42 180 :countermarch :skirmish)
+    (1 :rodeleros 120 58 -90 180 nil :chase)
+    (1 :rodeleros 120 58 90 180 nil :chase))
+  "Régiments de la démonstration : (camp dotation effectif x y orientation en
+degrés [exercice de tir] [posture]). Sans exercice (ou NIL), le feu à volonté
+pour une arme de tir ; sans posture, :HOLD. Bataille rangée, en miroir : pour
+chaque camp, trois régiments de piques au centre, un régiment d'arquebusiers en
+tirailleurs et en contremarche devant chacun, et deux régiments de rodeleros en
+poursuite sur les ailes.")
 
 (defparameter *demo-names* '((:pikemen . "Piquiers") (:rodeleros . "Rodeleros")
                               (:halberdiers . "Hallebardiers")

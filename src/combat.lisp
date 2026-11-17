@@ -216,6 +216,11 @@ est à moins de *ALERT-DISTANCE*. Ne sert qu'au dessin."
   "Fait avancer un régiment qui attaque, ou le fige au contact."
   (update-alert battle regiment)
   (riposte battle regiment)
+  ;; Tireurs sans ordre d'attaque : minuteries des salves (en défense, ils
+  ;; suivent leur exercice) ; sous un ordre d'attaque, UPDATE-FIRE-POSITION.
+  (when (and (ranged-regiment-p regiment) (plusp (regiment-alive regiment))
+             (not (eq (first (regiment-orders regiment)) :attack)))
+    (update-countermarch regiment (battle-soldiers battle)))
   (let ((orders (regiment-orders regiment))
         (soldiers (battle-soldiers battle)))
     (when (and (eq (first orders) :attack) (plusp (regiment-alive regiment))

@@ -47,6 +47,8 @@ débande, :CHASE le poursuit, :SKIRMISH se replie devant une mêlée qui approch
    (chase-x :initform 0f0 :accessor regiment-chase-x :type single-float
             :documentation "Centre du régiment au début de la poursuite.")
    (chase-y :initform 0f0 :accessor regiment-chase-y :type single-float)
+   (steady :initform nil :accessor regiment-steady-p
+           :documentation "Arrêté en formation, pour les salves (shooting.lisp, UPDATE-STEADY).")
    (alert :initform nil :accessor regiment-alert-p
           :documentation "Ennemi proche (combat.lisp, UPDATE-ALERT) : en garde, piques
 basses et arquebuses en joue, même sans ordre d'attaque.")
