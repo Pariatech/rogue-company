@@ -93,6 +93,18 @@
 (defparameter *gun-stock* 0.7f0
   "Part de l'arquebuse en bois, depuis la crosse : le fût court sous presque tout
 le canon, seule la bouche est d'acier.")
+(defparameter *gun-load* (pose 0.35 0.2 0.02 0.45 0.12 1.18)
+  "Arquebuse posée pour la recharger : crosse à terre devant le pied droit,
+canon dressé ; la main gauche tient le canon, la droite bourre la charge.")
+(defparameter *gun-hold-seconds* 0.4f0 "Arquebuse gardée en joue après le coup.")
+(defparameter *gun-lower-seconds* 0.4f0
+  "Passage de la joue à la pose de rechargement, et de celle-ci à la joue (ou à
+l'épaule) à la fin du rechargement.")
+(defparameter *gun-ram-seconds* 1f0 "Un aller-retour de la baguette.")
+(defparameter *gun-ram-stroke* 0.25f0
+  "Course de la main qui bourre, au-dessus de la bouche, en part de l'arquebuse.")
+(defvar *gun-pose-scratch* (make-array 6 :element-type 'single-float :initial-element 0f0)
+  "Pose d'arquebuse interpolée du soldat en cours de dessin.")
 (defparameter *gun-recoil* 0.12f0 "Recul de l'arquebuse au coup, en mètres.")
 (defparameter *gun-flash-seconds* 0.15f0 "Durée de l'éclair à la bouche du canon.")
 (defparameter *gun-smoke-seconds* 1.2f0 "Durée de la fumée d'un coup.")
@@ -250,6 +262,7 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (strike-ticks (soldiers-strike-tick soldiers))
          (stuns (soldiers-stun soldiers))
          (marches (soldiers-march soldiers))
+         (reloads (soldiers-reload soldiers))
          (recoil-distance (the single-float *stun-recoil*))
          (soldier-regiments (soldiers-regiment soldiers))
          (regiments (battle-regiments battle))
@@ -262,6 +275,7 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (regiment-guards *regiment-guards*)
          (regiment-crouch *regiment-crouch*)
          (regiment-stoop *regiment-stoop*)
+         (regiment-aim-ranks *regiment-aim-ranks*)
          (crouch-height (the single-float *crouch-height*))
          (soldier-weapons (soldiers-weapon soldiers))
          (tick (battle-tick-count battle))
@@ -330,7 +344,12 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (halberd-axe (the single-float *halberd-axe*))
          (strike-ticks-halberd (* (the single-float *halberd-strike-seconds*)
                                   (float +ticks-per-second+ 1f0)))
-         (gun-rest *gun-rest*) (gun-aim *gun-aim*)
+         (gun-rest *gun-rest*) (gun-aim *gun-aim*) (gun-load *gun-load*)
+         (gun-pose *gun-pose-scratch*)
+         (gun-hold (* (the single-float *gun-hold-seconds*) (float +ticks-per-second+ 1f0)))
+         (gun-lower (* (the single-float *gun-lower-seconds*) (float +ticks-per-second+ 1f0)))
+         (gun-ram (* (the single-float *gun-ram-seconds*) (float +ticks-per-second+ 1f0)))
+         (gun-ram-stroke (the single-float *gun-ram-stroke*))
          (gun-stock (the single-float *gun-stock*))
          (gun-recoil (the single-float *gun-recoil*))
          (flash-ticks (* (the single-float *gun-flash-seconds*) (float +ticks-per-second+ 1f0)))
@@ -348,13 +367,14 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (brass-r (first brass)) (brass-g (second brass)) (brass-b (third brass)))
     (declare (type fixnum count tick)
              (type single-float recoil-distance)
-             (type fixnum-array order strike-ticks stuns marches soldier-regiments bearers lowered-ends
+             (type fixnum-array order strike-ticks stuns marches reloads soldier-regiments bearers lowered-ends
                    regiment-starts regiment-files regiment-weapons regiment-shields
-                   regiment-guards regiment-crouch regiment-stoop soldier-weapons)
+                   regiment-guards regiment-crouch regiment-stoop regiment-aim-ranks soldier-weapons)
              (type single-float crouch-height)
              (type (simple-array single-float (6)) sword-rest sword-guard-pose sword-raised
                    sword-cut shield-rest shield-guard halberd-rest halberd-guard
-                   halberd-raised halberd-cut gun-rest gun-aim)
+                   halberd-raised halberd-cut gun-rest gun-aim gun-load gun-pose)
+             (type single-float gun-hold gun-lower gun-ram gun-ram-stroke)
              (type single-float gun-stock gun-recoil flash-ticks smoke-ticks smoke-size smoke-rise)
              (type single-float halberd-length halberd-head halberd-grip halberd-gap
                    halberd-axe strike-ticks-halberd)
@@ -579,39 +599,70 @@ dans le sens des aiguilles d'une montre à l'écran)."
                        (multiple-value-setq (hand1-x hand1-y hand1-depth)
                          (project (* (- hand-swing) swing) (- hand-side) (+ hand-height bob))))
                       ((= weapon 4)
-                       ;; Arquebuse : en joue sous un ordre d'attaque, sur l'épaule
-                       ;; sinon ; le coup la fait reculer et relever.
-                       (let* ((aim (and (not stunned) (zerop (aref marches i))
-                                        (= 1 (aref regiment-guards regiment-index))))
-                              (pose (if aim gun-aim gun-rest))
+                       ;; Arquebuse : sur l'épaule au repos ou en marche, en joue
+                       ;; en garde. Après le coup (recul), posée crosse à terre le
+                       ;; temps du rechargement, la main droite bourre ; relevée en
+                       ;; joue (ou sur l'épaule) quand elle est presque rechargée.
+                       (let* ((steady (and (not stunned) (zerop (aref marches i)) (not moving)))
+                              ;; En joue : en garde, et dans un rang qui peut tirer.
+                              (guard (and (= 1 (aref regiment-guards regiment-index))
+                                          (< rank (aref regiment-aim-ranks regiment-index))))
+                              (ready-pose (if guard gun-aim gun-rest))
+                              (left (float (aref reloads i) 1f0))
                               (age (+ alpha (float (min 1000000 (- tick (aref strike-ticks i))) 1f0)))
-                              (kick (if (and aim (< age smoke-ticks))
-                                        (* gun-recoil (max 0f0 (- 1f0 (/ age 6f0))))
-                                        0f0))
+                              (from gun-rest) (to gun-rest) (amount 0f0)
+                              ;; Part de la pose de rechargement, pour les mains.
+                              (load 0f0)
+                              (kick 0f0)
                               (depth 0f0))
-                         (declare (type (simple-array single-float (6)) pose)
-                                  (type single-float age kick depth))
+                         (declare (type (simple-array single-float (6)) ready-pose from to)
+                                  (type single-float left age amount load kick depth))
+                         (cond ((not steady))
+                               ((not (plusp left)) (setf from ready-pose to ready-pose))
+                               ((< age gun-hold)
+                                (setf from gun-aim to gun-aim
+                                      kick (* gun-recoil (max 0f0 (- 1f0 (/ age 6f0))))))
+                               ((< age (+ gun-hold gun-lower))
+                                (setf from gun-aim to gun-load
+                                      amount (/ (- age gun-hold) gun-lower) load amount))
+                               ((< left gun-lower)
+                                (setf from ready-pose to gun-load
+                                      amount (/ left gun-lower) load amount))
+                               (t (setf from gun-load to gun-load load 1f0)))
+                         (dotimes (k 6)
+                           (setf (aref gun-pose k)
+                                 (+ (aref from k) (* amount (- (aref to k) (aref from k))))))
                          (when (< age smoke-ticks) (setf shot-age age))
                          (setf pole t)
-                         (macrolet ((along (u)
-                                      ;; Point de l'arquebuse à la part U depuis la crosse.
-                                      `(project (- (+ (aref pose 0) (* ,u (- (aref pose 3) (aref pose 0))))
-                                                   kick)
-                                                (+ (aref pose 1) (* ,u (- (aref pose 4) (aref pose 1))))
-                                                (+ (aref pose 2) bob (* ,u kick)
-                                                   (* ,u (- (aref pose 5) (aref pose 2)))))))
-                           (multiple-value-setq (ax ay depth) (along 0f0))
-                           (setf rear-behind (< depth 0f0))
-                           (multiple-value-setq (hand2-x hand2-y hand2-depth) (along 0.15f0))
-                           (setf mx hand2-x my hand2-y)
-                           (multiple-value-setq (cx cy) (along gun-stock))
-                           (multiple-value-setq (bx by depth) (along 1f0))
-                           (setf front-behind (< depth 0f0))
-                           (if aim
-                               (multiple-value-setq (hand1-x hand1-y hand1-depth) (along 0.5f0))
-                               (multiple-value-setq (hand1-x hand1-y hand1-depth)
-                                 (project (* (- hand-swing) swing) (- hand-side)
-                                          (+ hand-height bob)))))))
+                         (let ((pose gun-pose)
+                               (aimed (and steady (or (plusp load) (eq from gun-aim)))))
+                           (declare (type (simple-array single-float (6)) pose))
+                           (macrolet ((along (u)
+                                        ;; Point de l'arquebuse à la part U depuis la crosse.
+                                        `(project (- (+ (aref pose 0) (* ,u (- (aref pose 3) (aref pose 0))))
+                                                     kick)
+                                                  (+ (aref pose 1) (* ,u (- (aref pose 4) (aref pose 1))))
+                                                  (+ (aref pose 2) bob (* ,u kick)
+                                                     (* ,u (- (aref pose 5) (aref pose 2)))))))
+                             (multiple-value-setq (ax ay depth) (along 0f0))
+                             (setf rear-behind (< depth 0f0))
+                             ;; Main droite : à la crosse, ou au-dessus de la bouche,
+                             ;; la baguette en main, quand l'arme est posée.
+                             (multiple-value-setq (hand2-x hand2-y hand2-depth)
+                               (along (+ 0.15f0
+                                         (* load (+ 0.85f0
+                                                    (* gun-ram-stroke
+                                                       (- 0.5f0 (* 0.5f0 (cos (* two-pi (/ age gun-ram)))))))))))
+                             (setf mx hand2-x my hand2-y)
+                             (multiple-value-setq (cx cy) (along gun-stock))
+                             (multiple-value-setq (bx by depth) (along 1f0))
+                             (setf front-behind (< depth 0f0))
+                             (if aimed
+                                 (multiple-value-setq (hand1-x hand1-y hand1-depth)
+                                   (along (+ 0.5f0 (* 0.1f0 load))))
+                                 (multiple-value-setq (hand1-x hand1-y hand1-depth)
+                                   (project (* (- hand-swing) swing) (- hand-side)
+                                            (+ hand-height bob))))))))
                       ((= weapon 3)
                        ;; Hallebarde : dressée au repos, en garde sous un ordre
                        ;; d'attaque, coup de haut en bas en trois temps.

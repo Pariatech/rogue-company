@@ -129,8 +129,14 @@ contact, le plus proche à moins de DISTANCE. NIL sinon."
               (formation-facing formation) facing
               (regiment-slots-dirty-p regiment) t)))))
 
-(defun end-retreat (regiment)
-  "Fin du repli : REGIMENT reprend son ordre d'attaque, s'il en avait un."
+(defun end-retreat (regiment soldiers)
+  "Fin du repli : REGIMENT s'arrête où il est, face à l'ennemi (sa formation
+regarde déjà vers lui), et reprend son ordre d'attaque, s'il en avait un."
+  (multiple-value-bind (x y) (regiment-centroid regiment soldiers)
+    (let ((formation (regiment-formation regiment)))
+      (setf (formation-x formation) x
+            (formation-y formation) y
+            (regiment-slots-dirty-p regiment) t)))
   (setf (regiment-orders regiment) (regiment-resume-orders regiment)
         (regiment-resume-orders regiment) nil
         (regiment-holding-p regiment) nil
@@ -154,7 +160,7 @@ contact, le plus proche à moins de DISTANCE. NIL sinon."
                       ;; Jamais au milieu d'un régiment ami qu'il traverse.
                       (and period (null (skirmish-threat battle regiment *skirmish-clear*))
                            (not (friend-near-p battle regiment))))
-              (end-retreat regiment)))
+              (end-retreat regiment soldiers)))
           (when (and (zerop (regiment-engaged regiment))
                      (zerop (mod (+ (battle-tick-count battle) (regiment-index regiment))
                                  *advance-period*)))

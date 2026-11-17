@@ -123,12 +123,18 @@ est une commande du joueur, pas un tirage de la simulation."
                          (rng-range rng (- half-height) half-height)
                          (rng-range rng 0f0 (float (* 2 pi) 1f0))))))
 
-(defun order-charge (battle)
-  "Lance chaque régiment sur le régiment ennemi vivant le plus proche."
+(defparameter *demo-charge-sides* '(1)
+  "Camps que C lance à l'attaque : les bleus seuls, les rouges attendent en
+défense. '(0 1) pour lancer les deux.")
+
+(defun order-charge (battle &key (sides '(0 1)))
+  "Lance chaque régiment des camps SIDES sur le régiment ennemi vivant le plus
+proche."
   (let ((regiments (battle-regiments battle))
         (soldiers (battle-soldiers battle)))
     (loop for regiment across regiments
-          when (and (plusp (regiment-alive regiment)) (not (regiment-routed-p regiment)))
+          when (and (member (regiment-side regiment) sides)
+                    (plusp (regiment-alive regiment)) (not (regiment-routed-p regiment)))
             do (multiple-value-bind (x y) (regiment-centroid regiment soldiers)
                  (let ((nearest nil) (best most-positive-single-float))
                    (loop for other across regiments

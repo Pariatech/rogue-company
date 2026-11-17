@@ -224,6 +224,17 @@ feu à volonté (:AT-WILL)."
        (regiment-holding-p regiment)
        (zerop (regiment-engaged regiment))))
 
+(defun regiment-firing-ranks (regiment)
+  "Rangs de REGIMENT qui peuvent tirer, comptés depuis le front, comme dans
+FIRE-SHOTS : ceux de la salve selon l'exercice, *FIRING-RANKS* au feu à
+volonté. Pour le dessin : seuls ceux-là sont en joue."
+  (if (volley-fire-p regiment)
+      (case (regiment-drill regiment)
+        (:volley *volley-ranks*)
+        ((:salvo :fire-by-rank) *rank-fire-ranks*)
+        (t 1))
+      *firing-ranks*))
+
 (defun update-countermarch (regiment soldiers)
   "Minuteries des salves, en début de tick : fin de salve (contremarche, ou tous
 debout au feu par rang). Hors des salves (en marche, au contact), tous debout."

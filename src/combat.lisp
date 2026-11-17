@@ -173,8 +173,49 @@ derrière leurs piques se battent contre les piques, pas autour)."
                (not (regiment-routed-p fought)))
       (order-attack regiment fought))))
 
+(defun riposte (battle regiment)
+  "Un régiment sans ordre d'attaque (aucun, ou un déplacement : en défense, ou
+surpris en marche) abordé par l'ennemi riposte : assez de
+ses soldats au contact pour qu'un régiment qui attaque s'y fige, il attaque le
+régiment contre lequel il se bat, sur place. Il pose ses piques et pousse."
+  (when (and (member (first (regiment-orders regiment)) '(nil :move))
+             (plusp (regiment-alive regiment))
+             (>= (regiment-contact regiment)
+                 (max 1 (floor (* *hold-fraction*
+                                  (formation-files (regiment-formation regiment)
+                                                   (regiment-alive regiment)))))))
+    (let ((fought (fought-regiment battle regiment)))
+      (when (and fought (not (regiment-routed-p fought)))
+        (order-attack regiment fought)))))
+
+(defparameter *alert-distance* 15f0
+  "Un régiment de mêlée se met en garde (piques basses) quand un régiment ennemi
+non débandé est à moins de cette distance, de soldat à soldat.")
+
+(defun update-alert (battle regiment)
+  "Met REGIMENT en garde quand l'ennemi approche, à chaque recalcul : un tireur
+quand un ennemi est à portée devant lui, un régiment de mêlée quand un ennemi
+est à moins de *ALERT-DISTANCE*. Ne sert qu'au dessin."
+  (when (zerop (mod (+ (battle-tick-count battle) (regiment-index regiment)) *advance-period*))
+    (setf (regiment-alert-p regiment)
+          (and (plusp (regiment-alive regiment))
+               (not (regiment-routed-p regiment))
+               (let ((primary (stats-primary (regiment-stats regiment))))
+                 (if (eq (attack-kind primary) :ranged)
+                     (fire-target battle regiment (attack-reach primary))
+                     (let ((soldiers (battle-soldiers battle)))
+                       (loop for other across (battle-regiments battle)
+                             thereis (and (/= (regiment-side other) (regiment-side regiment))
+                                          (plusp (regiment-alive other))
+                                          (not (regiment-routed-p other))
+                                          (< (regiment-gap regiment other soldiers *alert-distance*)
+                                             *alert-distance*))))))
+               t))))
+
 (defun update-engagement (battle regiment)
   "Fait avancer un régiment qui attaque, ou le fige au contact."
+  (update-alert battle regiment)
+  (riposte battle regiment)
   (let ((orders (regiment-orders regiment))
         (soldiers (battle-soldiers battle)))
     (when (and (eq (first orders) :attack) (plusp (regiment-alive regiment))
