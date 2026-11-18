@@ -13,9 +13,9 @@
 ;;; courant à l'opposé de l'ennemi et ne frappe plus. Les flancs exposés et les
 ;;; charges viendront plus tard.
 
-(defparameter *loss-morale* 1f0
+(defparameter *loss-morale* 0.75f0
   "Moral perdu pour chaque pour cent de l'effectif de départ tué, multiplié par
-1,5 − discipline : 1 point par pour cent pour une discipline de 0,5.")
+1,5 − discipline : 0,75 point par pour cent pour une discipline de 0,5.")
 
 (defparameter *rout-morale* 20f0 "Sous ce moral, le régiment se débande.")
 

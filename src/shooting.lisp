@@ -77,7 +77,7 @@ la dernière salve et le moment où tous se relèvent.")
   "Contremarche : distance, en mètres, à laquelle un soldat a atteint une étape
 de son chemin.")
 
-(defparameter *volley-shock* 2f0
+(defparameter *volley-shock* 0.5f0
   "Moral perdu par la cible d'une salve, par rang complet de balles tirées
 (proportionnel au nombre de balles : deux rangs ensemble, le double).")
 

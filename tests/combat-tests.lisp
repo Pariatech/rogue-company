@@ -186,14 +186,14 @@ se resserre (10 et 11 glissent d'une place). Le front garde ses 4 files."
 ;;; Poussée et moral
 
 (test losses-lower-morale
-  "100 hommes, discipline 0,5 : chaque mort coûte 1 point de moral."
+  "100 hommes, discipline 0,5 : chaque mort coûte *LOSS-MORALE* points de moral."
   (let* ((b (rogue-company::make-battle))
          (r (rogue-company::add-regiment b (rogue-company::dotation-stats :pikemen) 100))
          (hps (rogue-company::soldiers-hp (rogue-company::battle-soldiers b))))
     (dotimes (i 10) (setf (aref hps (* 10 i)) 0f0))
     (rogue-company::apply-damage b)
     (is (= 90 (rogue-company::regiment-alive r)))
-    (is (near 50 (rogue-company::regiment-morale r) 1f-3))))
+    (is (near (- 60 (* 10 rogue-company::*loss-morale*)) (rogue-company::regiment-morale r) 1f-3))))
 
 (test low-morale-routs-away-from-the-enemy
   (let* ((b (run-ticks (demo) (* 30 30)))
