@@ -627,6 +627,7 @@ indices, avec le générateur de la bataille : la bataille se rejoue."
          (last-attackers (soldiers-last-attacker soldiers))
          (strike-ticks (soldiers-strike-tick soldiers))
          (stuns (soldiers-stun soldiers))
+         (momentums (soldiers-momentum soldiers))
          (stun-rate (* (the single-float *stun-seconds-per-damage*)
                        #.(float +ticks-per-second+ 1f0)))
          (tick (battle-tick-count battle))
@@ -640,7 +641,7 @@ indices, avec le générateur de la bataille : la bataille se rejoue."
              (type float-array xs ys)
              (type fixnum tick)
              (type single-float stun-rate)
-             (type float-array hps damages)
+             (type float-array hps damages momentums)
              (type vector regiments)
              (type single-float min-chance max-chance))
     (loop for regiment across regiments
@@ -690,8 +691,16 @@ indices, avec le générateur de la bataille : la bataille se rejoue."
                                                                            (attack-accuracy attack)))
                                                              (* (sector-defense sector)
                                                                 (the single-float
-                                                                     (stats-defense defender))))))))
+                                                                     (stats-defense defender))
+                                                                ;; En désordre, il se défend mal.
+                                                                (- 1f0 (* (the single-float *disorder-defense*)
+                                                                          (the single-float
+                                                                               (regiment-disorder defending))))))))))
                                    (declare (type single-float facing chance) (type fixnum sector))
+                                   ;; Une pique arrête net un cavalier lancé (penetration.lisp).
+                                   (when (and pikes (zerop (aref weapons i))
+                                              (plusp (aref momentums target)))
+                                     (setf (aref momentums target) -1f0))
                                    (when (< (rng-float rng) chance)
                                      ;; L'armure réduit les dégâts ordinaires, jamais les
                                      ;; perforants.

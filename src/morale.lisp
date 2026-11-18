@@ -61,7 +61,9 @@ flanc (flanks.lisp), pas par la poussée."
   (* (min (regiment-contact regiment)
           (formation-files (regiment-formation enemy) (max 1 (regiment-alive enemy))))
      (stats-mass (regiment-stats regiment))
-     (max 0f0 (regiment-morale regiment))))
+     (max 0f0 (regiment-morale regiment))
+     ;; Un régiment en désordre pousse mal (penetration.lisp).
+     (- 1f0 (regiment-disorder regiment))))
 
 (defun opponent (battle regiment)
   "Régiment que REGIMENT attaque, ou NIL."
@@ -214,6 +216,7 @@ distance d'arrêt (plus *CLOSE-IN-SLACK*) et qu'il suit ses emplacements
   (when (and (plusp (regiment-alive regiment)) (not (regiment-routed-p regiment)))
     (push-regiment battle regiment)
     (close-in battle regiment)
+    (update-disorder regiment)
     ;; Attaqué de flanc ou de dos (flanks.lisp).
     (let ((loss (flank-morale-loss regiment)))
       (when (plusp loss)

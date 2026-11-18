@@ -14,7 +14,8 @@
 (deftype fixnum-array () '(simple-array fixnum (*)))
 
 (defparameter *soldier-float-arrays*
-  '(x y prev-x prev-y facing prev-facing slot-x slot-y hp radius mass push-x push-y damage)
+  '(x y prev-x prev-y facing prev-facing slot-x slot-y hp radius mass push-x push-y damage
+    momentum)
   "Slots de SOLDIERS qui sont des tableaux de single-float.")
 
 (defparameter *soldier-fixnum-arrays*
@@ -109,7 +110,10 @@ change au combat : la file avance quand un homme tombe devant.")
          :documentation "File du soldat, 0 à gauche du front. Elle ne change pas au combat,
 seulement quand le régiment se reforme.")
    (damage :initform (make-float-array 0) :reader soldiers-damage :type float-array
-           :documentation "Dégâts reçus pendant le tick, appliqués ensemble.")))
+           :documentation "Dégâts reçus pendant le tick, appliqués ensemble.")
+   (momentum :initform (make-float-array 0) :reader soldiers-momentum :type float-array
+             :documentation "Élan d'un cavalier lancé à la charge, en m/s (penetration.lisp) :
+0 au repos, -1 dépensé jusqu'à la charge suivante.")))
 
 (defun make-float-array (size)
   (make-array size :element-type 'single-float :initial-element 0f0))
@@ -181,9 +185,10 @@ le front de chacun est le côté du carré le plus proche de sa place
         (radii (soldiers-radius soldiers))
         (ranks (soldiers-rank soldiers))
         (files (soldiers-file soldiers))
+        (momentums (soldiers-momentum soldiers))
         (start-distance *walk-start-distance*)
         (stop-distance *walk-stop-distance*))
-    (declare (type float-array xs ys slot-xs slot-ys facings hps radii)
+    (declare (type float-array xs ys slot-xs slot-ys facings hps radii momentums)
              (type fixnum-array walking targets stuns ranks files)
              (type single-float start-distance stop-distance))
     (flet ((turn-toward (i angle)
@@ -198,6 +203,8 @@ le front de chacun est le côté du carré le plus proche de sa place
                    ;; Étourdi par un coup : sur place, sans même se tourner.
                    ((plusp (aref stuns i))
                     (decf (aref stuns i)))
+                   ;; Lancé à la charge : l'élan le porte (penetration.lisp).
+                   ((plusp (aref momentums i)))
                    ((and (>= target 0) (plusp (aref hps target))
                           (let ((tx (- (aref xs target) (aref xs i)))
                                 (ty (- (aref ys target) (aref ys i))))

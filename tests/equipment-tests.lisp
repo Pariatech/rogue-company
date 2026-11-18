@@ -48,7 +48,7 @@
     (is (= 3.2 (rogue-company::stats-speed s)))
     (is (= 9 (rogue-company::stats-mass s)))
     (is (= 32 (rogue-company::stats-load s)) "lance, épée, armure et morion ; le cheval ne compte pas")
-    (is (equal (quote (:loose-order)) (rogue-company::stats-traits s))))))
+    (is (equal (quote (:loose-order)) (rogue-company::stats-traits s)))))
 
 (test pavise
   (let ((s (dotation :crossbowmen)))

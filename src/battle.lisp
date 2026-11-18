@@ -143,6 +143,8 @@ et s'ajoutent ici au fil des étapes :
              (loosen-formation battle regiment))
     (loop for regiment across regiments
           do (move-regiment regiment soldiers))
+    ;; Cavaliers lancés : ils percent et renversent (penetration.lisp).
+    (drive-charges battle)
     (rebuild-grid (battle-grid battle) soldiers)
     (resolve-collisions soldiers (battle-grid battle) (battle-max-radius battle))
     (loop for regiment across regiments

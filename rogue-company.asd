@@ -36,6 +36,7 @@
                (:file "open-files")
                (:file "morale")
                (:file "charge")
+               (:file "penetration")
                (:file "demo-battle")
                (:file "camera")
                (:file "sprites")

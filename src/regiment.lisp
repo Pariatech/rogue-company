@@ -46,6 +46,9 @@ débande, :CHASE le poursuit, :SKIRMISH se replie devant une mêlée qui approch
                   :documentation "Ordre d'attaque repris à la fin d'un repli (:skirmish).")
    (retreat-ticks :initform 0 :accessor regiment-retreat-ticks :type fixnum
                   :documentation "Ticks depuis le début du repli en cours.")
+   (disorder :initform 0f0 :accessor regiment-disorder :type single-float
+             :documentation "Désordre, de 0 à 1, sous les hommes renversés par une charge
+(penetration.lisp).")
    (charging :initform nil :accessor regiment-charging-p
              :documentation "À la charge, au pas de course ou au galop (charge.lisp).")
    (charge-contact :initform -1 :accessor regiment-charge-contact :type fixnum
@@ -364,6 +367,8 @@ pendant une contremarche."
   ;; de tir, ou à moins de *ALERT-DISTANCE* : entre deux salves aussi).
   (when (or (regiment-in-melee-p regiment)
             (regiment-alert-p regiment)
+            ;; En désordre : il ne se reforme pas avant de s'être ressaisi.
+            (> (regiment-disorder regiment) 0.05f0)
             (< (- tick (regiment-fire-tick regiment)) (* 2 +ticks-per-second+)))
     (setf (regiment-busy-tick regiment) tick))
   (when (and (plusp (regiment-alive regiment))
@@ -389,13 +394,17 @@ pendant une contremarche."
     (move-toward-slots soldiers (regiment-start regiment) (regiment-end regiment)
                        ;; Un régiment débandé court, et qui le poursuit ou se
                        ;; replie en tirailleurs aussi (stances.lisp).
+                       (* (- 1f0 (* *disorder-slowdown* (regiment-disorder regiment)))
                        (/ (if (or (member (first (regiment-orders regiment)) '(:rout :retreat))
                                   (regiment-chasing-p regiment)
-                                  ;; À la charge (charge.lisp).
-                                  (regiment-charging-p regiment))
+                                  ;; À la charge (charge.lisp), jusqu'à la fin
+                                  ;; de sa fenêtre : ceux qui n'ont pas encore
+                                  ;; atteint l'ennemi galopent encore.
+                                  (regiment-charging-p regiment)
+                                  (>= (regiment-charge-contact regiment) 0))
                               (stats-run-speed stats)
                               (stats-speed stats))
-                          #.(float +ticks-per-second+ 1f0))
+                          #.(float +ticks-per-second+ 1f0)))
                        (formation-facing (regiment-formation regiment))
                        (/ (stats-turn-rate stats) #.(float +ticks-per-second+ 1f0))
                        (regiment-hold-distance regiment)

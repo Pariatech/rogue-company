@@ -142,7 +142,6 @@ l'écran) ou de dos ; entre les deux, de profil.")
 ;;; soldat en morceaux haussé de *HORSE-SEAT*, pieds aux étriers.
 
 (defparameter *horse-anchor* 1.25f0 "Hauteur du centre de l'image du cheval, en mètres (comme draw-parts).")
-(defparameter *horse-seat* 0.95f0 "Hausse du cavalier sur la selle, en mètres.")
 (defparameter *horse-hip-forward* 0.52f0 "Épaules et hanches : avance (±) depuis le centre, en mètres.")
 (defparameter *horse-hip-side* 0.13f0 "Jambes : écart à l'axe du cheval, en mètres.")
 (defparameter *horse-hip-height* 1.05f0 "Haut des jambes, en mètres.")
@@ -162,6 +161,23 @@ les jambes en l'air, de biais.")
 (defparameter *rider-foot-side* 0.33f0 "Étriers : écart à l'axe, en mètres.")
 (defparameter *rider-foot-height* -0.42f0
   "Étriers : hauteur sous le bas du corps du cavalier haussé, en mètres.")
+
+;;; Arme en main : au changement d'arme, le soldat garde l'ancienne en main
+;;; jusqu'à la fin de l'animation du coup qu'il vient d'en porter.
+
+(defun shown-weapon (stats current switch-timer strike-age previous-anim)
+  "Arme à dessiner (0 principale, 1 secondaire) pour un soldat qui tient CURRENT
+depuis que sa minuterie de changement (SWITCH-TIMER, ticks restants) a démarré :
+l'ancienne si son dernier coup, vieux de STRIKE-AGE ticks, lui a été porté avant
+le changement et que son animation (PREVIOUS-ANIM ticks) n'est pas finie."
+  (declare (type fixnum current switch-timer) (type single-float strike-age previous-anim))
+  (if (plusp switch-timer)
+      (let* ((attack (if (zerop current) (stats-primary stats) (stats-secondary stats)))
+             (since-switch (float (- (attack-ready-time attack) switch-timer) 1f0)))
+        (if (and (< since-switch strike-age) (< strike-age previous-anim))
+            (- 1 current)
+            current))
+      current))
 
 (defparameter *part-depth-squash* 0.5f0
   "Vue de trois quarts : part de la profondeur au sol (vers le haut ou le bas de
@@ -338,6 +354,7 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (regiment-aim-ranks *regiment-aim-ranks*)
          (crouch-height (the single-float *crouch-height*))
          (soldier-weapons (soldiers-weapon soldiers))
+         (switch-timers (soldiers-switch-timer soldiers))
          (tick (battle-tick-count battle))
          (zoom (camera-zoom camera))
          (scale (the single-float (camera-sprite-scale camera)))
@@ -432,7 +449,8 @@ dans le sens des aiguilles d'une montre à l'écran)."
              (type fixnum-array order strike-ticks soldier-ranks stuns marches reloads soldier-regiments bearers lowered-ends
                    regiment-weapons regiment-shields regiment-mounts
                    regiment-square-depths regiment-square-files soldier-files
-                   regiment-guards regiment-crouch regiment-stoop regiment-aim-ranks soldier-weapons)
+                   regiment-guards regiment-crouch regiment-stoop regiment-aim-ranks soldier-weapons
+                   switch-timers)
              (type single-float crouch-height horse-anchor horse-seat horse-hip-forward
                    horse-hip-side horse-hip-height horse-knee-height horse-stride horse-lift
                    horse-leg-half horse-gait horse-bob rider-foot-side rider-foot-height)
@@ -520,6 +538,18 @@ dans le sens des aiguilles d'une montre à l'écran)."
                  (ax 0f0) (ay 0f0) (mx 0f0) (my 0f0) (cx 0f0) (cy 0f0) (bx 0f0) (by 0f0)
                  (rear-behind nil) (front-behind nil)
                  (weapon (aref regiment-weapons regiment-index))
+                 ;; Arme en main, l'ancienne jusqu'à la fin de l'animation de
+                 ;; son dernier coup (SHOWN-WEAPON).
+                 (hand (shown-weapon (regiment-stats (aref regiments regiment-index))
+                                     (aref soldier-weapons i) (aref switch-timers i)
+                                     (+ alpha (float (min 1000000 (- tick (aref strike-ticks i))) 1f0))
+                                     (if (zerop (aref soldier-weapons i))
+                                         strike-ticks-sword
+                                         (case weapon
+                                           ((1 6) thrust-ticks)
+                                           (3 strike-ticks-halberd)
+                                           (5 strike-ticks-sword)
+                                           (t 0f0)))))
                  ;; Lame tenue par la main droite (HAND2) : poignée H, pointe T,
                  ;; garde de G1 à G2. Rondache tenue par la main gauche (HAND1).
                  (blade nil)
@@ -540,7 +570,7 @@ dans le sens des aiguilles d'une montre à l'écran)."
                            ax ay mx my cx cy bx by hilt-x hilt-y tip-x tip-y
                            guard1-x guard1-y guard2-x guard2-y
                            p1x p1y e1x e1y e2x e2y p2x p2y p3x p3y kx ky shot-age)
-                     (type fixnum direction frame regiment-index weapon shield-frame)
+                     (type fixnum direction frame regiment-index weapon hand shield-frame)
                      (type (integer 0 255) team-r team-g team-b))
             (macrolet ((project (f r h)
                          ;; Écran x, écran y et profondeur (vers l'écran) d'un point
@@ -644,7 +674,7 @@ dans le sens des aiguilles d'une montre à l'écran)."
                                                      ,length))))))
                 (cond (bearer
                        (upright upright-forward pole-lean pole-height))
-                      ((and pikes (= weapon 1) (= 1 (aref soldier-weapons i)))
+                      ((and pikes (= weapon 1) (= 1 hand))
                        ;; Piquier à la dague : pique dressée de la main gauche,
                        ;; dague en garde dans la droite.
                        (upright upright-forward pike-lean
@@ -663,7 +693,7 @@ dans le sens des aiguilles d'une montre à l'écran)."
                              (multiple-value-setq (hand1-x hand1-y hand1-depth)
                                (project (* (- hand-swing) swing) (- hand-side)
                                         (+ hand-height bob))))))
-                      ((and (= weapon 5) (zerop (aref soldier-weapons i)))
+                      ((and (= weapon 5) (zerop hand))
                        ;; Espadon à deux mains : la main gauche sous la droite,
                        ;; sur la poignée, dans le prolongement de la lame.
                        (strike-blade (and (not stunned) (= 1 (aref regiment-guards regiment-index)))
@@ -678,7 +708,7 @@ dans le sens des aiguilles d'une montre à l'écran)."
                        (strike-blade t dagger-length)
                        (multiple-value-setq (hand1-x hand1-y hand1-depth)
                          (project (* (- hand-swing) swing) (- hand-side) (+ hand-height bob))))
-                      ((and (= weapon 4) (= 1 (aref soldier-weapons i)))
+                      ((and (= weapon 4) (= 1 hand))
                        ;; Tireur à l'épée, au contact.
                        (strike-blade t sword-length)
                        (multiple-value-setq (hand1-x hand1-y hand1-depth)
@@ -852,7 +882,7 @@ dans le sens des aiguilles d'une montre à l'écran)."
                       ((and pikes (= weapon 1))
                        (upright upright-forward pike-lean
                                 (sqrt (- (* pike-length pike-length) (* pike-lean pike-lean)))))
-                      ((and (= weapon 6) (zerop (aref soldier-weapons i))
+                      ((and (= weapon 6) (zerop hand)
                             (not stunned) (= 1 (aref regiment-guards regiment-index)))
                        ;; Lance couchée sous le bras droit ; le coup la pousse en
                        ;; avant, la main avec. La gauche tient les rênes.
@@ -878,7 +908,7 @@ dans le sens des aiguilles d'une montre à l'écran)."
                            (project-flat thrust side h))
                          (multiple-value-setq (hand1-x hand1-y hand1-depth)
                            (project 0.3f0 -0.1f0 (+ hand-height bob)))))
-                      ((and (= weapon 6) (zerop (aref soldier-weapons i)))
+                      ((and (= weapon 6) (zerop hand))
                        ;; Lance dressée au repos.
                        (let ((length (the single-float *lance-length*)))
                          (declare (type single-float length))

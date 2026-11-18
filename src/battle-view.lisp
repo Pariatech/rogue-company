@@ -106,6 +106,10 @@ aucun). Même usage que *BEARERS*.")
 (defvar *regiment-shields* (make-array 0 :element-type 'fixnum)
   "1 si le régiment porte une rondache, sinon 0. Même usage que *BEARERS*.")
 
+(defparameter *horse-seat* 0.95f0
+  "Hausse du cavalier sur la selle, en mètres : le cavalier en morceaux
+(soldier-parts.lisp) et la hampe du porteur à cheval (DRAW-FLAGS).")
+
 (defvar *regiment-square-depths* (make-array 0 :element-type 'fixnum)
   "Par régiment : rangs du carré de piques (exercice :SQUARE), ou 0.")
 
@@ -538,13 +542,17 @@ regard en miroir. En vue éloignée, il flotte au-dessus du porteur, à une
                             (center-x (- (fround x) (* flag-scale *sprite-foot-x*)))
                             (center-y (- (fround y) (* flag-scale *sprite-foot-y*)))
                             (parts (and scale (eq *soldier-style* :parts)))
+                            ;; Porteur à cheval : sa hampe part de la selle.
+                            (pole-y (if (getf (stats-loadout (regiment-stats regiment)) :mount)
+                                        (- y (* zoom *horse-seat*))
+                                        y))
                             ;; Le drapeau touche la hampe, un pixel sous son sommet ; en
                             ;; morceaux, sous la pointe dorée.
                             (pole-left (if parts
-                                           (fround (bearer-pole-top x y facing zoom))
+                                           (fround (bearer-pole-top x pole-y facing zoom))
                                            (+ center-x (* flag-scale pole))))
                             (top (cond (parts
-                                        (fround (+ (nth-value 1 (bearer-pole-top x y facing zoom))
+                                        (fround (+ (nth-value 1 (bearer-pole-top x pole-y facing zoom))
                                                    (* zoom *finial-length*))))
                                        (scale
                                         (+ center-y (* flag-scale (1+ (aref tips (1+ tip))))))

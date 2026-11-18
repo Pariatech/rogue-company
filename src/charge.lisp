@@ -63,12 +63,15 @@ d'attaque, plus de charge."
           (tick (battle-tick-count battle))
           (contact (regiment-charge-contact regiment)))
       (cond ((not (eq (first orders) :attack))
+             (when (or (regiment-charging-p regiment) (>= contact 0))
+               (reset-momentum regiment (battle-soldiers battle)))
              (setf (regiment-charging-p regiment) nil
                    (regiment-charge-contact regiment) -1))
             ((>= contact 0)
              ;; Au contact : le bonus court, puis la charge prend fin.
              (unless (charge-bonus-active-p regiment tick)
-               (setf (regiment-charge-contact regiment) -1)))
+               (setf (regiment-charge-contact regiment) -1)
+               (reset-momentum regiment (battle-soldiers battle))))
             ((regiment-charging-p regiment)
              ;; Premier contact : ses soldats atteignent l'ennemi (être visé par
              ;; des armes plus longues ne compte pas).
