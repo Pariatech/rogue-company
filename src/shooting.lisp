@@ -376,6 +376,7 @@ STRIKE, appliqués ensuite par APPLY-DAMAGE."
          (regiments (battle-regiments battle))
          (rng (battle-rng battle))
          (tick (battle-tick-count battle))
+         (wounds (battle-wounds battle))
          (xs (soldiers-x soldiers)) (ys (soldiers-y soldiers))
          (prev-xs (soldiers-prev-x soldiers)) (prev-ys (soldiers-prev-y soldiers))
          (still2 (expt (the single-float *still-step*) 2))
@@ -524,6 +525,8 @@ STRIKE, appliqués ensuite par APPLY-DAMAGE."
                                       (let ((damage (+ (max 0f0 (- (the single-float (attack-damage attack))
                                                                    (the single-float (stats-armor defender))))
                                                        (the single-float (attack-piercing attack)))))
+                                        (record-wound wounds (aref xs j) (aref ys j)
+                                                      (aref xs i) (aref ys i) damage tick)
                                         (incf (aref damages j) damage)
                                         (setf (aref last-attackers j) index
                                               (aref stuns j)

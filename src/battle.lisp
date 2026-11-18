@@ -25,7 +25,9 @@ pour reproduire une bataille.")
    (max-radius :initform 0f0 :accessor battle-max-radius
                :documentation "Plus grand rayon de collision des régiments.")
    (deaths :initform (make-death-log) :reader battle-deaths
-           :documentation "Journal des morts (deaths.lisp), pour les dessiner.")))
+           :documentation "Journal des morts (deaths.lisp), pour les dessiner.")
+   (wounds :initform (make-wound-log) :reader battle-wounds
+           :documentation "Journal des blessures (wounds.lisp), pour dessiner le sang.")))
 
 (defparameter *battlefield-size* 256
   "Côté de la carte, en mètres, centrée sur l'origine.")

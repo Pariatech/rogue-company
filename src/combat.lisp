@@ -586,6 +586,7 @@ indices, avec le générateur de la bataille : la bataille se rejoue."
          (stun-rate (* (the single-float *stun-seconds-per-damage*)
                        #.(float +ticks-per-second+ 1f0)))
          (tick (battle-tick-count battle))
+         (wounds (battle-wounds battle))
          (soldier-regiments (soldiers-regiment soldiers))
          (xs (soldiers-x soldiers)) (ys (soldiers-y soldiers))
          (min-chance *min-hit-chance*)
@@ -643,6 +644,8 @@ indices, avec le générateur de la bataille : la bataille se rejoue."
                                                                   (the single-float (stats-armor defender))))
                                                       (the single-float (attack-piercing attack)))))
                                        (progn
+                                         (record-wound wounds (aref xs target) (aref ys target)
+                                                       (aref xs i) (aref ys i) damage tick)
                                          (incf (aref damages target) damage)
                                          (setf (aref last-attackers target) index
                                                (aref stuns target)
