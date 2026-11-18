@@ -113,7 +113,8 @@ poursuite sur les ailes.")
   "Duel de deux régiments d'arquebusiers en contremarche, hors de portée au
 départ, pour observer comment les pertes se comblent.")
 
-(defparameter *matchup-dotations* '(:pikemen :halberdiers :rodeleros :arquebusiers :musketeers)
+(defparameter *matchup-dotations* '(:pikemen :halberdiers :rodeleros :arquebusiers :musketeers
+                                     :light-cavalry)
   "Dotations du tournoi : chacune affronte chacune des autres une fois.")
 (defparameter *matchup-count* 105 "Effectif d'un régiment du tournoi, sauf dans *MATCHUP-COUNTS*.")
 (defparameter *matchup-counts* '((:pikemen . 225) (:light-cavalry . 60))
@@ -149,22 +150,23 @@ remplace les paires tirées de DOTATIONS."
                         (list 1 blue (size blue) (+ cx half-gap) y 180 drill))))))
 
 (defparameter *matchup-demo-regiments* (matchup-regiments)
-  "Tournoi : chaque dotation contre chacune des autres, à effectifs égaux, dix
-duels côte à côte que C lance ensemble ; les piquiers sont 225. Le tableau des duels (tally-view.lisp)
-compte les survivants.")
+  "Tournoi : chaque dotation contre chacune des autres, quinze duels côte à côte
+que C lance ensemble, 105 hommes de chaque côté, sauf 225 piquiers et 60
+chevau-légers (*MATCHUP-COUNTS*). Le tableau des duels (tally-view.lisp) compte
+les survivants.")
 
 (defparameter *cavalry-demo-regiments*
   (matchup-regiments :pairs (mapcar (lambda (other) (list :light-cavalry other))
-                                    *matchup-dotations*))
+                                    (remove :light-cavalry *matchup-dotations*)))
   "Chevau-légers (60, à l'épée) contre chaque autre dotation, cinq duels que C
 lance ensemble : la charge contre les piques, les hallebardes, les rodeleros et
 les tireurs.")
 
-(defparameter *demo-regiments* *cavalry-demo-regiments*
+(defparameter *demo-regiments* *matchup-demo-regiments*
   "Régiments de la démonstration : (camp dotation effectif x y orientation en
 degrés [exercice de tir] [posture]). Sans exercice (ou NIL), le feu à volonté
-pour une arme de tir ; sans posture, DEFAULT-STANCE (:CHASE pour la cavalerie, :HOLD sinon). La cavalerie par défaut ;
-*MATCHUP-DEMO-REGIMENTS* garde le tournoi ;
+pour une arme de tir ; sans posture, DEFAULT-STANCE (:CHASE pour la cavalerie, :HOLD sinon). Le tournoi par défaut ;
+*CAVALRY-DEMO-REGIMENTS* garde les duels des chevau-légers ;
 *DUEL-DEMO-REGIMENTS* garde le duel d'arquebusiers en contremarche.")
 
 (defparameter *demo-names* '((:pikemen . "Piquiers") (:rodeleros . "Rodeleros")
