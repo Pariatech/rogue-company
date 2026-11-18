@@ -233,6 +233,97 @@ coins restent vides, ce qui arrondit les formes)."
                               (format nil "assets/overlays/part-~a/frame_~3,'0d.png" name i)
                               *root*))))
 
+;;; Cheval : tronc, poitrail, croupe, encolure, tête, oreilles, crinière, queue,
+;;; tapis de selle (cramoisi, teint du camp) et selle, en volumes (ellipsoïdes)
+;;; dans le repère du cheval : vers l'avant, vers sa droite, en hauteur, en
+;;; mètres. Chaque vue les projette comme le jeu projette les morceaux (sol à
+;;; 18 px/m, profondeur écrasée de moitié, hauteur vers le haut) et garde le
+;;; point le plus proche de l'écran. Les jambes, animées, sont tracées par le
+;;; jeu (src/soldier-parts.lisp). 48 × 48 px ; le centre de la toile est le
+;;; point à *HORSE-ANCHOR* mètres au-dessus du sol, sous le cheval.
+
+(defparameter *horse-anchor* 1.25 "Hauteur du point dessiné au centre de la toile, en mètres.")
+(defparameter *horse-coat* '((196 132 80) (158 98 56) (112 66 38)) "Robe baie : clair, moyen, sombre.")
+(defparameter *horse-dark* '((70 50 42) (48 34 30) (32 24 22)) "Crins et extrémités.")
+(defparameter *horse-cloth* (list *crimson-light* *crimson* *crimson-shade*))
+(defparameter *horse-saddle* '((128 86 52) (96 62 36) (70 44 26)))
+
+(defparameter *view-angles* '((:east . 0) (:south-east . 45) (:south . 90)
+                              (:north-east . -45) (:north . -90))
+  "Orientation du cheval dans chaque vue, en degrés (y vers le bas : le sud à 90).")
+
+(defun horse-volumes ()
+  "Liste de (centre-avant centre-droite centre-hauteur rayon-avant rayon-droite
+rayon-hauteur matière), matière : :coat, :dark, :cloth ou :saddle. Les derniers
+passent devant les premiers à égalité."
+  (append
+   '((0 0 1.15 0.62 0.27 0.31 :coat)       ; tronc
+     (0.5 0 1.2 0.32 0.25 0.31 :coat)      ; poitrail
+     (-0.5 0 1.22 0.36 0.27 0.3 :coat))    ; croupe
+   ;; Encolure, de l'épaule à la nuque, puis tête, de la nuque au bout du nez.
+   (loop for k from 0 to 6
+         for u = (/ k 6.0)
+         collect (list (+ 0.62 (* u 0.3)) 0 (+ 1.38 (* u 0.4))
+                       (- 0.18 (* u 0.06)) (- 0.14 (* u 0.05)) (- 0.2 (* u 0.07)) :coat))
+   (loop for k from 0 to 5
+         for u = (/ k 5.0)
+         collect (list (+ 0.95 (* u 0.26)) 0 (- 1.8 (* u 0.36))
+                       0.1 (- 0.1 (* u 0.03)) 0.1 (if (> u 0.8) :dark :coat)))
+   '((0.93 0.06 1.95 0.03 0.03 0.06 :coat) ; oreilles
+     (0.93 -0.06 1.95 0.03 0.03 0.06 :coat))
+   ;; Crinière, sur le dessus de l'encolure.
+   (loop for k from 0 to 5
+         for u = (/ k 5.0)
+         collect (list (+ 0.6 (* u 0.32)) 0 (+ 1.5 (* u 0.38)) 0.07 0.04 0.07 :dark))
+   ;; Queue, de la croupe vers le bas.
+   (loop for k from 0 to 6
+         for u = (/ k 6.0)
+         collect (list (- -0.85 (* u 0.18)) 0 (- 1.32 (* u 0.55)) 0.07 0.06 0.08 :dark))
+   ;; Tapis de selle sur le dos, et selle.
+   '((0 0 1.3 0.36 0.29 0.2 :cloth)
+     (0.02 0 1.43 0.24 0.18 0.06 :saddle))))
+
+(defun horse (view)
+  (let* ((canvas (make-canvas 48 48))
+         (depths (make-array '(48 48) :initial-element nil))
+         (angle (* (cdr (assoc view *view-angles*)) (/ pi 180)))
+         (c (cos angle)) (s (sin angle))
+         (ppm 18) (squash 0.5))
+    (flet ((plot (f r h nf nr nh material)
+             ;; Point du volume et sa normale, dans le repère du cheval.
+             (let* ((gx (- (* f c) (* r s)))
+                    (gy (+ (* f s) (* r c)))
+                    (px (round (+ 24 (* ppm gx))))
+                    (py (round (+ 24 (* ppm (- (* squash gy) (- h *horse-anchor*))))))
+                    ;; Vers l'écran : plus bas sur le sol, ou plus haut.
+                    (depth (+ gy h))
+                    (ngy (+ (* nf s) (* nr c)))
+                    (ngx (- (* nf c) (* nr s)))
+                    ;; Lumière d'en haut, à gauche, vers l'écran.
+                    (light (+ (* 0.7 nh) (* -0.4 ngx) (* 0.3 ngy)))
+                    (tones (ecase material
+                             (:coat *horse-coat*) (:dark *horse-dark*)
+                             (:cloth *horse-cloth*) (:saddle *horse-saddle*)))
+                    (color (cond ((> light 0.45) (first tones))
+                                 ((> light -0.15) (second tones))
+                                 (t (third tones)))))
+               (when (and (array-in-bounds-p canvas py px)
+                          (or (null (aref depths py px)) (> depth (aref depths py px))))
+                 (setf (aref depths py px) depth
+                       (aref canvas py px) color)))))
+      (loop for (cf cr ch rf rr rh material) in (horse-volumes)
+            do (loop for i from 0 below 24
+                     for theta = (* pi (/ (+ i 0.5) 24))
+                     do (loop for j from 0 below 48
+                              for phi = (* 2 pi (/ j 48))
+                              for nf = (* (sin theta) (cos phi))
+                              for nr = (* (sin theta) (sin phi))
+                              for nh = (cos theta)
+                              do (plot (+ cf (* rf nf)) (+ cr (* rr nr)) (+ ch (* rh nh))
+                                       nf nr nh material)))))
+    (outline canvas)))
+
+(write-part "horse" (mapcar #'horse *views*))
 (write-part "body" (mapcar #'body *views*))
 (write-part "head" (mapcar #'head *views*))
 (write-part "hand" (list (hand)))

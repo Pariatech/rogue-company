@@ -46,6 +46,11 @@ débande, :CHASE le poursuit, :SKIRMISH se replie devant une mêlée qui approch
                   :documentation "Ordre d'attaque repris à la fin d'un repli (:skirmish).")
    (retreat-ticks :initform 0 :accessor regiment-retreat-ticks :type fixnum
                   :documentation "Ticks depuis le début du repli en cours.")
+   (charging :initform nil :accessor regiment-charging-p
+             :documentation "À la charge, au pas de course ou au galop (charge.lisp).")
+   (charge-contact :initform -1 :accessor regiment-charge-contact :type fixnum
+                   :documentation "Tick du premier contact de la charge, qui ouvre le
+bonus de charge, ou -1.")
    (chasing :initform nil :accessor regiment-chasing-p
             :documentation "Poursuit un ennemi débandé (:chase).")
    (chase-x :initform 0f0 :accessor regiment-chase-x :type single-float
@@ -381,7 +386,9 @@ pendant une contremarche."
                        ;; Un régiment débandé court, et qui le poursuit ou se
                        ;; replie en tirailleurs aussi (stances.lisp).
                        (/ (if (or (member (first (regiment-orders regiment)) '(:rout :retreat))
-                                  (regiment-chasing-p regiment))
+                                  (regiment-chasing-p regiment)
+                                  ;; À la charge (charge.lisp).
+                                  (regiment-charging-p regiment))
                               (stats-run-speed stats)
                               (stats-speed stats))
                           #.(float +ticks-per-second+ 1f0))

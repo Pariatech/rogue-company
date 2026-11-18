@@ -36,16 +36,22 @@ pour reproduire une bataille.")
   (make-instance 'battle :seed seed :rng (make-rng seed)
                          :grid (make-spatial-grid :size size)))
 
+(defun default-stance (stats)
+  "Posture par défaut d'un régiment aux STATS : la cavalerie (une monture)
+poursuit les débandés, les autres tiennent leur place."
+  (if (getf (stats-loadout stats) :mount) :chase :hold))
+
 (defun add-regiment (battle stats count &key (name "Régiment") (side 0) (x 0) (y 0) (facing 0)
                                              (ranks (stats-ranks stats)) (scatter 0)
-                                             (stance :hold)
+                                             (stance (default-stance stats))
                                              (drill (and (eq (attack-kind (stats-primary stats)) :ranged)
                                                          :at-will)))
   "Ajoute un régiment de COUNT soldats aux STATS données, en formation autour de
 X, Y. Avec SCATTER, chaque soldat part d'un point tiré au hasard à au plus
 SCATTER mètres de son emplacement, sur chaque axe. DRILL : exercice de tir des
 salves (shooting.lisp), le feu à volonté du premier rang par défaut pour une
-arme de tir. STANCE : posture (stances.lisp), :HOLD par défaut.
+arme de tir. STANCE : posture (stances.lisp), DEFAULT-STANCE par défaut :
+:CHASE pour la cavalerie, :HOLD sinon.
 Renvoie le régiment."
   (let* ((soldiers (battle-soldiers battle))
          ;; Feu par rang et salve : autant de rangs que de rangs qui tirent.
@@ -128,6 +134,7 @@ et s'ajoutent ici au fil des étapes :
              (update-skirmish battle regiment)
              (update-open-files battle regiment)
              (update-engagement battle regiment)
+             (update-charge battle regiment)
              (update-regiment-slots regiment soldiers)
              ;; Le rang qui a tiré gagne l'arrière par les intervalles (shooting.lisp).
              (steer-countermarch regiment soldiers)

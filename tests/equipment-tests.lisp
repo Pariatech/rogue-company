@@ -46,9 +46,9 @@
 (test mount-sets-speed-and-carries-no-load
   (let ((s (dotation :lancers)))
     (is (= 3.2 (rogue-company::stats-speed s)))
-    (is (= 4.5 (rogue-company::stats-mass s)))
+    (is (= 9 (rogue-company::stats-mass s)))
     (is (= 32 (rogue-company::stats-load s)) "lance, épée, armure et morion ; le cheval ne compte pas")
-    (is (equal '(:charge) (rogue-company::stats-traits s)))))
+    (is (null (rogue-company::stats-traits s))))))
 
 (test pavise
   (let ((s (dotation :crossbowmen)))

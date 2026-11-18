@@ -27,6 +27,8 @@
             :cooldown 1.5 :ready-time 0.5)
   ;; Quinze rangs : un bataillon carré, 15 files sur 15 rangs à 225 hommes.
   :modifiers '((:ranks :set 15))
+  ;; Les piquiers ne chargent pas : ils gardent la cohésion de leur bloc.
+  :traits '(:no-charge)
   :forbids '(:mount))
 
 (define-item :halberd "Hallebarde"
@@ -126,17 +128,19 @@
 
 (define-item :light-horse "Cheval léger"
   :slots '(:mount) :price 60
-  :modifiers '((:speed :set 4.0) (:run-speed :set 8.0) (:mass :mul 3) (:radius :set 0.9) (:turn-rate :set 1.6)
+  ;; Quatre rangs : 15 files à 60 cavaliers.
+  :modifiers '((:speed :set 4.0) (:run-speed :set 8.0) (:mass :mul 6) (:radius :set 0.9) (:turn-rate :set 1.6)
                (:endurance :set 1.5)
-               (:spacing :set 2.0) (:ranks :set 2))
-  :traits '(:charge))
+               (:spacing :set 2.4) (:ranks :set 4))
+  ;; Au contact, la cavalerie légère rompt ses rangs : chaque cavalier va
+  ;; chercher son homme, comme les rodeleros.
+  :traits '(:loose-order))
 
 (define-item :heavy-horse "Cheval lourd"
   :slots '(:mount) :price 100
-  :modifiers '((:speed :set 3.2) (:run-speed :set 6.5) (:mass :mul 4.5) (:radius :set 1.0) (:turn-rate :set 1.2)
+  :modifiers '((:speed :set 3.2) (:run-speed :set 6.5) (:mass :mul 9) (:radius :set 1.0) (:turn-rate :set 1.2)
                (:endurance :set 1.2)
-               (:spacing :set 2.2) (:ranks :set 2))
-  :traits '(:charge))
+               (:spacing :set 2.2) (:ranks :set 2)))
 
 ;;; Dotations de démonstration : un homme et un équipement. Ce ne sont pas des
 ;;; types d'unité, seulement des équipements tout faits.
@@ -148,6 +152,7 @@
     (:arquebusiers :recruit (:main :arquebus :secondary :sword :armor :buff-coat :helmet :morion))
     (:halberdiers :recruit (:main :halberd :secondary :sword :armor :corselet :helmet :morion))
     (:crossbowmen :recruit (:main :crossbow :secondary :sword :shield :pavise :helmet :morion))
+    (:light-cavalry :recruit (:main :sword :armor :buff-coat :helmet :morion :mount :light-horse))
     (:reiters :recruit (:main :pistols :secondary :sword :armor :buff-coat :mount :light-horse))
     (:lancers :recruit (:main :lance :secondary :sword :armor :cuirassier-armour
                         :helmet :morion :mount :heavy-horse))))

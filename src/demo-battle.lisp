@@ -116,7 +116,7 @@ départ, pour observer comment les pertes se comblent.")
 (defparameter *matchup-dotations* '(:pikemen :halberdiers :rodeleros :arquebusiers :musketeers)
   "Dotations du tournoi : chacune affronte chacune des autres une fois.")
 (defparameter *matchup-count* 105 "Effectif d'un régiment du tournoi, sauf dans *MATCHUP-COUNTS*.")
-(defparameter *matchup-counts* '((:pikemen . 225))
+(defparameter *matchup-counts* '((:pikemen . 225) (:light-cavalry . 60))
   "Effectifs propres à certaines dotations du tournoi : (dotation . effectif).")
 (defparameter *matchup-drill* :countermarch "Exercice de tir des tireurs du tournoi.")
 (defparameter *matchup-gap* 90
@@ -128,13 +128,14 @@ la portée du mousquet (80 m), personne ne tire avant la charge.")
 régiment est plus près de son adversaire que de tout ennemi de l'autre colonne.")
 
 (defun matchup-regiments (&key (dotations *matchup-dotations*) (count *matchup-count*)
-                               (drill *matchup-drill*))
+                               (drill *matchup-drill*)
+                               (pairs (loop for (a . rest) on dotations
+                                            nconc (loop for b in rest collect (list a b)))))
   "Régiments du tournoi : un duel par paire de DOTATIONS, COUNT hommes de chaque
 côté (ou celui de la dotation dans *MATCHUP-COUNTS*), la première dotation de la paire en rouge, à gauche. Deux colonnes de
-duels, l'une sous l'autre, rouge et bleu face à face, hors de portée."
-  (let* ((pairs (loop for (a . rest) on dotations
-                      nconc (loop for b in rest collect (list a b))))
-         (rows (ceiling (length pairs) 2))
+duels, l'une sous l'autre, rouge et bleu face à face, hors de portée. PAIRS
+remplace les paires tirées de DOTATIONS."
+  (let* ((rows (ceiling (length pairs) 2))
          (half-gap (/ *matchup-gap* 2)))
     (loop for (red blue) in pairs
           for k from 0
@@ -152,16 +153,25 @@ duels, l'une sous l'autre, rouge et bleu face à face, hors de portée."
 duels côte à côte que C lance ensemble ; les piquiers sont 225. Le tableau des duels (tally-view.lisp)
 compte les survivants.")
 
-(defparameter *demo-regiments* *matchup-demo-regiments*
+(defparameter *cavalry-demo-regiments*
+  (matchup-regiments :pairs (mapcar (lambda (other) (list :light-cavalry other))
+                                    *matchup-dotations*))
+  "Chevau-légers (60, à l'épée) contre chaque autre dotation, cinq duels que C
+lance ensemble : la charge contre les piques, les hallebardes, les rodeleros et
+les tireurs.")
+
+(defparameter *demo-regiments* *cavalry-demo-regiments*
   "Régiments de la démonstration : (camp dotation effectif x y orientation en
 degrés [exercice de tir] [posture]). Sans exercice (ou NIL), le feu à volonté
-pour une arme de tir ; sans posture, :HOLD. Le tournoi par défaut ;
+pour une arme de tir ; sans posture, DEFAULT-STANCE (:CHASE pour la cavalerie, :HOLD sinon). La cavalerie par défaut ;
+*MATCHUP-DEMO-REGIMENTS* garde le tournoi ;
 *DUEL-DEMO-REGIMENTS* garde le duel d'arquebusiers en contremarche.")
 
 (defparameter *demo-names* '((:pikemen . "Piquiers") (:rodeleros . "Rodeleros")
                               (:halberdiers . "Hallebardiers")
                               (:arquebusiers . "Arquebusiers")
-                              (:musketeers . "Mousquetaires"))
+                              (:musketeers . "Mousquetaires")
+                              (:light-cavalry . "Chevau-légers"))
   "Nom affiché de chaque dotation.")
 
 (defun demo-battlefield-size (regiments &key (margin 64))
@@ -181,7 +191,7 @@ tiennent avec MARGIN mètres autour, arrondi à 64 m."
                                          (if (zerop side) "rouges" "bleus"))
                            :side side :x x :y y :facing (* degrees (/ pi 180))
                            :scatter scatter
-                           :stance (or stance :hold)
+                           :stance (or stance (default-stance (dotation-stats dotation)))
                            :drill (or drill
                                       (and (eq (attack-kind (stats-primary (dotation-stats dotation)))
                                                :ranged)

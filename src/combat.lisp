@@ -619,8 +619,12 @@ indices, avec le générateur de la bataille : la bataille se rejoue."
           do (let* ((stats (regiment-stats regiment))
                     (skill (stats-melee-skill stats))
                     (index (regiment-index regiment))
-                    (bearer (regiment-bearer regiment)))
-               (declare (type single-float skill) (type fixnum index bearer))
+                    (bearer (regiment-bearer regiment))
+                    ;; Élan de la charge, les premières secondes du contact (charge.lisp).
+                    (charge (if (charge-bonus-active-p regiment tick)
+                                (float (regiment-charge-bonus regiment) 1f0)
+                                0f0)))
+               (declare (type single-float skill charge) (type fixnum index bearer))
                (loop for i of-type fixnum from (regiment-start regiment) below (regiment-end regiment)
                      do (let ((target (aref targets i)))
                           ;; Le porteur d'étendard ne frappe pas.
@@ -656,7 +660,8 @@ indices, avec le générateur de la bataille : la bataille se rejoue."
                                    (when (< (rng-float rng) chance)
                                      ;; L'armure réduit les dégâts ordinaires, jamais les
                                      ;; perforants.
-                                     (let ((damage (+ (max 0f0 (- (the single-float (attack-damage attack))
+                                     (let ((damage (+ (max 0f0 (- (+ (the single-float (attack-damage attack))
+                                                                     charge)
                                                                   (the single-float (stats-armor defender))))
                                                       (the single-float (attack-piercing attack)))))
                                        (progn

@@ -126,6 +126,34 @@ arrière.")
   "Sinus de l'orientation au-delà duquel on voit la rondache de face (vers
 l'écran) ou de dos ; entre les deux, de profil.")
 
+;;; Cheval : corps, encolure et tête en un morceau par direction (part-horse,
+;;; dessiné par scripts/draw-parts.lisp, le centre de son image à
+;;; *HORSE-ANCHOR* au-dessus du sol), jambes tracées ici : de la hanche au
+;;; genou, puis au sabot, au trot (diagonales ensemble). Le cavalier est un
+;;; soldat en morceaux haussé de *HORSE-SEAT*, pieds aux étriers.
+
+(defparameter *horse-anchor* 1.25f0 "Hauteur du centre de l'image du cheval, en mètres (comme draw-parts).")
+(defparameter *horse-seat* 0.95f0 "Hausse du cavalier sur la selle, en mètres.")
+(defparameter *horse-hip-forward* 0.52f0 "Épaules et hanches : avance (±) depuis le centre, en mètres.")
+(defparameter *horse-hip-side* 0.13f0 "Jambes : écart à l'axe du cheval, en mètres.")
+(defparameter *horse-hip-height* 1.05f0 "Haut des jambes, en mètres.")
+(defparameter *horse-knee-height* 0.5f0 "Genou, en mètres.")
+(defparameter *horse-stride* 0.32f0 "Avance d'un sabot au trot, de part et d'autre, en mètres.")
+(defparameter *horse-lift* 0.18f0 "Hauteur d'un sabot levé, en mètres.")
+(defparameter *horse-leg-width* 0.1f0 "Épaisseur d'une jambe, en mètres.")
+(defparameter *horse-gait* 1.6f0 "Cadence du trot, en part de celle de la marche à pied.")
+(defparameter *horse-bob* 0.06f0 "Rebond du cheval au trot, en mètres.")
+(defparameter *horse-leg-color* '(122 74 42) "Jambe, du haut au genou.")
+(defparameter *horse-shank-color* '(56 40 34) "Jambe, du genou au sabot.")
+(defparameter *horse-dead-tilt* 0.35f0
+  "Cheval mort : il bascule d'un demi-tour moins cet angle, en radians, et reste
+les jambes en l'air, de biais.")
+(defparameter *horse-lying-height* 0.45f0
+  "Cheval mort, couché sur le flanc : hauteur du centre de son image, en mètres.")
+(defparameter *rider-foot-side* 0.33f0 "Étriers : écart à l'axe, en mètres.")
+(defparameter *rider-foot-height* -0.42f0
+  "Étriers : hauteur sous le bas du corps du cavalier haussé, en mètres.")
+
 (defparameter *part-depth-squash* 0.5f0
   "Vue de trois quarts : part de la profondeur au sol (vers le haut ou le bas de
 l'écran) que gardent les décalages du corps (mains, pieds, épée, rondache,
@@ -228,24 +256,28 @@ dans le sens des aiguilles d'une montre à l'écran)."
             (multiple-value-bind (shield-row shield-frames shield-w shield-h)
                 (atlas-overlay atlas :part-shield)
               (declare (ignore shield-frames))
-              (unless (and body-row head-row hand-row foot-row solid-row shield-row)
-                (error "Morceaux absents de l'atlas : lancer scripts/draw-parts.lisp puis build-atlas."))
-              (draw-parts-batch battle alpha camera atlas
-                                body-row (float body-w 1f0) (float body-h 1f0)
-                                head-row (float head-w 1f0) (float head-h 1f0)
-                                hand-row (float hand-w 1f0) (float hand-h 1f0)
-                                foot-row (float foot-w 1f0) (float foot-h 1f0)
-                                solid-row
-                                shield-row (float shield-w 1f0) (float shield-h 1f0)))))))))
+              (multiple-value-bind (horse-row horse-frames horse-w horse-h)
+                  (atlas-overlay atlas :part-horse)
+                (declare (ignore horse-frames))
+                (unless (and body-row head-row hand-row foot-row solid-row shield-row horse-row)
+                  (error "Morceaux absents de l'atlas : lancer scripts/draw-parts.lisp puis build-atlas."))
+                (draw-parts-batch battle alpha camera atlas
+                                  body-row (float body-w 1f0) (float body-h 1f0)
+                                  head-row (float head-w 1f0) (float head-h 1f0)
+                                  hand-row (float hand-w 1f0) (float hand-h 1f0)
+                                  foot-row (float foot-w 1f0) (float foot-h 1f0)
+                                  solid-row
+                                  shield-row (float shield-w 1f0) (float shield-h 1f0)
+                                  horse-row (float horse-w 1f0) (float horse-h 1f0))))))))))
 
 (defun draw-parts-batch (battle alpha camera atlas
                          body-row body-w body-h head-row head-w head-h
                          hand-row hand-w hand-h foot-row foot-w foot-h solid-row
-                         shield-row shield-w shield-h)
+                         shield-row shield-w shield-h horse-row horse-w horse-h)
   (declare (optimize (speed 3) (safety 1))
            (type single-float alpha body-w body-h head-w head-h hand-w hand-h foot-w foot-h
-                 shield-w shield-h)
-           (type fixnum body-row head-row hand-row foot-row solid-row shield-row))
+                 shield-w shield-h horse-w horse-h)
+           (type fixnum body-row head-row hand-row foot-row solid-row shield-row horse-row))
   (let* ((soldiers (battle-soldiers battle))
          (atlas-w (float (the fixnum (atlas-width atlas)) 1f0))
          (atlas-h (float (the fixnum (atlas-height atlas)) 1f0))
@@ -271,6 +303,23 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (lowered-ends *lowered-ends*)
          (regiment-weapons *regiment-weapons*)
          (regiment-shields *regiment-shields*)
+         (regiment-mounts *regiment-mounts*)
+         (horse-anchor (the single-float *horse-anchor*))
+         (horse-seat (the single-float *horse-seat*))
+         (horse-hip-forward (the single-float *horse-hip-forward*))
+         (horse-hip-side (the single-float *horse-hip-side*))
+         (horse-hip-height (the single-float *horse-hip-height*))
+         (horse-knee-height (the single-float *horse-knee-height*))
+         (horse-stride (the single-float *horse-stride*))
+         (horse-lift (the single-float *horse-lift*))
+         (horse-leg-half (* 0.5f0 (the single-float *horse-leg-width*)))
+         (horse-gait (the single-float *horse-gait*))
+         (horse-bob (the single-float *horse-bob*))
+         (rider-foot-side (the single-float *rider-foot-side*))
+         (rider-foot-height (the single-float *rider-foot-height*))
+         (leg-color *horse-leg-color*) (shank-color *horse-shank-color*)
+         (leg-r (first leg-color)) (leg-g (second leg-color)) (leg-b (third leg-color))
+         (shank-r (first shank-color)) (shank-g (second shank-color)) (shank-b (third shank-color))
          (regiment-guards *regiment-guards*)
          (regiment-crouch *regiment-crouch*)
          (regiment-stoop *regiment-stoop*)
@@ -367,9 +416,12 @@ dans le sens des aiguilles d'une montre à l'écran)."
     (declare (type fixnum count tick)
              (type single-float recoil-distance)
              (type fixnum-array order strike-ticks soldier-ranks stuns marches reloads soldier-regiments bearers lowered-ends
-                   regiment-weapons regiment-shields
+                   regiment-weapons regiment-shields regiment-mounts
                    regiment-guards regiment-crouch regiment-stoop regiment-aim-ranks soldier-weapons)
-             (type single-float crouch-height)
+             (type single-float crouch-height horse-anchor horse-seat horse-hip-forward
+                   horse-hip-side horse-hip-height horse-knee-height horse-stride horse-lift
+                   horse-leg-half horse-gait horse-bob rider-foot-side rider-foot-height)
+             (type (integer 0 255) leg-r leg-g leg-b shank-r shank-g shank-b)
              (type (simple-array single-float (6)) sword-rest sword-guard-pose sword-raised
                    sword-cut shield-rest shield-guard halberd-rest halberd-guard
                    halberd-raised halberd-cut gun-rest gun-aim gun-load gun-pose)
@@ -415,6 +467,10 @@ dans le sens des aiguilles d'une montre à l'écran)."
                              0f0))
                  (sx (- sx (* recoil c)))
                  (sy (- sy (* recoil squash s)))
+                 ;; Cavalier : le cheval part du sol, le cavalier de la selle.
+                 (mounted (= 1 (aref regiment-mounts (aref soldier-regiments i))))
+                 (ground-sy sy)
+                 (sy (if mounted (- sy (* zoom horse-seat)) sy))
                  (direction (mod (the fixnum (round facing eighth)) 8))
                  (frame (the fixnum (svref strips direction)))
                  (mirror (eql 1 (svref mirrored direction)))
@@ -756,20 +812,87 @@ dans le sens des aiguilles d'une montre à l'écran)."
                          (project (* (- hand-swing) swing) (- hand-side) (+ hand-height bob)))
                        (multiple-value-setq (hand2-x hand2-y hand2-depth)
                          (project (* hand-swing swing) hand-side (+ hand-height bob))))))
+              (when mounted
+                  ;; Cheval : jambes, pied du cavalier du côté caché, corps du
+                  ;; cheval et son tapis teint, puis l'autre pied.
+                  (let* ((gait (* two-pi (+ (* horse-gait walk-cycles)
+                                            (* 0.375f0 (float (logand i 7) 1f0)))))
+                         (gait-swing (if moving (sin gait) 0f0))
+                         (gait-lift (if moving (cos gait) 0f0))
+                         (horse-up (if moving (* horse-bob (abs gait-lift)) 0f0)))
+                    (declare (type single-float gait gait-swing gait-lift horse-up))
+                    (macrolet ((ground (f r h)
+                                 ;; Comme PROJECT, depuis le sol sous le cheval.
+                                 `(let ((ground-x (- (* ,f c) (* ,r s)))
+                                        (ground-y (+ (* ,f s) (* ,r c))))
+                                    (values (+ sx (* zoom ground-x))
+                                            (- (+ ground-sy (* zoom squash ground-y)) (* zoom ,h))
+                                            ground-y)))
+                               (thick (x0 y0 x1 y1 half red green blue)
+                                 `(let* ((ex (- ,x1 ,x0)) (ey (- ,y1 ,y0))
+                                         (length (sqrt (+ (* ex ex) (* ey ey))))
+                                         (w (* zoom ,half))
+                                         (nx (if (plusp length) (* w (/ (- ey) length)) 0f0))
+                                         (ny (if (plusp length) (* w (/ ex length)) 0f0)))
+                                    (declare (type single-float ex ey length w nx ny))
+                                    (solid-quad (- ,x0 nx) (- ,y0 ny) (+ ,x0 nx) (+ ,y0 ny)
+                                                (+ ,x1 nx) (+ ,y1 ny) (- ,x1 nx) (- ,y1 ny)
+                                                ,red ,green ,blue)))
+                               (leg (forward side sign)
+                                 ;; Jambe à l'avance FORWARD, du côté SIDE ; SIGN
+                                 ;; choisit la diagonale.
+                                 `(let* ((step (* ,sign horse-stride gait-swing))
+                                         (up (* horse-lift (max 0f0 (* ,sign gait-lift)))))
+                                    (declare (type single-float step up))
+                                    (multiple-value-bind (hx hy)
+                                        (ground ,forward ,side (+ horse-hip-height horse-up))
+                                      (declare (type single-float hx hy))
+                                      (multiple-value-bind (kx ky)
+                                          (ground (+ ,forward (* 0.5f0 step)) ,side
+                                                  (+ horse-knee-height up))
+                                        (declare (type single-float kx ky))
+                                        (multiple-value-bind (fx fy)
+                                            (ground (+ ,forward step) ,side up)
+                                          (declare (type single-float fx fy))
+                                          (thick hx hy kx ky horse-leg-half leg-r leg-g leg-b)
+                                          (thick kx ky fx fy (* 0.75f0 horse-leg-half)
+                                                 shank-r shank-g shank-b)))))))
+                      (leg horse-hip-forward (- horse-hip-side) 1f0)
+                      (leg horse-hip-forward horse-hip-side -1f0)
+                      (leg (- horse-hip-forward) (- horse-hip-side) -1f0)
+                      (leg (- horse-hip-forward) horse-hip-side 1f0)
+                      (multiple-value-bind (left-x left-y left-depth)
+                          (project 0.05f0 (- rider-foot-side) (+ foot-height rider-foot-height bob))
+                        (declare (type single-float left-x left-y left-depth))
+                        (multiple-value-bind (right-x right-y right-depth)
+                            (project 0.05f0 rider-foot-side (+ foot-height rider-foot-height bob))
+                          (declare (type single-float right-x right-y right-depth))
+                          (if (< left-depth right-depth)
+                              (part-quad foot-row 0 foot-w foot-h left-x left-y nil 255 255 255)
+                              (part-quad foot-row 0 foot-w foot-h right-x right-y nil 255 255 255))
+                          (multiple-value-bind (hx hy) (ground 0f0 0f0 (+ horse-anchor horse-up))
+                            (declare (type single-float hx hy))
+                            (part-quad horse-row frame horse-w horse-h hx hy mirror 255 255 255)
+                            (part-quad (1+ horse-row) frame horse-w horse-h hx hy mirror
+                                       team-r team-g team-b))
+                          (if (< left-depth right-depth)
+                              (part-quad foot-row 0 foot-w foot-h right-x right-y nil 255 255 255)
+                              (part-quad foot-row 0 foot-w foot-h left-x left-y nil 255 255 255)))))))
               ;; Pieds, le plus éloigné d'abord.
-              (multiple-value-bind (left-x left-y left-depth)
-                  (project (* stride swing) (- foot-side)
-                           (+ foot-height (* foot-lift (max 0f0 lift))))
-                (declare (type single-float left-x left-y left-depth))
-                (multiple-value-bind (right-x right-y right-depth)
-                    (project (* (- stride) swing) foot-side
-                             (+ foot-height (* foot-lift (max 0f0 (- lift)))))
-                  (declare (type single-float right-x right-y right-depth))
-                  (if (< left-depth right-depth)
-                      (progn (part-quad foot-row 0 foot-w foot-h left-x left-y nil 255 255 255)
-                             (part-quad foot-row 0 foot-w foot-h right-x right-y nil 255 255 255))
-                      (progn (part-quad foot-row 0 foot-w foot-h right-x right-y nil 255 255 255)
-                             (part-quad foot-row 0 foot-w foot-h left-x left-y nil 255 255 255)))))
+              (unless mounted
+                (multiple-value-bind (left-x left-y left-depth)
+                    (project (* stride swing) (- foot-side)
+                             (+ foot-height (* foot-lift (max 0f0 lift))))
+                  (declare (type single-float left-x left-y left-depth))
+                  (multiple-value-bind (right-x right-y right-depth)
+                      (project (* (- stride) swing) foot-side
+                               (+ foot-height (* foot-lift (max 0f0 (- lift)))))
+                    (declare (type single-float right-x right-y right-depth))
+                    (if (< left-depth right-depth)
+                        (progn (part-quad foot-row 0 foot-w foot-h left-x left-y nil 255 255 255)
+                               (part-quad foot-row 0 foot-w foot-h right-x right-y nil 255 255 255))
+                        (progn (part-quad foot-row 0 foot-w foot-h right-x right-y nil 255 255 255)
+                               (part-quad foot-row 0 foot-w foot-h left-x left-y nil 255 255 255))))))
               ;; Derrière le corps.
               (pole-part t)
               (blade-part t)
@@ -849,27 +972,37 @@ dans le sens des aiguilles d'une montre à l'écran)."
             (multiple-value-bind (shield-row shield-frames shield-w shield-h)
                 (atlas-overlay atlas :part-shield)
               (declare (ignore shield-frames))
-              (when (and body-row head-row hand-row foot-row solid-row shield-row)
-                (update-bearers battle)
-                (draw-corpses-batch battle alpha camera atlas
-                                    body-row (float body-w 1f0) (float body-h 1f0)
-                                    head-row (float head-w 1f0) (float head-h 1f0)
-                                    hand-row (float hand-w 1f0) (float hand-h 1f0)
-                                    foot-row (float foot-w 1f0) (float foot-h 1f0)
-                                    solid-row
-                                    shield-row (float shield-w 1f0) (float shield-h 1f0))))))))))
+              (multiple-value-bind (horse-row horse-frames horse-w horse-h)
+                  (atlas-overlay atlas :part-horse)
+                (declare (ignore horse-frames))
+                (when (and body-row head-row hand-row foot-row solid-row shield-row horse-row)
+                  (update-bearers battle)
+                  (draw-corpses-batch battle alpha camera atlas
+                                      body-row (float body-w 1f0) (float body-h 1f0)
+                                      head-row (float head-w 1f0) (float head-h 1f0)
+                                      hand-row (float hand-w 1f0) (float hand-h 1f0)
+                                      foot-row (float foot-w 1f0) (float foot-h 1f0)
+                                      solid-row
+                                      shield-row (float shield-w 1f0) (float shield-h 1f0)
+                                      horse-row (float horse-w 1f0) (float horse-h 1f0)))))))))))
 
 (defun draw-corpses-batch (battle alpha camera atlas
                            body-row body-w body-h head-row head-w head-h
                            hand-row hand-w hand-h foot-row foot-w foot-h solid-row
-                           shield-row shield-w shield-h)
+                           shield-row shield-w shield-h horse-row horse-w horse-h)
   "Dessine les morts. Les tampons par régiment (*REGIMENT-WEAPONS*,
 *REGIMENT-SHIELDS*) doivent être à jour : voir UPDATE-BEARERS."
   (declare (optimize (speed 3) (safety 1))
            (type single-float alpha body-w body-h head-w head-h hand-w hand-h foot-w foot-h
-                 shield-w shield-h)
-           (type fixnum body-row head-row hand-row foot-row solid-row shield-row))
+                 shield-w shield-h horse-w horse-h)
+           (type fixnum body-row head-row hand-row foot-row solid-row shield-row horse-row))
   (let* ((log (battle-deaths battle))
+         (regiment-mounts *regiment-mounts*)
+         (horse-anchor (the single-float *horse-anchor*))
+         (horse-lying (the single-float *horse-lying-height*))
+         (horse-hip (the single-float *horse-hip-forward*))
+         (horse-leg-half (* 0.5f0 (the single-float *horse-leg-width*)))
+         (horse-leg-color *horse-leg-color*) (horse-shank-color *horse-shank-color*)
          (total (death-count log))
          (capacity (death-log-capacity log))
          (n (min total capacity))
@@ -934,7 +1067,9 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (wood *pike-wood*) (steel *pike-steel*))
     (declare (type fixnum total capacity n oldest corpse-shade lowered-ranks)
              (type float-array xs ys facings)
-             (type fixnum-array sides ticks ranks death-regiments regiment-weapons regiment-shields)
+             (type fixnum-array sides ticks ranks death-regiments regiment-weapons regiment-shields
+                   regiment-mounts)
+             (type single-float horse-anchor horse-lying horse-hip horse-leg-half)
              (type fixnum known-regiments)
              (type single-float sword-length sword-guard)
              (type simple-vector strips mirrored)
@@ -995,6 +1130,68 @@ dans le sens des aiguilles d'une montre à l'écran)."
                            ;; Point du corps à la hauteur H debout, basculé.
                            `(ground (* gdx ,h sin-tilt) (* gdy ,h sin-tilt)
                                     (+ (* ,h cos-tilt) (* lying sin-tilt)))))
+                ;; Cheval du cavalier : il s'affaisse sur le flanc, de profil,
+                ;; le long de son orientation, jambes allongées ; le cavalier
+                ;; tombe par-dessus.
+                (when (and (< regiment known-regiments) (= 1 (aref regiment-mounts regiment)))
+                  (let* ((ex c) (ey (* squash s))
+                         (norm (max 1f-3 (sqrt (+ (* ex ex) (* ey ey)))))
+                         ;; Tête vers l'orientation : image de profil, retournée
+                         ;; vers l'ouest, jamais à l'envers.
+                         (flip (minusp c))
+                         (ca0 (if flip (- (/ ex norm)) (/ ex norm)))
+                         (sa0 (if flip (- (/ ey norm)) (/ ey norm)))
+                         ;; Il bascule, jusqu'à presque se retourner : dos au sol,
+                         ;; jambes en l'air, de biais d'un côté ou de l'autre.
+                         (roll (* fall (- pi-f (the single-float *horse-dead-tilt*))
+                                  (if (< (death-jitter serial 7) 0.5f0) 1f0 -1f0)))
+                         (roll-cos (cos roll)) (roll-sin (sin roll))
+                         (ca (- (* ca0 roll-cos) (* sa0 roll-sin)))
+                         (sa (+ (* sa0 roll-cos) (* ca0 roll-sin)))
+                         (hx sx)
+                         (hy (- sy (* zoom (+ horse-anchor (* fall (- horse-lying horse-anchor))))))
+                         (leg-length (* zoom (- 1.0f0 (* 0.25f0 fall))))
+                         (hip-down (* zoom 0.2f0))
+                         (hip-along (* zoom horse-hip))
+                         (splay (* zoom 0.15f0 fall))
+                         (legs-r (floor (* (the fixnum (first horse-leg-color)) light) 255))
+                         (legs-g (floor (* (the fixnum (second horse-leg-color)) light) 255))
+                         (legs-b (floor (* (the fixnum (third horse-leg-color)) light) 255))
+                         (shank-r (floor (* (the fixnum (first horse-shank-color)) light) 255))
+                         (shank-g (floor (* (the fixnum (second horse-shank-color)) light) 255))
+                         (shank-b (floor (* (the fixnum (third horse-shank-color)) light) 255)))
+                    (declare (type single-float ex ey norm ca0 sa0 roll roll-cos roll-sin ca sa hx hy leg-length hip-down
+                                   hip-along splay)
+                             (type fixnum legs-r legs-g legs-b shank-r shank-g shank-b))
+                    (macrolet ((local (along down)
+                                 ;; Point du repère de l'image tournée : le long du
+                                 ;; corps (vers la tête), et vers son ventre.
+                                 `(values (+ hx (- (* ,along ca) (* ,down sa)))
+                                          (+ hy (+ (* ,along sa) (* ,down ca)))))
+                               (leg (along spread)
+                                 `(multiple-value-bind (x0 y0) (local ,along hip-down)
+                                    (multiple-value-bind (x1 y1)
+                                        (local (+ ,along (* 0.5f0 ,spread)) (+ hip-down (* 0.5f0 leg-length)))
+                                      (multiple-value-bind (x2 y2)
+                                          (local (+ ,along ,spread) (+ hip-down leg-length))
+                                        (let ((w (* zoom horse-leg-half)))
+                                          (macrolet ((thick (ax ay bx by width r g b)
+                                                       `(let* ((ex (- ,bx ,ax)) (ey (- ,by ,ay))
+                                                               (len (max 1f-3 (sqrt (+ (* ex ex) (* ey ey)))))
+                                                               (nx (* ,width (/ (- ey) len)))
+                                                               (ny (* ,width (/ ex len))))
+                                                          (solid-quad (- ,ax nx) (- ,ay ny) (+ ,ax nx) (+ ,ay ny)
+                                                                      (+ ,bx nx) (+ ,by ny) (- ,bx nx) (- ,by ny)
+                                                                      ,r ,g ,b))))
+                                            (thick x0 y0 x1 y1 w legs-r legs-g legs-b)
+                                            (thick x1 y1 x2 y2 (* 0.75f0 w) shank-r shank-g shank-b))))))))
+                      (leg hip-along splay)
+                      (leg (- hip-along (* zoom 0.12f0)) (* 1.5f0 splay))
+                      (leg (- hip-along) (- splay))
+                      (leg (+ (- hip-along) (* zoom 0.12f0)) (* -1.5f0 splay)))
+                    (turned-part-quad horse-row 0 horse-w horse-h hx hy flip ca sa light light light)
+                    (turned-part-quad (1+ horse-row) 0 horse-w horse-h hx hy flip ca sa
+                                      team-r team-g team-b)))
                 ;; Pique : elle s'abat vers l'avant si elle était croisée, sinon
                 ;; du côté où tombe le soldat.
                 (when (and pikes (or (= weapon 1) (= weapon 3)))
