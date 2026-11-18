@@ -150,8 +150,21 @@ loin, est hors de portée."
         *hold-margin*)))
 
 (defparameter *bearer-rank* 3
-  "Rang du porteur d'étendard, compté depuis 0 au front : le quatrième, hors de
-portée des piques ennemies.")
+  "Rang du porteur d'étendard d'un régiment de mêlée, compté depuis 0 au front :
+le quatrième, hors de portée des piques ennemies. Celui d'un régiment de tireurs
+est au dernier rang (BEARER-RANK).")
+
+(defun ranged-regiment-p (regiment)
+  (eq (attack-kind (stats-primary (regiment-stats regiment))) :ranged))
+
+(defun bearer-rank (regiment)
+  "Rang du porteur d'étendard de REGIMENT. Chez les tireurs, le dernier : en
+queue de sa file, il ne se trouve jamais sur le chemin des hommes qui avancent
+d'un rang à la contremarche."
+  (let ((last (1- (regiment-depth regiment))))
+    (if (ranged-regiment-p regiment)
+        last
+        (min *bearer-rank* last))))
 
 ;;; Rangs et files
 ;;;
@@ -175,24 +188,106 @@ sur FILES files, le dernier rang centré."
                        (+ file (floor (- files last-size) 2))
                        file)))))
 
-(defun refresh-layout (regiment soldiers)
+(defun swap-soldier-data (soldiers i j)
+  "Échange les soldats I et J, mais pas leurs places (rang et file) : chacun prend
+la place de l'autre."
+  (dolist (slot *soldier-float-arrays*)
+    (let ((array (slot-value soldiers slot)))
+      (rotatef (aref array i) (aref array j))))
+  (dolist (slot *soldier-fixnum-arrays*)
+    (unless (member slot '(rank file))
+      (let ((array (slot-value soldiers slot)))
+        (rotatef (aref array i) (aref array j))))))
+
+(defun file-tail-p (regiment soldiers i)
+  "Vrai si le soldat I est le dernier de sa file : personne derrière lui. La
+plage est rangée par rang : tout homme de sa file plus loin dans la plage est
+derrière lui."
+  (let ((files (soldiers-file soldiers)))
+    (loop for j from (1+ i) below (regiment-end regiment)
+          never (= (aref files j) (aref files i)))))
+
+(defun middle-of-rank (regiment soldiers rank)
+  "Indice du soldat au milieu du rang RANK de REGIMENT (ou du premier rang
+plus profond s'il est vide)."
+  (let* ((start (regiment-start regiment))
+         (end (regiment-end regiment))
+         (ranks (soldiers-rank soldiers))
+         (first (loop for i from start below end
+                      when (>= (aref ranks i) rank) return i))
+         (count (loop for i from first below end
+                      while (= (aref ranks i) (aref ranks first)) count t)))
+    (+ first (floor count 2))))
+
+(defun nearest-standing (regiment soldiers x y)
+  "Le soldat vivant de REGIMENT le plus proche du point X Y, parmi ceux qui ne
+sont pas en contremarche s'il y en a ; -1 si aucun ne vit (morts du tick pas
+encore retirés)."
+  (let ((xs (soldiers-x soldiers)) (ys (soldiers-y soldiers))
+        (march (soldiers-march soldiers)) (hps (soldiers-hp soldiers))
+        (best -1) (best-d 0f0) (best-marching t))
+    (loop for i from (regiment-start regiment) below (regiment-end regiment)
+          do (let ((d (+ (expt (- (aref xs i) x) 2) (expt (- (aref ys i) y) 2)))
+                   (marching (plusp (aref march i))))
+               (when (and (plusp (aref hps i))
+                          (or (< best 0)
+                              (and best-marching (not marching))
+                              (and (eq marching best-marching) (< d best-d))))
+                 (setf best i best-d d best-marching marching))))
+    best))
+
+(defun file-tail (regiment soldiers i)
+  "Indice du dernier homme de la file du soldat I."
+  (let ((files (soldiers-file soldiers)))
+    (loop with tail = i
+          for j from (1+ i) below (regiment-end regiment)
+          when (= (aref files j) (aref files i)) do (setf tail j)
+          finally (return tail))))
+
+(defun ranged-bearer (regiment soldiers keep fallen-x fallen-y)
+  "Porteur d'étendard d'un régiment de tireurs : toujours en queue de sa file,
+pour ne barrer le chemin de personne à la contremarche. KEEP, l'indice du
+porteur actuel s'il vit encore, le reste ; s'il n'est plus en queue de file
+(reformation), il échange sa place avec l'homme du milieu du dernier rang et
+y marche, l'étendard en main. Mort à FALLEN-X FALLEN-Y, l'étendard passe à
+l'homme le plus proche qui n'est pas en contremarche, qui échange sa place avec
+le dernier de sa file : il ne saute jamais vers un homme qui redescend de la
+contremarche, à l'autre bout du régiment."
+  (flet ((carry-to (man place)
+           ;; MAN prend la place PLACE, l'étendard en main ; l'autre la sienne.
+           ;; Pas d'échange avec un mort pas encore retiré : APPLY-DAMAGE, qui
+           ;; parcourt la plage en montant, ne le verrait plus.
+           (cond ((= man place) place)
+                 ((plusp (aref (soldiers-hp soldiers) place))
+                  (swap-soldier-data soldiers man place)
+                  place)
+                 (t man))))
+    (cond ((and (>= keep 0) (file-tail-p regiment soldiers keep)) keep)
+          ((>= keep 0)
+           (carry-to keep (middle-of-rank regiment soldiers (bearer-rank regiment))))
+          (fallen-x
+           (let ((man (nearest-standing regiment soldiers fallen-x fallen-y)))
+             (if (< man 0)
+                 (middle-of-rank regiment soldiers (bearer-rank regiment))
+                 (carry-to man (file-tail regiment soldiers man)))))
+          (t (middle-of-rank regiment soldiers (bearer-rank regiment))))))
+
+(defun refresh-layout (regiment soldiers &key (keep -1) fallen-x fallen-y)
   "Recalcule la profondeur et le porteur d'étendard de REGIMENT après un
-changement de rangs : le porteur est au milieu du rang *BEARER-RANK*, ou du
-dernier s'il en reste moins ; -1 pour un homme seul, qui se bat. Il ne frappe
-pas ; quand il meurt ou change de rang, l'homme du milieu prend l'étendard."
+changement de rangs : -1 pour un homme seul, qui se bat ; sinon, dans un
+régiment de mêlée, l'homme au milieu du rang BEARER-RANK (le quatrième, ou le
+dernier s'il en reste moins), qui cède l'étendard à l'homme du milieu quand il
+meurt ou change de rang ; dans un régiment de tireurs, RANGED-BEARER, qui garde
+le porteur KEEP (indice à jour) tant qu'il vit. Le porteur ne frappe pas."
   (let ((alive (regiment-alive regiment))
         (start (regiment-start regiment))
         (ranks (soldiers-rank soldiers)))
     (setf (regiment-depth regiment) (if (plusp alive) (1+ (aref ranks (+ start alive -1))) 0)
           (regiment-bearer regiment)
-          (if (> alive 1)
-              (let* ((rank (min *bearer-rank* (1- (regiment-depth regiment))))
-                     (first (loop for i from start below (+ start alive)
-                                  when (>= (aref ranks i) rank) return i))
-                     (count (loop for i from first below (+ start alive)
-                                  while (= (aref ranks i) rank) count t)))
-                (+ first (floor count 2)))
-              -1)
+          (cond ((<= alive 1) -1)
+                ((ranged-regiment-p regiment)
+                 (ranged-bearer regiment soldiers keep fallen-x fallen-y))
+                (t (middle-of-rank regiment soldiers (bearer-rank regiment))))
           (regiment-slots-dirty-p regiment) t)))
 
 (defun front-rank-end (regiment soldiers)
@@ -221,7 +316,8 @@ de file."
       (multiple-value-bind (rank file) (dense-place k alive files)
         (setf (aref (soldiers-rank soldiers) (+ start k)) rank
               (aref (soldiers-file soldiers) (+ start k)) file)))
-    (refresh-layout regiment soldiers)))
+    ;; Les indices ne bougent pas : le porteur reste le même homme.
+    (refresh-layout regiment soldiers :keep (regiment-bearer regiment))))
 
 (defun layout-dense-p (regiment soldiers)
   "Vrai si REGIMENT est déjà en rangs pleins, sans trou."

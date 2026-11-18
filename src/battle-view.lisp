@@ -160,7 +160,10 @@ usage que *BEARERS*.")
                                                      0)
                    (aref *regiment-guards* k)
                    ;; En garde sous un ordre d'attaque, ou l'ennemi proche (défense).
-                   (if (or (eq (first (regiment-orders regiment)) :attack)
+                   ;; Des tireurs ne mettent en joue qu'un ennemi à portée devant
+                   ;; eux (alerte), pas dès l'ordre d'attaque.
+                   (if (or (and (eq (first (regiment-orders regiment)) :attack)
+                                (not (ranged-regiment-p regiment)))
                            (regiment-alert-p regiment))
                        1 0))
              (setf (aref *bearers* k) (regiment-bearer regiment)

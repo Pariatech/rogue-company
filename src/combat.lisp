@@ -673,7 +673,12 @@ plage, qui revérifie l'indice I, voit tous les morts."
          (ranks (soldiers-rank soldiers))
          (files (soldiers-file soldiers))
          (file (aref files i))
-         (hole i))
+         (hole i)
+         ;; Le porteur d'étendard, suivi d'indice en indice ; -1 s'il meurt.
+         (bearer (regiment-bearer regiment))
+         (fallen-x (when (= i bearer) (aref (soldiers-x soldiers) i)))
+         (fallen-y (when (= i bearer) (aref (soldiers-y soldiers) i))))
+    (when (= i bearer) (setf bearer -1))
     ;; La file avance : l'homme du rang suivant, dans la même file, prend
     ;; l'indice (donc le rang) du trou.
     (loop
@@ -685,19 +690,21 @@ plage, qui revérifie l'indice I, voit tous les morts."
                            return nil)))
         (unless next (return))
         (move-soldier soldiers next hole)
+        (when (= next bearer) (setf bearer hole))
         (setf (aref ranks hole) rank
               (aref files hole) file
               hole next)))
     ;; Le trou en queue de file disparaît de la plage : les suivants se
     ;; décalent d'un indice, rang et file compris.
     (loop for j from hole below (1- end)
-          do (move-soldier soldiers (1+ j) j))
+          do (move-soldier soldiers (1+ j) j)
+             (when (= (1+ j) bearer) (setf bearer j)))
     ;; La dernière case de la plage se libère : réservée, marquée morte.
     (let ((freed (1- end)))
       (setf (aref (soldiers-hp soldiers) freed) 0f0
             (aref (soldiers-target soldiers) freed) -1))
     (decf (regiment-alive regiment))
-    (refresh-layout regiment soldiers)
+    (refresh-layout regiment soldiers :keep bearer :fallen-x fallen-x :fallen-y fallen-y)
     (lose-morale regiment (casualty-morale regiment))))
 
 (defun apply-damage (battle)

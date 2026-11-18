@@ -105,9 +105,6 @@ tire pas : on tire immobile.")
   "Un régiment de tireurs arrêté se tourne vers l'ennemi quand celui-ci sort de
 cet angle autour de son front (20°).")
 
-(defun ranged-regiment-p (regiment)
-  (eq (attack-kind (stats-primary (regiment-stats regiment))) :ranged))
-
 (defun box-gap (a b)
   "Distance entre les boîtes de deux régiments, 0 si elles se chevauchent. Les
 boîtes suivent les axes : en diagonale, elles débordent largement des
@@ -127,17 +124,6 @@ premier tri (FIRE-DISTANCE ne peut pas être plus petite)."
   (dolist (slot *soldier-fixnum-arrays*)
     (let ((array (slot-value soldiers slot)))
       (rotatef (aref array i) (aref array j)))))
-
-(defun swap-soldier-data (soldiers i j)
-  "Échange les soldats I et J, mais pas leurs places (rang et file) : chacun prend
-la place de l'autre."
-  (dolist (slot *soldier-float-arrays*)
-    (let ((array (slot-value soldiers slot)))
-      (rotatef (aref array i) (aref array j))))
-  (dolist (slot *soldier-fixnum-arrays*)
-    (unless (member slot '(rank file))
-      (let ((array (slot-value soldiers slot)))
-        (rotatef (aref array i) (aref array j))))))
 
 (defun countermarch (regiment soldiers)
   "Dans chaque file de REGIMENT, l'homme du premier rang passe en queue de sa
