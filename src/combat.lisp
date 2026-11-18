@@ -32,12 +32,10 @@ files) avant qu'un régiment figé reprenne son avance.")
   "Ticks sans ennemi à portée de l'arme secondaire avant de reprendre l'arme
 principale : évite d'alterner quand un ennemi oscille à la limite.")
 
-(defparameter *press-distance* 1.0f0
-  "Sous les piques : une arme à portée minimale (la pique) ne s'abaisse pas, depuis
-le deuxième rang ou plus loin, sur un ennemi à moins de cette distance (de bord
-à bord) de son propre premier rang. Collé au premier rang, l'ennemi n'a plus en
-face que lui : des rodeleros passés sous les pointes ne prennent plus les coups
-de quatre rangs de piques.")
+(defparameter *closed-margin* 0.5f0
+  "Un soldat du premier rang compte au contact (REGIMENT-CLOSED) si sa cible est
+à sa distance d'arrêt plus cette marge : les coups, les reculs et les
+remplaçants qui avancent le tiennent rarement pile à la distance d'arrêt.")
 
 (defparameter *stun-seconds-per-damage* 0.04f0
   "Étourdissement d'un soldat touché au corps à corps, en secondes par point de
@@ -181,6 +179,24 @@ derrière leurs piques se battent contre les piques, pas autour)."
                (not (regiment-routed-p fought)))
       (order-attack regiment fought))))
 
+(defun assailing-regiment (battle regiment)
+  "Régiment ennemi dont le plus de soldats visaient un soldat de REGIMENT au
+dernier tick, et leur nombre ; NIL et 0 si personne."
+  (let* ((soldiers (battle-soldiers battle))
+         (targets (soldiers-target soldiers))
+         (owners (soldiers-regiment soldiers))
+         (index (regiment-index regiment))
+         (best nil) (best-count 0))
+    (loop for other across (battle-regiments battle)
+          when (and (/= (regiment-side other) (regiment-side regiment))
+                    (plusp (regiment-alive other)))
+            do (let ((count (loop for i from (regiment-start other) below (regiment-end other)
+                                  count (let ((target (aref targets i)))
+                                          (and (>= target 0) (= (aref owners target) index))))))
+                 (when (> count best-count)
+                   (setf best other best-count count))))
+    (values best best-count)))
+
 (defun riposte (battle regiment)
   "Un régiment sans ordre d'attaque (aucun, ou un déplacement : en défense, ou
 surpris en marche) abordé par l'ennemi riposte : assez de
@@ -188,11 +204,17 @@ ses soldats au contact pour qu'un régiment qui attaque s'y fige, il attaque le
 régiment contre lequel il se bat, sur place. Il pose ses piques et pousse."
   (when (and (member (first (regiment-orders regiment)) '(nil :move))
              (plusp (regiment-alive regiment))
-             (>= (regiment-contact regiment)
+             (>= (if (ranged-regiment-p regiment)
+                     ;; Des tireurs frappés par des armes plus longues que
+                     ;; leur épée ripostent aussi.
+                     (max (regiment-contact regiment) (regiment-assailed regiment))
+                     (regiment-contact regiment))
                  (max 1 (floor (* *hold-fraction*
                                   (formation-files (regiment-formation regiment)
                                                    (regiment-alive regiment)))))))
-    (let ((fought (fought-regiment battle regiment)))
+    (let ((fought (or (fought-regiment battle regiment)
+                      (and (ranged-regiment-p regiment)
+                           (assailing-regiment battle regiment)))))
       (when (and fought (not (regiment-routed-p fought)))
         (order-attack regiment fought)))))
 
@@ -320,21 +342,21 @@ premier rang qui sont au contact (cible à la distance d'arrêt)."
          (cooldowns (soldiers-cooldown soldiers))
          (calms (soldiers-calm soldiers))
          (max-radius (battle-max-radius battle))
-         (hold-distance (regiment-hold-distance regiment))
+         (closed-distance (+ (regiment-hold-distance regiment) *closed-margin*))
          ;; Rang de chaque soldat : seul le premier compte au contact (poussée,
          ;; arrêt).
          (ranks (soldiers-rank soldiers))
-         (spacing (formation-spacing (regiment-formation regiment)))
-         (press (the single-float *press-distance*))
          ;; Une arme longue ne vise que devant sa formation (flanks.lisp).
          (front-x (cos (formation-facing (regiment-formation regiment))))
          (front-y (sin (formation-facing (regiment-formation regiment))))
          (front-cos (the single-float *front-cos*))
+         ;; Tireurs en mêlée : tous tirent l'épée, même sans ennemi à portée.
+         (draw (and (eq (attack-kind primary) :ranged) (regiment-in-melee-p regiment)))
          (engaged 0)
          (closed 0))
     (declare (type fixnum side start end engaged closed)
-             (type single-float spacing press front-x front-y front-cos)
-             (type single-float hold-distance)
+             (type single-float front-x front-y front-cos)
+             (type single-float closed-distance)
              (type fixnum-array targets weapons switch-timers cooldowns calms ranks)
              (type single-float max-radius))
     (multiple-value-bind (p-min p-reach) (melee-reaches primary)
@@ -351,6 +373,7 @@ premier rang qui sont au contact (cible à la distance d'arrêt)."
                (search (max p-reach s-reach)))
           (declare (type single-float p-min p-reach s-reach search))
           ;; Minuteries : elles avancent même sans ennemi.
+          (setf draw (and draw s-usable))
           (loop for i of-type fixnum from start below end
                 do (when (plusp (aref switch-timers i)) (decf (aref switch-timers i)))
                    (when (plusp (aref cooldowns i)) (decf (aref cooldowns i))))
@@ -385,16 +408,8 @@ premier rang qui sont au contact (cible à la distance d'arrêt)."
                                 (column (- cell (* row columns)))
                                 (span (min 8 (the fixnum (ceiling (+ search ri max-radius) cell-size))))
                                 (best-p -1) (best-p-d most-positive-single-float)
-                                (best-s -1) (best-s-d most-positive-single-float)
-                                ;; Arme à portée minimale, hors du premier rang : un
-                                ;; ennemi doit être à PRESS au moins de notre premier
-                                ;; rang, à BEHIND mètres devant ce soldat.
-                                (behind (if (and (plusp p-min) (plusp (aref ranks i)))
-                                            (+ (* spacing (float (aref ranks i) 1f0))
-                                               press)
-                                            0f0))
-                                (p-floor (max p-min behind)))
-                           (declare (type single-float xi yi ri best-p-d best-s-d behind p-floor)
+                                (best-s -1) (best-s-d most-positive-single-float))
+                           (declare (type single-float xi yi ri best-p-d best-s-d)
                                     (type fixnum cell row column span best-p best-s))
                            (loop for r of-type fixnum from (max 0 (- row span))
                                    to (min (1- columns) (+ row span))
@@ -413,7 +428,7 @@ premier rang qui sont au contact (cible à la distance d'arrêt)."
                                                                                       (+ (* dx dx) (* dy dy)))))
                                                                    (d (- center ri (aref radii j))))
                                                               (declare (type single-float dx dy center d))
-                                                              (when (and (<= p-floor d p-reach) (< d best-p-d)
+                                                              (when (and (<= p-min d p-reach) (< d best-p-d)
                                                                          (or (zerop p-min)
                                                                              (>= (+ (* dx front-x) (* dy front-y))
                                                                                  (* front-cos center))))
@@ -427,6 +442,7 @@ premier rang qui sont au contact (cible à la distance d'arrêt)."
                            ;; seulement après un moment sans ennemi au contact.
                            (let* ((weapon (aref weapons i))
                                   (wanted (cond ((and (>= best-s 0) (< best-s-d p-min)) 1)
+                                                (draw 1)
                                                 ((>= best-p 0)
                                                  (if (and (= weapon 1)
                                                           (< (aref calms i) return-ticks))
@@ -449,7 +465,7 @@ premier rang qui sont au contact (cible à la distance d'arrêt)."
                                    (incf engaged)
                                    (when (and (zerop (aref ranks i))
                                               (<= (if (= wanted 0) best-p-d best-s-d)
-                                                  hold-distance))
+                                                  closed-distance))
                                      (incf closed)))))))))
           (setf (regiment-engaged regiment) engaged
                 (regiment-closed regiment) closed))))))

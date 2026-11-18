@@ -25,7 +25,8 @@
   :slots '(:main) :hands 2 :weight 5 :price 20
   :attack '(:kind :melee :min-reach 1.5 :reach 4.5 :damage 24 :piercing 8
             :cooldown 1.5 :ready-time 0.5)
-  :modifiers '((:ranks :set 8))
+  ;; Quinze rangs : un bataillon carré, 15 files sur 15 rangs à 225 hommes.
+  :modifiers '((:ranks :set 15))
   :forbids '(:mount))
 
 (define-item :halberd "Hallebarde"
@@ -34,9 +35,9 @@
   ;; frappe un ennemi collé (sinon les rodeleros la forcent à l'épée).
   :attack '(:kind :melee :reach 2.8 :damage 20 :piercing 8
             :cooldown 1.4 :ready-time 0.5)
-  ;; Ordre serré, plus profond qu'une troupe d'épées. La portée laisse le
+  ;; Ordre serré, 15 files sur 7 rangs à 105 hommes. La portée laisse le
   ;; deuxième rang frapper par-dessus l'épaule du premier sur un ennemi au contact.
-  :modifiers '((:ranks :set 6)))
+  :modifiers '((:ranks :set 7)))
 
 (define-item :sword "Épée"
   :slots '(:main :secondary) :hands 1 :weight 1.5 :price 15
@@ -60,8 +61,9 @@
   :slots '(:main) :hands 2 :weight 7 :price 40
   :attack '(:kind :ranged :volley t :range 80 :damage 20 :piercing 110
             :reload 20 :ready-time 1.0)
-  ;; Six rangs : la contremarche laisse cinq rangs recharger pendant qu'un tire.
-  :modifiers '((:spacing :set 1.2) (:ranks :set 6))
+  ;; Sept rangs, 15 files à 105 hommes : la contremarche laisse six rangs
+  ;; recharger pendant qu'un tire.
+  :modifiers '((:spacing :set 1.2) (:ranks :set 7))
   :tags '(:firearm)
   :forbids '(:mount))
 
@@ -69,8 +71,9 @@
   :slots '(:main) :hands 2 :weight 4.5 :price 30
   :attack '(:kind :ranged :volley t :range 60 :damage 20 :piercing 90 :accuracy 0.05
             :reload 15 :ready-time 1.0)
-  ;; Six rangs : la contremarche laisse cinq rangs recharger pendant qu'un tire.
-  :modifiers '((:spacing :set 1.2) (:ranks :set 6))
+  ;; Sept rangs, 15 files à 105 hommes : la contremarche laisse six rangs
+  ;; recharger pendant qu'un tire.
+  :modifiers '((:spacing :set 1.2) (:ranks :set 7))
   :tags '(:firearm))
 
 (define-item :crossbow "Arbalète"
@@ -90,8 +93,9 @@
 (define-item :rodela "Rondache"
   :slots '(:shield) :hands 1 :weight 4 :price 15
   ;; Épée et rondache : infanterie légère, qui marche plus vite que les blocs de
-  ;; piques et se bat en ordre lâche, chacun cherchant son homme.
-  :modifiers '((:defense :add 0.15) (:cover :add 0.1) (:speed :add 0.4))
+  ;; piques et se bat en ordre lâche, chacun cherchant son homme. Sept rangs :
+  ;; 15 files à 105 hommes.
+  :modifiers '((:defense :add 0.15) (:cover :add 0.1) (:speed :add 0.4) (:ranks :set 7))
   :traits '(:loose-order))
 
 (define-item :pavise "Pavise"

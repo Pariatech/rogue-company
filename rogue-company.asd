@@ -41,6 +41,7 @@
                (:file "battle-view")
                (:file "soldier-parts")
                (:file "blood-view")
+               (:file "tally-view")
                (:file "battle-scene")
                (:file "game")
                (:file "bench")))

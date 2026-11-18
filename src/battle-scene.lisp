@@ -21,6 +21,8 @@
                :documentation "Tire les ordres de R, sans toucher au générateur de la bataille.")
    (clock :initform (make-fixed-clock) :reader scene-clock)
    (camera :initform (make-camera) :reader scene-camera)
+   (tally :initform (make-tally) :reader scene-tally
+          :documentation "Tableau des régiments (tally-view.lisp).")
    (resume-speed :initform 1 :accessor scene-resume-speed
                  :documentation "Vitesse retrouvée quand on reprend après Espace.")
    (tick-text :initform (make-text-buffer) :reader scene-tick-text
@@ -77,6 +79,8 @@ que s'ils changent, ce qui est rare."))
            (order-random-moves (scene-battle scene) (scene-orders-rng scene)))
          (when (key-pressed-p :key-c)
            (order-charge (scene-battle scene) :sides *demo-charge-sides*))
+         (when (key-pressed-p :key-tab)
+           (setf *draw-tally* (not *draw-tally*)))
          (when (key-pressed-p :key-v)
            (setf *soldier-style* (if (eq *soldier-style* :parts) :sprites :parts)))
          (update-camera (scene-camera scene) dt)
@@ -115,7 +119,8 @@ que s'ils changent, ce qui est rare."))
   (clear-background :black)
   (draw-soldiers (scene-battle scene) (clock-alpha (scene-clock scene)) (scene-camera scene))
   (draw-battle-hud scene)
-  (draw-text "Espace : pause   + / - : vitesse   R : nouvel ordre   C : charge   V : morceaux / sprites   Flèches, ZQSD, clic droit : caméra   Molette : zoom   F11 : plein écran   Échap : menu"
+  (draw-tally (scene-tally scene) (scene-battle scene))
+  (draw-text "Espace : pause   + / - : vitesse   R : nouvel ordre   C : charge   V : morceaux / sprites   Tab : tableau   Flèches, ZQSD, clic droit : caméra   Molette : zoom   F11 : plein écran   Échap : menu"
              10 (- *window-height* 26) 16 :darkgray))
 
 ;;; Inspection

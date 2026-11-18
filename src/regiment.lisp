@@ -26,6 +26,10 @@ un régiment débandé, ou NIL.")
             :documentation "Soldats qui avaient une cible au dernier tick.")
    (closed :initform 0 :accessor regiment-closed :type fixnum
            :documentation "Soldats du premier rang dont la cible était à la distance d'arrêt.")
+   (assailed :initform 0 :accessor regiment-assailed :type fixnum
+             :documentation "Ennemis qui visaient un de ses soldats en mêlée au dernier
+tick (flanks.lisp) : un régiment de tireurs frappé par des piques qu'il
+n'atteint pas est en mêlée quand même.")
    (flank-attackers :initform 0 :accessor regiment-flank-attackers :type fixnum
                     :documentation "Ennemis qui le visaient de flanc au dernier tick (flanks.lisp).")
    (rear-attackers :initform 0 :accessor regiment-rear-attackers :type fixnum
@@ -138,16 +142,28 @@ plus près.")
   "Le soldat s'arrête à cette distance en deçà de la portée de son arme principale.")
 
 (defun regiment-hold-distance (regiment)
-  "Distance de bord à bord où un soldat s'arrête devant sa cible : 0,5 m en
-deçà de la portée de son arme principale de mêlée, et jamais plus près que sa
-portée minimale. Avec une pique (portée 4,5 m), les premiers rangs s'arrêtent
-à 4 m l'un de l'autre : le premier rang frappe, le deuxième, un mètre plus
-loin, est hors de portée."
-  (let ((primary (stats-primary (regiment-stats regiment))))
-    (if (eq (attack-kind primary) :melee)
-        (max (+ *hold-margin* (attack-min-reach primary))
-             (- (attack-reach primary) *hold-short-of-reach*))
-        *hold-margin*)))
+  "Distance de bord à bord où un soldat s'arrête devant sa cible. Une arme à
+portée minimale (la pique) serre l'ennemi au plus près, à sa portée minimale
+plus *HOLD-MARGIN* (1,75 m) : le plus de rangs possible l'atteignent (à 1 m
+d'intervalle, les trois premiers, à 1,75, 2,75 et 3,75 m sur 4,5 m de portée).
+Une autre arme de mêlée s'arrête *HOLD-SHORT-OF-REACH* en deçà de sa portée.
+Des tireurs comptent leur arme secondaire : au contact, ils tirent l'épée."
+  (let ((primary (let ((stats (regiment-stats regiment)))
+                   ;; Des tireurs au contact se battent à l'arme secondaire.
+                   (if (and (eq (attack-kind (stats-primary stats)) :ranged)
+                            (eq (attack-kind (stats-secondary stats)) :melee))
+                       (stats-secondary stats)
+                       (stats-primary stats)))))
+    (cond ((not (eq (attack-kind primary) :melee)) *hold-margin*)
+          ((plusp (attack-min-reach primary))
+           (+ *hold-margin* (attack-min-reach primary)))
+          (t (max *hold-margin* (- (attack-reach primary) *hold-short-of-reach*))))))
+
+(defun regiment-in-melee-p (regiment)
+  "Vrai si REGIMENT se battait en mêlée au dernier tick : un de ses soldats
+avait une cible, ou un ennemi en visait un."
+  (or (plusp (regiment-engaged regiment))
+      (plusp (regiment-assailed regiment))))
 
 (defparameter *bearer-rank* 3
   "Rang du porteur d'étendard d'un régiment de mêlée, compté depuis 0 au front :
@@ -337,7 +353,7 @@ mêlée, sans tir et sans ennemi proche (REGIMENT-ALERT-P) ; pas en débandade, 
 pendant une contremarche."
   ;; Occupé : en mêlée, sous le feu ou tirant, ou l'ennemi proche (à portée
   ;; de tir, ou à moins de *ALERT-DISTANCE* : entre deux salves aussi).
-  (when (or (plusp (regiment-engaged regiment))
+  (when (or (regiment-in-melee-p regiment)
             (regiment-alert-p regiment)
             (< (- tick (regiment-fire-tick regiment)) (* 2 +ticks-per-second+)))
     (setf (regiment-busy-tick regiment) tick))

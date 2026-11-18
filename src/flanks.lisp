@@ -64,7 +64,8 @@ flanc, 2 de dos."
 
 (defun count-flank-attacks (battle)
   "Compte, pour chaque régiment, les soldats ennemis qui le visent de flanc et
-de dos à ce tick, et pour chaque soldat, ceux qui le visent. Séquentiel : écrit
+de dos à ce tick, tous ceux qui le visent (REGIMENT-ASSAILED), et pour chaque
+soldat, ceux qui le visent. Séquentiel : écrit
 dans les régiments et les soldats visés."
   (declare (optimize (speed 3) (safety 1)))
   (let* ((soldiers (battle-soldiers battle))
@@ -78,7 +79,8 @@ dans les régiments et les soldats visés."
              (type float-array xs ys))
     (loop for regiment across regiments
           do (setf (regiment-flank-attackers regiment) 0
-                   (regiment-rear-attackers regiment) 0)
+                   (regiment-rear-attackers regiment) 0
+                   (regiment-assailed regiment) 0)
              (fill (the fixnum-array attackers) 0
                    :start (regiment-start regiment) :end (regiment-end regiment)))
     (loop for attacker across regiments
@@ -93,6 +95,7 @@ dans les régiments et les soldats visés."
                                                           (- (aref xs i) (aref xs target))
                                                           (- (aref ys i) (aref ys target)))))
                               (declare (type single-float facing) (type fixnum sector))
+                              (incf (regiment-assailed defender))
                               (case sector
                                 (1 (incf (regiment-flank-attackers defender)))
                                 (2 (incf (regiment-rear-attackers defender)))))))))))

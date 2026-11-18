@@ -240,7 +240,7 @@ salve)."
 feu à volonté (:AT-WILL). Arrêté en formation (REGIMENT-STEADY-P), avec ou sans
 ordre d'attaque, et aucun soldat en mêlée."
   (and (volley-drill-p regiment)
-       (zerop (regiment-engaged regiment))
+       (not (regiment-in-melee-p regiment))
        ;; Sous un ordre d'attaque, l'arrêt à portée du tick même : la valeur
        ;; d'UPDATE-STEADY date du début du tick, avant UPDATE-FIRE-POSITION, et
        ;; ferait tirer à volonté le premier rang au tick où le régiment s'arrête.
@@ -253,7 +253,7 @@ ordre d'attaque, et aucun soldat en mêlée."
 selon l'exercice hors de la mêlée (même pendant un pas en avant, où il retient
 son feu), *FIRING-RANKS* au feu à volonté. Pour le dessin : seuls ceux-là sont
 en joue."
-  (if (and (volley-drill-p regiment) (zerop (regiment-engaged regiment)))
+  (if (and (volley-drill-p regiment) (not (regiment-in-melee-p regiment)))
       (case (regiment-drill regiment)
         (:volley *volley-ranks*)
         ((:salvo :fire-by-rank) *rank-fire-ranks*)
@@ -304,9 +304,18 @@ l'orientation des deux formations."
 (defun update-fire-position (battle regiment)
   "Engagement d'un régiment de tireurs sous un ordre d'attaque : avance jusqu'à
 portée de tir, puis arrêt face à l'ennemi. Renvoie vrai s'il s'en est chargé,
-NIL pour un régiment de mêlée (UPDATE-ENGAGEMENT fait alors le reste)."
+NIL pour un régiment de mêlée, ou de tireurs en mêlée, qui se battent à l'épée
+(UPDATE-ENGAGEMENT fait alors le reste)."
   (when (ranged-regiment-p regiment)
     (update-countermarch regiment (battle-soldiers battle))
+    (when (regiment-in-melee-p regiment)
+      ;; Attaqués par un autre régiment que leur cible : ils se tournent contre lui.
+      (let ((assailant (assailing-regiment battle regiment)))
+        (when (and assailant
+                   (/= (regiment-index assailant) (second (regiment-orders regiment)))
+                   (not (regiment-routed-p assailant)))
+          (order-attack regiment assailant)))))
+  (when (and (ranged-regiment-p regiment) (not (regiment-in-melee-p regiment)))
     (let* ((soldiers (battle-soldiers battle))
            (enemy (aref (battle-regiments battle) (second (regiment-orders regiment))))
            (formation (regiment-formation regiment))
@@ -404,7 +413,9 @@ STRIKE, appliqués ensuite par APPLY-DAMAGE."
     (loop for regiment across regiments
           do (when (and (ranged-regiment-p regiment)
                         (plusp (regiment-alive regiment))
-                        (not (regiment-routed-p regiment)))
+                        (not (regiment-routed-p regiment))
+                        ;; En mêlée, les tireurs se battent à l'épée.
+                        (not (regiment-in-melee-p regiment)))
                (let* ((stats (regiment-stats regiment))
                       (attack (stats-primary stats))
                       (range (attack-reach attack))
@@ -462,7 +473,7 @@ STRIKE, appliqués ensuite par APPLY-DAMAGE."
                                    ;; volonté reste à l'exercice de base et à
                                    ;; la mêlée.
                                    (if (and (volley-drill-p regiment)
-                                            (zerop (regiment-engaged regiment)))
+                                            (not (regiment-in-melee-p regiment)))
                                        0
                                        firing-ranks))
                                   (ready (+ volley-rank volley-depth))

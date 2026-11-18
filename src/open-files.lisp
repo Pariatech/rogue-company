@@ -57,7 +57,7 @@ ouvertes ou resserrées à chaque recalcul d'engagement sinon."
       (flet ((close-files ()
                (setf (regiment-open-until regiment) -1)
                (set-file-spacing regiment (regiment-base-file-spacing regiment))))
-        (cond ((plusp (regiment-engaged regiment))
+        (cond ((regiment-in-melee-p regiment)
                (when open (close-files)))
               ((not (zerop (mod (+ tick (regiment-index regiment)) *advance-period*))))
               ((friend-near-p battle regiment)

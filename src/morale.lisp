@@ -128,6 +128,55 @@ contact, et le fait reculer ou avancer d'autant."
                    (shift-regiment regiment (battle-soldiers battle) dx dy
                                    :soldiers-too nil)))))))))
 
+;;; Serrer l'ennemi : figée au contact, une formation de mêlée continue
+;;; d'avancer, lentement, tant que son premier rang n'est pas à sa distance
+;;; d'arrêt. Des piquiers figés au premier contact, plus loin, n'auraient que
+;;; leur premier rang à portée ; serrés, trois rangs piquent.
+
+(defparameter *close-in-speed* 0.5f0
+  "Avance, en mètres par seconde, d'une formation figée au contact dont le premier
+rang n'est pas encore à sa distance d'arrêt.")
+
+(defparameter *close-in-slack* 0.25f0
+  "Écart toléré, en mètres, entre la distance moyenne du premier rang à ses
+cibles et la distance d'arrêt, avant que la formation serre l'ennemi.")
+
+(defun front-target-gap (regiment soldiers)
+  "Distance moyenne, de bord à bord, des soldats du premier rang de REGIMENT à
+leur cible, ou NIL si aucun n'en a."
+  (let ((xs (soldiers-x soldiers)) (ys (soldiers-y soldiers))
+        (radii (soldiers-radius soldiers)) (hps (soldiers-hp soldiers))
+        (targets (soldiers-target soldiers))
+        (total 0f0) (count 0))
+    (loop for i from (regiment-start regiment) below (front-rank-end regiment soldiers)
+          do (let ((j (aref targets i)))
+               (when (and (>= j 0) (plusp (aref hps j)))
+                 (incf total (- (sqrt (+ (expt (- (aref xs j) (aref xs i)) 2)
+                                         (expt (- (aref ys j) (aref ys i)) 2)))
+                                (aref radii i) (aref radii j)))
+                 (incf count))))
+    (when (plusp count) (/ total count))))
+
+(defun close-in (battle regiment)
+  "Avance de *CLOSE-IN-SPEED* la formation d'un régiment de mêlée figé au contact
+sous un ordre d'attaque, tant que son premier rang est en moyenne au-delà de sa
+distance d'arrêt (plus *CLOSE-IN-SLACK*) et qu'il suit ses emplacements
+(*PUSH-MAX-LAG*). Les soldats déjà à leur distance d'arrêt ne bougent pas
+(MOVE-TOWARD-SLOTS)."
+  (when (and (regiment-holding-p regiment)
+             (eq (first (regiment-orders regiment)) :attack)
+             (or (not (ranged-regiment-p regiment)) (regiment-in-melee-p regiment))
+             (not (loose-order-p regiment)))
+    (let* ((soldiers (battle-soldiers battle))
+           (gap (front-target-gap regiment soldiers)))
+      (when (and gap
+                 (> gap (+ (regiment-hold-distance regiment) *close-in-slack*))
+                 (< (front-lag regiment soldiers) *push-max-lag*))
+        (let* ((facing (formation-facing (regiment-formation regiment)))
+               (step (/ *close-in-speed* +ticks-per-second+)))
+          (shift-regiment regiment soldiers (* step (cos facing)) (* step (sin facing))
+                          :soldiers-too nil))))))
+
 (defun nearest-enemy-regiment (battle regiment)
   (let ((soldiers (battle-soldiers battle))
         (nearest nil) (best most-positive-single-float))
@@ -161,11 +210,12 @@ contact, et le fait reculer ou avancer d'autant."
   "Poussée, remontée du moral hors contact, et débandade sous le seuil."
   (when (and (plusp (regiment-alive regiment)) (not (regiment-routed-p regiment)))
     (push-regiment battle regiment)
+    (close-in battle regiment)
     ;; Attaqué de flanc ou de dos (flanks.lisp).
     (let ((loss (flank-morale-loss regiment)))
       (when (plusp loss)
         (lose-morale regiment (/ loss +ticks-per-second+))))
-    (when (and (zerop (regiment-engaged regiment))
+    (when (and (not (regiment-in-melee-p regiment))
                (> (- (battle-tick-count battle) (regiment-fire-tick regiment))
                   (* *fire-calm-seconds* +ticks-per-second+)))
       (setf (regiment-morale regiment)

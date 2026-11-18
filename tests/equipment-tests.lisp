@@ -23,7 +23,7 @@
   (let ((s (dotation :pikemen)))
     (is (= 6 (rogue-company::stats-armor s)) "corselet 5 + morion 1")
     (is (= 16.5 (rogue-company::stats-load s)) "pique 5 + dague 0,5 + corselet 9 + morion 2")
-    (is (= 8 (rogue-company::stats-ranks s)))
+    (is (= 15 (rogue-company::stats-ranks s)))
     (let ((pike (rogue-company::stats-primary s))
           (dagger (rogue-company::stats-secondary s)))
       (is (eq :melee (rogue-company::attack-kind pike)))

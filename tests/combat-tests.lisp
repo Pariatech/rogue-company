@@ -53,7 +53,7 @@ frappé reste très loin dans le passé."
       (is (<= 0 tick (rogue-company::battle-tick-count b)) "il a frappé en moins de 5 s"))))
 
 (test bearer-is-in-the-middle-of-the-fourth-rank
-  "160 piquiers sur 20 files : le porteur est le 11e du quatrième rang. Avec
+  "225 piquiers sur 15 files : le porteur est le 8e du quatrième rang. Avec
 moins de rangs, il est au milieu du dernier ; un homme seul n'en a pas."
   (let* ((b (demo))
          (r (first (regiments b)))
@@ -61,9 +61,9 @@ moins de rangs, il est au milieu du dernier ; un homme seul n'en a pas."
     (flet ((alive (n)
              (setf (rogue-company::regiment-alive r) n)
              (rogue-company::refresh-layout r (rogue-company::battle-soldiers b))))
-      (is (= (+ start 60 10) (rogue-company::regiment-bearer r)))
-      (alive 45)
-      (is (= (+ start 40 2) (rogue-company::regiment-bearer r)) "3e rang, 5 hommes")
+      (is (= (+ start 45 7) (rogue-company::regiment-bearer r)))
+      (alive 35)
+      (is (= (+ start 30 2) (rogue-company::regiment-bearer r)) "3e rang, 5 hommes")
       (alive 5)
       (is (= (+ start 2) (rogue-company::regiment-bearer r)))
       (alive 1)
@@ -89,13 +89,14 @@ de centre à centre)."
                                             below (+ (rogue-company::regiment-start r) files)
                                           sum (aref (rogue-company::soldiers-x s) i))
                                     files)))))
-    (is-true (every (lambda (r) (< (rogue-company::regiment-depth r) 8)) (regiments b))
+    (is-true (every (lambda (r) (< (rogue-company::regiment-depth r) 15)) (regiments b))
              "des rangs perdus")
     (is (< (abs (- (second fronts) (first fronts))) 5.6))))
 
-(test only-the-front-rank-strikes
-  "Les premiers rangs s'arrêtent à 4 m l'un de l'autre : le premier rang, à
-portée de pique (4,5 m), frappe ; le deuxième, un mètre plus loin, non."
+(test three-ranks-strike
+  "Les premiers rangs se serrent à 1,75 m l'un de l'autre : les trois premiers
+rangs, à 1,75, 2,75 et 3,75 m, sont à portée de pique (4,5 m) et frappent ; le
+quatrième, à 4,75 m, beaucoup moins (seulement quand les fronts se serrent)."
   (let* ((b (charged-demo :seconds 40))
          (tick (rogue-company::battle-tick-count b))
          (r (first (regiments b)))
@@ -107,7 +108,8 @@ portée de pique (4,5 m), frappe ; le deuxième, un mètre plus loin, non."
                    count (> (soldier-value b #'rogue-company::soldiers-strike-tick i)
                             (- tick 90)))))
       (is (> (strikers 0) (floor files 2)) "le premier rang frappe")
-      (is (= 0 (strikers 1)) "le deuxième rang ne frappe pas"))))
+      (is (> (strikers 2) (floor files 2)) "le troisième rang frappe")
+      (is (< (strikers 3) (floor (strikers 2) 2)) "le quatrième rang frappe peu"))))
 
 (test bearer-never-strikes
   "Pendant toute une mêlée, le porteur d'étendard ne frappe jamais. Vérifié aux
@@ -253,9 +255,9 @@ de mêlée, et une position entre les deux régiments."
     (is (equalp #(4f0 5f0 2f0 3f0) (rogue-company::death-x log)))))
 
 (defun pikes-against-swords (rodeleros &key (seconds 240))
-  "160 piquiers chargés par RODELEROS rodeleros, jusqu'à la débandade d'un camp."
+  "225 piquiers chargés par RODELEROS rodeleros, jusqu'à la débandade d'un camp."
   (let ((b (rogue-company::make-battle :seed 1)))
-    (rogue-company::add-regiment b (rogue-company::dotation-stats :pikemen) 160
+    (rogue-company::add-regiment b (rogue-company::dotation-stats :pikemen) 225
                                  :side 0 :x -25 :y 0 :facing 0)
     (rogue-company::add-regiment b (rogue-company::dotation-stats :rodeleros) rodeleros
                                  :side 1 :x 25 :y 0 :facing pi)
@@ -269,12 +271,12 @@ de mêlée, et une position entre les deux régiments."
   "À nombre égal, les rodeleros passés sous les piques l'emportent : collés au
 premier rang, ils n'ont plus en face que des dagues, les rangs de derrière ne
 pouvant plus abaisser leur pique sur eux."
-  (destructuring-bind (pikes swords) (pikes-against-swords 160)
+  (destructuring-bind (pikes swords) (pikes-against-swords 225)
     (is-true (rogue-company::regiment-routed-p pikes))
     (is-false (rogue-company::regiment-routed-p swords))))
 
 (test outnumbered-rodeleros-still-lose
-  "À 120 contre 160, les piquiers tiennent."
+  "À 120 contre 225, les piquiers tiennent."
   (destructuring-bind (pikes swords) (pikes-against-swords 120)
     (is-false (rogue-company::regiment-routed-p pikes))
     (is-true (rogue-company::regiment-routed-p swords))))
@@ -284,7 +286,7 @@ pouvant plus abaisser leur pique sur eux."
 reste en queue de file. Aucun soldat ne change de file."
   (let* ((b (rogue-company::make-battle))
          (r (rogue-company::add-regiment b (rogue-company::dotation-stats :arquebusiers) 28
-                                         :drill :countermarch))
+                                         :drill :countermarch :ranks 6))
          (so (rogue-company::battle-soldiers b))
          (hp (rogue-company::soldiers-hp so))
          (ranks (rogue-company::soldiers-rank so))

@@ -40,11 +40,11 @@
 ;;; Bataille de démonstration : deux régiments dispersés qui rejoignent leur formation.
 
 (defun demo (&rest args &key (scatter 12) &allow-other-keys)
-  "Deux régiments de 160 piquiers face à face, soldats dispersés à SCATTER
+  "Deux régiments de 225 piquiers (15 files sur 15 rangs) face à face, soldats dispersés à SCATTER
 mètres de leur emplacement : les tests éprouvent le regroupement et les
 collisions."
   (apply #'rogue-company::make-demo-battle :scatter scatter
-         :regiments '((0 :pikemen 160 -25 0 0) (1 :pikemen 160 25 0 180)) args))
+         :regiments '((0 :pikemen 225 -25 0 0) (1 :pikemen 225 25 0 180)) args))
 
 (defun regiments (battle)
   (coerce (rogue-company::battle-regiments battle) 'list))
@@ -57,7 +57,7 @@ collisions."
 (test demo-has-two-regiments
   (let ((b (demo)))
     (is (= 2 (length (regiments b))))
-    (is (= 320 (rogue-company::soldiers-count (rogue-company::battle-soldiers b))))
+    (is (= 450 (rogue-company::soldiers-count (rogue-company::battle-soldiers b))))
     (is (equal '(0 1) (mapcar #'rogue-company::regiment-side (regiments b))))
     (is (> (worst-slot-distance b) 1) "les soldats partent dispersés")))
 
