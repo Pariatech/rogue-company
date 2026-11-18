@@ -133,5 +133,20 @@ sans allouer, et renvoie BUFFER."
             do (rotatef (char buffer i) (char buffer j)))))
   buffer)
 
+(defparameter *text-reference-height* 2160
+  "Hauteur de fenêtre, en pixels, à partir de laquelle le texte garde sa taille
+nominale : le plein écran où les tailles ont été réglées. En dessous, il
+rapetisse en proportion (TEXT-SIZE) et garde la même part de l'écran.")
+
+(defparameter *min-text-size* 10
+  "Taille minimale du texte, en pixels : celle de la police par défaut, nette.")
+
+(defun text-size (size)
+  "Taille de texte à utiliser pour la taille nominale SIZE, selon la hauteur de
+la fenêtre : SIZE à *TEXT-REFERENCE-HEIGHT* et au-delà, en proportion en
+dessous, jamais sous *MIN-TEXT-SIZE*."
+  (max *min-text-size*
+       (min size (round (* size *window-height*) *text-reference-height*))))
+
 (defun draw-text-centered (text center-x y size color)
   (draw-text text (- center-x (floor (measure-text text size) 2)) y size color))

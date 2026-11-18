@@ -65,10 +65,10 @@ rouges alignés à droite, « contre », les bleus alignés à gauche."
       (when (tally-stale-p tally regiments)
         (rebuild-tally tally regiments))
       (let* ((lines (tally-lines tally))
-             (size *tally-text-size*)
+             (size (text-size *tally-text-size*))
              (gap (measure-text "  contre  " size))
              (line-height (+ size 6))
-             (top 40)
+             (top (+ 20 (text-size 20)))
              (left-width (loop for line across lines maximize (measure-text (first line) size)))
              (right-width (loop for line across lines
                                 maximize (if (third line) (measure-text (third line) size) 0)))

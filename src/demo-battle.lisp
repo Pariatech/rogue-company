@@ -114,10 +114,10 @@ poursuite sur les ailes.")
 départ, pour observer comment les pertes se comblent.")
 
 (defparameter *matchup-dotations* '(:pikemen :halberdiers :rodeleros :greatswords
-                                     :arquebusiers :musketeers :light-cavalry)
+                                     :arquebusiers :musketeers :light-cavalry :lancers)
   "Dotations du tournoi : chacune affronte chacune des autres une fois.")
 (defparameter *matchup-count* 105 "Effectif d'un régiment du tournoi, sauf dans *MATCHUP-COUNTS*.")
-(defparameter *matchup-counts* '((:pikemen . 225) (:light-cavalry . 60))
+(defparameter *matchup-counts* '((:pikemen . 225) (:light-cavalry . 60) (:lancers . 60))
   "Effectifs propres à certaines dotations du tournoi : (dotation . effectif).")
 (defparameter *matchup-drill* :countermarch "Exercice de tir des tireurs du tournoi.")
 (defparameter *matchup-gap* 90
@@ -150,9 +150,9 @@ remplace les paires tirées de DOTATIONS."
                         (list 1 blue (size blue) (+ cx half-gap) y 180 drill))))))
 
 (defparameter *matchup-demo-regiments* (matchup-regiments)
-  "Tournoi : chaque dotation contre chacune des autres, vingt et un duels côte à côte
-que C lance ensemble, 105 hommes de chaque côté, sauf 225 piquiers et 60
-chevau-légers (*MATCHUP-COUNTS*). Le tableau des duels (tally-view.lisp) compte
+  "Tournoi : chaque dotation contre chacune des autres, vingt-huit duels côte à
+côte que C lance ensemble, 105 hommes de chaque côté, sauf 225 piquiers, 60
+chevau-légers et 60 lanciers (*MATCHUP-COUNTS*). Le tableau des duels (tally-view.lisp) compte
 les survivants.")
 
 (defparameter *cavalry-demo-regiments*
@@ -174,7 +174,8 @@ pour une arme de tir ; sans posture, DEFAULT-STANCE (:CHASE pour la cavalerie, :
                               (:arquebusiers . "Arquebusiers")
                               (:musketeers . "Mousquetaires")
                               (:greatswords . "Espadonniers")
-                              (:light-cavalry . "Chevau-légers"))
+                              (:light-cavalry . "Chevau-légers")
+                              (:lancers . "Lanciers"))
   "Nom affiché de chaque dotation.")
 
 (defun demo-battlefield-size (regiments &key (margin 64))

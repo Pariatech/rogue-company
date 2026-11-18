@@ -623,7 +623,9 @@ indices, avec le générateur de la bataille : la bataille se rejoue."
                     ;; Élan de la charge, les premières secondes du contact (charge.lisp).
                     (charge (if (charge-bonus-active-p regiment tick)
                                 (float (regiment-charge-bonus regiment) 1f0)
-                                0f0)))
+                                0f0))
+                    ;; Des piques retournent contre l'assaillant l'élan de sa charge.
+                    (pikes (pike-wall-p regiment)))
                (declare (type single-float skill charge) (type fixnum index bearer))
                (loop for i of-type fixnum from (regiment-start regiment) below (regiment-end regiment)
                      do (let ((target (aref targets i)))
@@ -637,8 +639,10 @@ indices, avec le générateur de la bataille : la bataille se rejoue."
                               (declare (type fixnum cooldown))
                               (case (aref cooldowns i)
                                 ;; Premier contact : le premier coup part au hasard dans
-                                ;; la période, pour que tout le rang ne frappe pas ensemble.
-                                (-1 (setf (aref cooldowns i) (rng-below rng cooldown)))
+                                ;; la période, pour que tout le rang ne frappe pas ensemble ;
+                                ;; à la charge, tout de suite (charge.lisp).
+                                (-1 (setf (aref cooldowns i)
+                                          (if (plusp charge) 0 (rng-below rng cooldown))))
                                 (0
                                  (setf (aref cooldowns i) cooldown
                                        (aref strike-ticks i) tick)
@@ -660,8 +664,21 @@ indices, avec le générateur de la bataille : la bataille se rejoue."
                                    (when (< (rng-float rng) chance)
                                      ;; L'armure réduit les dégâts ordinaires, jamais les
                                      ;; perforants.
-                                     (let ((damage (+ (max 0f0 (- (+ (the single-float (attack-damage attack))
-                                                                     charge)
+                                     (let* ((bonus
+                                              (cond ((and pikes (zerop (aref weapons i)))
+                                                     ;; Pique contre une charge : le bonus
+                                                     ;; de l'assaillant (les piques ne visent
+                                                     ;; que devant elles).
+                                                     (if (charge-bonus-active-p defending tick)
+                                                         (float (regiment-charge-bonus defending) 1f0)
+                                                         0f0))
+                                                    ((and (plusp charge) (zerop sector)
+                                                          (pike-wall-p defending))
+                                                     ;; Charge de face sur des piques : volée.
+                                                     0f0)
+                                                    (t charge)))
+                                            (damage (+ (max 0f0 (- (+ (the single-float (attack-damage attack))
+                                                                     bonus)
                                                                   (the single-float (stats-armor defender))))
                                                       (the single-float (attack-piercing attack)))))
                                        (progn

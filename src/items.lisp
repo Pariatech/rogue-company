@@ -149,7 +149,11 @@
   :slots '(:mount) :price 100
   :modifiers '((:speed :set 3.2) (:run-speed :set 6.5) (:mass :mul 9) (:radius :set 1.0) (:turn-rate :set 1.2)
                (:endurance :set 1.2)
-               (:spacing :set 2.2) (:ranks :set 2)))
+               ;; Quatre rangs : 15 files à 60 cavaliers.
+               (:spacing :set 2.5) (:ranks :set 4))
+  ;; Au contact, la cavalerie lourde rompt ses rangs comme la légère : chaque
+  ;; cavalier va chercher son homme.
+  :traits '(:loose-order))
 
 ;;; Dotations de démonstration : un homme et un équipement. Ce ne sont pas des
 ;;; types d'unité, seulement des équipements tout faits.

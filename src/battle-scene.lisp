@@ -103,7 +103,7 @@ que s'ils changent, ce qui est rare."))
 
 (defun draw-battle-hud (scene)
   "« Tick 1234   x2 » en haut à gauche, sans allouer à chaque tick."
-  (let* ((size 20)
+  (let* ((size (text-size 20))
          (digits (write-integer-into (battle-tick-count (scene-battle scene))
                                      (scene-tick-text scene)))
          (x (+ 10 (measure-text "Tick " size))))
@@ -121,7 +121,7 @@ que s'ils changent, ce qui est rare."))
   (draw-battle-hud scene)
   (draw-tally (scene-tally scene) (scene-battle scene))
   (draw-text "Espace : pause   + / - : vitesse   R : nouvel ordre   C : charge   V : morceaux / sprites   Tab : tableau   Flèches, ZQSD, clic droit : caméra   Molette : zoom   F11 : plein écran   Échap : menu"
-             10 (- *window-height* 26) 16 :darkgray))
+             10 (- *window-height* (text-size 16) 10) (text-size 16) :darkgray))
 
 ;;; Inspection
 

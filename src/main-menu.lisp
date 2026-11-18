@@ -21,11 +21,11 @@
   "Indice de l'option sous le point (X, Y), ou NIL."
   (loop for (label) in (menu-options menu)
         for index from 0
-        for width = (measure-text label *menu-option-size*)
+        for width = (measure-text label (text-size *menu-option-size*))
         for left = (- (floor *window-width* 2) (floor width 2) 20)
         for top = (- (menu-option-y index) 10)
         when (and (<= left x (+ left width 40))
-                  (<= top y (+ top *menu-option-size* 20)))
+                  (<= top y (+ top (text-size *menu-option-size*) 20)))
           return index))
 
 (defun menu-activate (menu)
@@ -49,14 +49,14 @@
 (defmethod scene-draw ((menu main-menu))
   (clear-background :black)
   (let ((center (floor *window-width* 2)))
-    (draw-text-centered *menu-title* center 160 *menu-title-size* :white)
+    (draw-text-centered *menu-title* center 160 (text-size *menu-title-size*) :white)
     (loop for (label) in (menu-options menu)
           for index from 0
           for y = (menu-option-y index)
           do (if (= index (menu-selected menu))
-                 (let ((width (measure-text label *menu-option-size*)))
-                   (draw-text ">" (- center (floor width 2) 30) y *menu-option-size* :gold)
-                   (draw-text-centered label center y *menu-option-size* :gold))
-                 (draw-text-centered label center y *menu-option-size* :gray)))
+                 (let ((width (measure-text label (text-size *menu-option-size*))))
+                   (draw-text ">" (- center (floor width 2) 30) y (text-size *menu-option-size*) :gold)
+                   (draw-text-centered label center y (text-size *menu-option-size*) :gold))
+                 (draw-text-centered label center y (text-size *menu-option-size*) :gray)))
     (draw-text-centered "Flèches ou souris pour choisir, Entrée pour valider"
-                        center (- *window-height* 40) 16 :darkgray)))
+                        center (- *window-height* 40) (text-size 16) :darkgray)))

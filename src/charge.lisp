@@ -36,6 +36,16 @@ son arme principale."
     (+ (* *charge-momentum-damage* (stats-mass stats) (stats-run-speed stats))
        (attack-charge-bonus (stats-primary stats)))))
 
+(defun pike-wall-p (regiment)
+  "Vrai si REGIMENT présente des piques : une arme principale de mêlée à portée
+minimale, en bon ordre. Chargé de face, il vole le bonus de charge de
+l'assaillant (STRIKE) : l'assaillant n'en a pas sur lui, et ses piques le
+portent contre l'assaillant tant que dure sa charge."
+  (let ((primary (stats-primary (regiment-stats regiment))))
+    (and (eq (attack-kind primary) :melee)
+         (plusp (attack-min-reach primary))
+         (not (regiment-routed-p regiment)))))
+
 (defun charge-bonus-active-p (regiment tick)
   "Vrai si les coups de REGIMENT portent son bonus de charge au tick TICK."
   (let ((contact (regiment-charge-contact regiment)))

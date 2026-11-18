@@ -54,6 +54,12 @@
 
 (defparameter *sword-length* 0.8f0 "Lame de l'épée, en mètres.")
 (defparameter *dagger-length* 0.3f0 "Lame de la dague des piquiers, en mètres.")
+;;; Lance : couchée sous le bras droit en garde et à la charge, poussée par le
+;;; coup ; dressée au repos. Le fer est celui de la pique (*PIKE-HEAD*).
+(defparameter *lance-length* 3.2f0 "Lance, de bout en bout, en mètres.")
+(defparameter *lance-behind* 0.8f0 "Lance couchée : longueur derrière la main, en mètres.")
+(defparameter *lance-height* 0.75f0 "Lance couchée : hauteur au-dessus du cavalier haussé, en mètres.")
+(defparameter *lance-side* 0.22f0 "Lance couchée : à droite de l'axe du cavalier, en mètres.")
 (defparameter *greatsword-length* 1.3f0 "Lame de l'espadon, en mètres.")
 (defparameter *greatsword-grip* 0.16f0
   "Espadon : la main gauche tient la poignée à cette distance sous la droite, en mètres.")
@@ -828,6 +834,43 @@ dans le sens des aiguilles d'une montre à l'écran)."
                       ((and pikes (= weapon 1))
                        (upright upright-forward pike-lean
                                 (sqrt (- (* pike-length pike-length) (* pike-lean pike-lean)))))
+                      ((and (= weapon 6) (zerop (aref soldier-weapons i))
+                            (not stunned) (= 1 (aref regiment-guards regiment-index)))
+                       ;; Lance couchée sous le bras droit ; le coup la pousse en
+                       ;; avant, la main avec. La gauche tient les rênes.
+                       (let* ((length (the single-float *lance-length*))
+                              (behind (the single-float *lance-behind*))
+                              (side (the single-float *lance-side*))
+                              (h (+ (the single-float *lance-height*) bob))
+                              (age (+ alpha (float (min 1000000 (- tick (aref strike-ticks i))) 1f0)))
+                              (thrust (if (< age thrust-ticks)
+                                          (* pike-thrust (sin (* pi-f (/ age thrust-ticks))))
+                                          0f0))
+                              (butt (- thrust behind))
+                              (depth 0f0))
+                         (declare (type single-float length behind side h age thrust butt depth))
+                         (setf pole t)
+                         (multiple-value-setq (ax ay depth) (project-flat butt side h))
+                         (setf rear-behind (< depth 0f0))
+                         (multiple-value-setq (mx my) (project-flat thrust side h))
+                         (multiple-value-setq (cx cy) (project-flat (+ butt (- length pike-head)) side h))
+                         (multiple-value-setq (bx by depth) (project-flat (+ butt length) side h))
+                         (setf front-behind (< depth 0f0))
+                         (multiple-value-setq (hand2-x hand2-y hand2-depth)
+                           (project-flat thrust side h))
+                         (multiple-value-setq (hand1-x hand1-y hand1-depth)
+                           (project 0.3f0 -0.1f0 (+ hand-height bob)))))
+                      ((and (= weapon 6) (zerop (aref soldier-weapons i)))
+                       ;; Lance dressée au repos.
+                       (let ((length (the single-float *lance-length*)))
+                         (declare (type single-float length))
+                         (upright upright-forward pike-lean
+                                  (sqrt (- (* length length) (* pike-lean pike-lean))))))
+                      ((= weapon 6)
+                       ;; Lancier à l'épée, trop près pour la lance.
+                       (strike-blade t sword-length)
+                       (multiple-value-setq (hand1-x hand1-y hand1-depth)
+                         (project 0.3f0 -0.1f0 (+ hand-height bob))))
                       (t
                        (multiple-value-setq (hand1-x hand1-y hand1-depth)
                          (project (* (- hand-swing) swing) (- hand-side) (+ hand-height bob)))
@@ -1215,14 +1258,18 @@ dans le sens des aiguilles d'une montre à l'écran)."
                                       team-r team-g team-b)))
                 ;; Pique : elle s'abat vers l'avant si elle était croisée, sinon
                 ;; du côté où tombe le soldat.
-                (when (and pikes (or (= weapon 1) (= weapon 3)))
+                (when (or (and pikes (or (= weapon 1) (= weapon 3))) (= weapon 6))
                   (let* ((rank (aref ranks slot))
                          (lowered (and (= weapon 1) (< rank lowered-ranks)))
-                         ;; Pique ou hallebarde, plus courte.
-                         (pike-length (if (= weapon 3) halberd-length pike-length))
-                         (head-fraction (if (= weapon 3)
-                                            (- 1f0 (/ halberd-head halberd-length))
-                                            head-fraction))
+                         ;; Pique, ou hallebarde et lance, plus courtes.
+                         (pike-length (case weapon
+                                        (3 halberd-length)
+                                        (6 (the single-float *lance-length*))
+                                        (t pike-length)))
+                         (head-fraction (case weapon
+                                          (3 (- 1f0 (/ halberd-head halberd-length)))
+                                          (6 (- 1f0 (/ pike-head (the single-float *lance-length*))))
+                                          (t head-fraction)))
                          (angle (if lowered
                                     (+ facing (* 0.3f0 (- (* 2f0 (death-jitter serial 2)) 1f0)))
                                     (+ fall-angle (* 0.4f0 (- (* 2f0 (death-jitter serial 2)) 1f0)))))

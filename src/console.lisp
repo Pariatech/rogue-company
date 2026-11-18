@@ -159,7 +159,7 @@ Les messages retirés sont considérés comme reçus par Claude."
 (defun console-geometry (console)
   "Valeurs : haut de la console, ordonnée de la saisie, lignes d'historique
 visibles, hauteur de ligne, largeur de texte, lignes de la saisie."
-  (let* ((size *console-font-size*)
+  (let* ((size (text-size *console-font-size*))
          (line-height (+ size 4))
          (width (- *window-width* 20))
          (input-lines (console-input-lines console width size))
@@ -171,7 +171,7 @@ visibles, hauteur de ligne, largeur de texte, lignes de la saisie."
 (defun console-max-scroll (console)
   (multiple-value-bind (top input-y rows line-height width) (console-geometry console)
     (declare (ignore top input-y line-height))
-    (max 0 (- (length (console-lines console width *console-font-size*)) rows))))
+    (max 0 (- (length (console-lines console width (text-size *console-font-size*))) rows))))
 
 (defun console-scroll-by (console delta)
   "Défile de DELTA lignes vers le haut (négatif : vers le bas), dans les bornes."
@@ -251,7 +251,7 @@ liste de (couleur . texte)."
 (defun console-draw ()
   "Dessine la console ouverte, ou la dernière réponse si elle est fermée."
   (let ((console *console*)
-        (size *console-font-size*))
+        (size (text-size *console-font-size*)))
     ;; Console fermée sans réponse affichée : rien à calculer, rien à allouer.
     (cond
       ((console-open-p console)
@@ -286,8 +286,8 @@ liste de (couleur . texte)."
                  ;; Le curseur clignote : retirer le _ final une demi-seconde sur deux.
                  do (draw-text (if (or more blink) line (subseq line 0 (1- (length line))))
                                       10 y size :white))
-           (draw-text status (- *window-width* (measure-text status 14) 10)
-                             (+ top 4) 14 :gray)))))
+           (draw-text status (- *window-width* (measure-text status (text-size 14)) 10)
+                             (+ top 4) (text-size 14) :gray)))))
       ((console-banner console)
        (let* ((line-height (+ size 4))
               (width (- *window-width* 20))
