@@ -91,9 +91,12 @@ dans les régiments et les soldats visés."
                             (incf (aref attackers target))
                             (let* ((defender (aref regiments (aref soldier-regiments target)))
                                    (facing (formation-facing (regiment-formation defender)))
-                                   (sector (attack-sector (cos facing) (sin facing)
-                                                          (- (aref xs i) (aref xs target))
-                                                          (- (aref ys i) (aref ys target)))))
+                                   ;; Un carré de piques n'a pas de flanc.
+                                   (sector (if (regiment-square-p defender)
+                                               0
+                                               (attack-sector (cos facing) (sin facing)
+                                                              (- (aref xs i) (aref xs target))
+                                                              (- (aref ys i) (aref ys target))))))
                               (declare (type single-float facing) (type fixnum sector))
                               (incf (regiment-assailed defender))
                               (case sector

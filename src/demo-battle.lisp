@@ -113,9 +113,11 @@ poursuite sur les ailes.")
   "Duel de deux régiments d'arquebusiers en contremarche, hors de portée au
 départ, pour observer comment les pertes se comblent.")
 
-(defparameter *matchup-dotations* '(:pikemen :halberdiers :rodeleros :greatswords
+(defparameter *matchup-dotations* '(:pikemen (:pikemen :square) :halberdiers :rodeleros :greatswords
                                      :arquebusiers :musketeers :light-cavalry :lancers)
-  "Dotations du tournoi : chacune affronte chacune des autres une fois.")
+  "Dotations du tournoi : chacune affronte chacune des autres une fois. Une
+entrée est une dotation, ou (dotation exercice) : (:PIKEMEN :SQUARE), les
+piquiers en carré.")
 (defparameter *matchup-count* 105 "Effectif d'un régiment du tournoi, sauf dans *MATCHUP-COUNTS*.")
 (defparameter *matchup-counts* '((:pikemen . 225) (:light-cavalry . 60) (:lancers . 60))
   "Effectifs propres à certaines dotations du tournoi : (dotation . effectif).")
@@ -135,7 +137,8 @@ régiment est plus près de son adversaire que de tout ennemi de l'autre colonne
   "Régiments du tournoi : un duel par paire de DOTATIONS, COUNT hommes de chaque
 côté (ou celui de la dotation dans *MATCHUP-COUNTS*), la première dotation de la paire en rouge, à gauche. Deux colonnes de
 duels, l'une sous l'autre, rouge et bleu face à face, hors de portée. PAIRS
-remplace les paires tirées de DOTATIONS."
+remplace les paires tirées de DOTATIONS. Une entrée (dotation exercice) impose
+son exercice ; sinon DRILL."
   (let* ((rows (ceiling (length pairs) 2))
          (half-gap (/ *matchup-gap* 2)))
     (loop for (red blue) in pairs
@@ -144,20 +147,23 @@ remplace les paires tirées de DOTATIONS."
           for row = (mod k rows)
           for cx = (* column *matchup-column*)
           for y = (* *matchup-row* (- row (/ (1- rows) 2)))
-          nconc (flet ((size (dotation)
-                         (or (cdr (assoc dotation *matchup-counts*)) count)))
-                  (list (list 0 red (size red) (- cx half-gap) y 0 drill)
-                        (list 1 blue (size blue) (+ cx half-gap) y 180 drill))))))
+          nconc (flet ((dotation (entry) (if (consp entry) (first entry) entry))
+                       (entry-drill (entry) (if (consp entry) (second entry) drill)))
+                  (flet ((size (entry)
+                           (or (cdr (assoc (dotation entry) *matchup-counts*)) count)))
+                    (list (list 0 (dotation red) (size red) (- cx half-gap) y 0 (entry-drill red))
+                          (list 1 (dotation blue) (size blue) (+ cx half-gap) y 180
+                                (entry-drill blue))))))))
 
 (defparameter *matchup-demo-regiments* (matchup-regiments)
-  "Tournoi : chaque dotation contre chacune des autres, vingt-huit duels côte à
-côte que C lance ensemble, 105 hommes de chaque côté, sauf 225 piquiers, 60
-chevau-légers et 60 lanciers (*MATCHUP-COUNTS*). Le tableau des duels (tally-view.lisp) compte
+  "Tournoi : chaque dotation contre chacune des autres, piquiers en carré
+compris, trente-six duels côte à côte que C lance ensemble, 105 hommes de chaque
+côté, sauf 225 piquiers, 60 chevau-légers et 60 lanciers (*MATCHUP-COUNTS*). Le tableau des duels (tally-view.lisp) compte
 les survivants.")
 
 (defparameter *cavalry-demo-regiments*
   (matchup-regiments :pairs (mapcar (lambda (other) (list :light-cavalry other))
-                                    (remove :light-cavalry *matchup-dotations*)))
+                                    (remove :light-cavalry *matchup-dotations* :test #'equal)))
   "Chevau-légers (60, à l'épée) contre chaque autre dotation, cinq duels que C
 lance ensemble : la charge contre les piques, les hallebardes, les rodeleros et
 les tireurs.")
@@ -189,10 +195,11 @@ tiennent avec MARGIN mètres autour, arrondi à 64 m."
   (let ((battle (make-battle :seed seed :size (demo-battlefield-size regiments))))
     (loop for (side dotation count x y degrees drill stance) in regiments
           do (add-regiment battle (dotation-stats dotation) count
-                           :name (format nil "~a ~a"
+                           :name (format nil "~a ~a~:[~; en carré~]"
                                          (or (cdr (assoc dotation *demo-names*))
                                              (string-capitalize dotation))
-                                         (if (zerop side) "rouges" "bleus"))
+                                         (if (zerop side) "rouges" "bleus")
+                                         (eq drill :square))
                            :side side :x x :y y :facing (* degrees (/ pi 180))
                            :scatter scatter
                            :stance (or stance (default-stance (dotation-stats dotation)))

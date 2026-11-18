@@ -158,15 +158,18 @@ doublant la capacité pour que des ajouts successifs restent bon marché."
         ((< angle #.(float (- pi) 1f0)) (+ angle #.(float (* 2 pi) 1f0)))
         (t angle)))
 
-(defun move-toward-slots (soldiers start end step front turn-step hold-distance)
+(defun move-toward-slots (soldiers start end step front turn-step hold-distance
+                          &optional (square-depth 0) (square-files 1))
   "Avance les soldats de START à END d'au plus STEP mètres vers leur emplacement,
 et les tourne d'au plus TURN-STEP radians : vers leur destination s'ils en sont
 loin, vers FRONT, l'orientation de la formation, s'ils en sont près. Un soldat
 dont la cible est à moins de HOLD-DISTANCE (de bord à bord) ne bouge plus : il
 se tourne vers elle. Un soldat étourdi (STUN) ne bouge pas ; son compte baisse
-d'un tick."
+d'un tick. Avec SQUARE-DEPTH (rangs du carré, 0 hors du carré) et SQUARE-FILES,
+le front de chacun est le côté du carré le plus proche de sa place
+(SQUARE-OUTWARD)."
   (declare (optimize (speed 3) (safety 1))
-           (type fixnum start end)
+           (type fixnum start end square-depth square-files)
            (type single-float step front turn-step hold-distance))
   (let ((xs (soldiers-x soldiers)) (ys (soldiers-y soldiers))
         (slot-xs (soldiers-slot-x soldiers)) (slot-ys (soldiers-slot-y soldiers))
@@ -176,10 +179,12 @@ d'un tick."
         (stuns (soldiers-stun soldiers))
         (hps (soldiers-hp soldiers))
         (radii (soldiers-radius soldiers))
+        (ranks (soldiers-rank soldiers))
+        (files (soldiers-file soldiers))
         (start-distance *walk-start-distance*)
         (stop-distance *walk-stop-distance*))
     (declare (type float-array xs ys slot-xs slot-ys facings hps radii)
-             (type fixnum-array walking targets stuns)
+             (type fixnum-array walking targets stuns ranks files)
              (type single-float start-distance stop-distance))
     (flet ((turn-toward (i angle)
              (declare (type fixnum i) (type single-float angle))
@@ -212,7 +217,14 @@ d'un tick."
                              (if (zerop (aref walking i))
                                  (if (> distance start-distance) 1 0)
                                  (if (< distance stop-distance) 0 1)))
-                       (turn-toward i (if (zerop (aref walking i)) front (atan dy dx)))
+                       (turn-toward i (cond ((plusp (aref walking i)) (atan dy dx))
+                                            ((plusp square-depth)
+                                             (multiple-value-bind (ox oy)
+                                                 (square-outward front square-depth square-files
+                                                                 (aref ranks i) (aref files i))
+                                               (declare (type single-float ox oy))
+                                               (atan oy ox)))
+                                            (t front)))
                        (if (<= distance step)
                            (setf (aref xs i) (aref slot-xs i)
                                  (aref ys i) (aref slot-ys i))

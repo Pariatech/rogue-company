@@ -124,6 +124,8 @@ contact, et le fait reculer ou avancer d'autant."
                    (lose-morale regiment (/ (* *push-morale-loss* (- balance))
                                             +ticks-per-second+)))
                   ((and (plusp balance)
+                        ;; Un carré ne quitte pas sa place.
+                        (not (regiment-square-p regiment))
                         (< (front-lag regiment (battle-soldiers battle)) *push-max-lag*))
                    (shift-regiment regiment (battle-soldiers battle) dx dy
                                    :soldiers-too nil)))))))))
@@ -166,7 +168,8 @@ distance d'arrêt (plus *CLOSE-IN-SLACK*) et qu'il suit ses emplacements
   (when (and (regiment-holding-p regiment)
              (eq (first (regiment-orders regiment)) :attack)
              (or (not (ranged-regiment-p regiment)) (regiment-in-melee-p regiment))
-             (not (loose-order-p regiment)))
+             (not (loose-order-p regiment))
+             (not (regiment-square-p regiment)))
     (let* ((soldiers (battle-soldiers battle))
            (gap (front-target-gap regiment soldiers)))
       (when (and gap

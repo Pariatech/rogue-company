@@ -261,7 +261,18 @@ est à moins de *ALERT-DISTANCE*. Ne sert qu'au dessin."
              (files (formation-files formation (regiment-alive regiment)))
              (needed (max 1 (floor (* *hold-fraction* files))))
              (closed (regiment-contact regiment)))
-        (cond ((and (eq (regiment-stance regiment) :chase)
+        (cond ((regiment-square-p regiment)
+               ;; Carré : il reste sur place, piques de tous côtés, et se bat
+               ;; contre qui l'aborde ; l'ennemi défait, il attend.
+               (if (or (zerop (regiment-alive enemy)) (regiment-routed-p enemy))
+                   (end-chase regiment soldiers)
+                   (progn
+                     (setf (regiment-holding-p regiment) (>= closed needed))
+                     (when (and (>= closed needed)
+                                (zerop (mod (+ (battle-tick-count battle) (regiment-index regiment))
+                                            *advance-period*)))
+                       (retarget-fought battle regiment)))))
+              ((and (eq (regiment-stance regiment) :chase)
                     (plusp (regiment-alive enemy)) (regiment-routed-p enemy))
                ;; Posture de poursuite : il court après les fuyards (stances.lisp).
                (update-chase battle regiment enemy))
@@ -352,9 +363,16 @@ premier rang qui sont au contact (cible à la distance d'arrêt)."
          (front-cos (the single-float *front-cos*))
          ;; Tireurs en mêlée : tous tirent l'épée, même sans ennemi à portée.
          (draw (and (eq (attack-kind primary) :ranged) (regiment-in-melee-p regiment)))
+         ;; En carré, chacun vise devant le côté du bloc le plus proche de sa
+         ;; place, et les soldats du bord sont au contact (formation.lisp).
+         (square-depth (if (regiment-square-p regiment) (max 1 (regiment-depth regiment)) 0))
+         (square-files (formation-files (regiment-formation regiment)
+                                        (max 1 (regiment-alive regiment))))
+         (soldier-files (soldiers-file soldiers))
          (engaged 0)
          (closed 0))
-    (declare (type fixnum side start end engaged closed)
+    (declare (type fixnum side start end engaged closed square-depth square-files)
+             (type fixnum-array soldier-files)
              (type single-float front-x front-y front-cos)
              (type single-float closed-distance)
              (type fixnum-array targets weapons switch-timers cooldowns calms ranks)
@@ -408,9 +426,15 @@ premier rang qui sont au contact (cible à la distance d'arrêt)."
                                 (column (- cell (* row columns)))
                                 (span (min 8 (the fixnum (ceiling (+ search ri max-radius) cell-size))))
                                 (best-p -1) (best-p-d most-positive-single-float)
-                                (best-s -1) (best-s-d most-positive-single-float))
-                           (declare (type single-float xi yi ri best-p-d best-s-d)
+                                (best-s -1) (best-s-d most-positive-single-float)
+                                (aim-x front-x) (aim-y front-y))
+                           (declare (type single-float xi yi ri best-p-d best-s-d aim-x aim-y)
                                     (type fixnum cell row column span best-p best-s))
+                           (when (plusp square-depth)
+                             (multiple-value-setq (aim-x aim-y)
+                               (square-outward (formation-facing (regiment-formation regiment))
+                                               square-depth square-files
+                                               (aref ranks i) (aref soldier-files i))))
                            (loop for r of-type fixnum from (max 0 (- row span))
                                    to (min (1- columns) (+ row span))
                                  do (loop for c of-type fixnum from (max 0 (- column span))
@@ -430,7 +454,7 @@ premier rang qui sont au contact (cible à la distance d'arrêt)."
                                                               (declare (type single-float dx dy center d))
                                                               (when (and (<= p-min d p-reach) (< d best-p-d)
                                                                          (or (zerop p-min)
-                                                                             (>= (+ (* dx front-x) (* dy front-y))
+                                                                             (>= (+ (* dx aim-x) (* dy aim-y))
                                                                                  (* front-cos center))))
                                                                 (setf best-p j best-p-d d))
                                                               (when (and (<= d s-reach) (< d best-s-d))
@@ -463,7 +487,11 @@ premier rang qui sont au contact (cible à la distance d'arrêt)."
                                  (setf (aref cooldowns i) -1)
                                  (progn
                                    (incf engaged)
-                                   (when (and (zerop (aref ranks i))
+                                   (when (and (if (plusp square-depth)
+                                                  (zerop (square-edge-depth square-depth square-files
+                                                                            (aref ranks i)
+                                                                            (aref soldier-files i)))
+                                                  (zerop (aref ranks i)))
                                               (<= (if (= wanted 0) best-p-d best-s-d)
                                                   closed-distance))
                                      (incf closed)))))))))
@@ -650,9 +678,12 @@ indices, avec le générateur de la bataille : la bataille se rejoue."
                                         (defender (regiment-stats defending))
                                         ;; De flanc ou de dos, la défense tombe (flanks.lisp).
                                         (facing (formation-facing (regiment-formation defending)))
-                                        (sector (attack-sector (cos facing) (sin facing)
-                                                               (- (aref xs i) (aref xs target))
-                                                               (- (aref ys i) (aref ys target))))
+                                        ;; Un carré de piques n'a pas de flanc.
+                                        (sector (if (regiment-square-p defending)
+                                                    0
+                                                    (attack-sector (cos facing) (sin facing)
+                                                                   (- (aref xs i) (aref xs target))
+                                                                   (- (aref ys i) (aref ys target)))))
                                         (chance (max min-chance
                                                      (min max-chance
                                                           (- (+ skill (the single-float

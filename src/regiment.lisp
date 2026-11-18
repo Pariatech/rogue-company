@@ -164,6 +164,10 @@ Des tireurs comptent leur arme secondaire : au contact, ils tirent l'épée."
            (+ *hold-margin* (attack-min-reach primary)))
           (t (max *hold-margin* (- (attack-reach primary) *hold-short-of-reach*))))))
 
+(defun regiment-square-p (regiment)
+  "Vrai si REGIMENT est formé en carré de piques (exercice :SQUARE)."
+  (eq (regiment-drill regiment) :square))
+
 (defun regiment-in-melee-p (regiment)
   "Vrai si REGIMENT se battait en mêlée au dernier tick : un de ses soldats
 avait une cible, ou un ennemi en visait un."
@@ -394,7 +398,11 @@ pendant une contremarche."
                           #.(float +ticks-per-second+ 1f0))
                        (formation-facing (regiment-formation regiment))
                        (/ (stats-turn-rate stats) #.(float +ticks-per-second+ 1f0))
-                       (regiment-hold-distance regiment))))
+                       (regiment-hold-distance regiment)
+                       ;; En carré, chacun fait face au côté le plus proche.
+                       (if (regiment-square-p regiment) (max 1 (regiment-depth regiment)) 0)
+                       (formation-files (regiment-formation regiment)
+                                        (max 1 (regiment-alive regiment))))))
 
 ;;; Inspection
 

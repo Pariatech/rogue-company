@@ -70,6 +70,42 @@ reformation, sinon celles de COUNT soldats en rangs pleins."
       (formation-dense-files formation count)))
 
 (declaim (inline grid-point))
+;;; Carré de piques (exercice :SQUARE) : chaque soldat présente la pique vers
+;;; le côté du bloc le plus proche de sa place.
+
+(declaim (inline square-outward))
+(defun square-outward (facing depth files rank file)
+  "Vecteur unitaire, au sol, vers l'extérieur du carré pour le soldat du rang
+RANK et de la file FILE d'une grille de DEPTH rangs et FILES files orientée vers
+FACING : vers le côté dont sa place est la plus proche (front, arrière, gauche ou
+droite), en diagonale aux coins."
+  (declare (type single-float facing) (type fixnum depth files rank file)
+           (optimize (speed 3) (safety 0)))
+  (let* ((half-depth (max 0.5f0 (* 0.5f0 (float (1- depth) 1f0))))
+         (half-width (max 0.5f0 (* 0.5f0 (float (1- files) 1f0))))
+         ;; Place relative, de -1 à 1 : vers l'avant, et vers la droite.
+         (a (/ (- half-depth (float rank 1f0)) half-depth))
+         (b (/ (- (float file 1f0) half-width) half-width))
+         (fx (cos facing)) (fy (sin facing))
+         (rx (- fy)) (ry fx))
+    (declare (type single-float half-depth half-width a b fx fy rx ry))
+    (cond ((< (abs (- (abs a) (abs b))) 1f-3)
+           ;; Coin : en diagonale.
+           (let ((sa (if (minusp a) -0.70710677f0 0.70710677f0))
+                 (sb (if (minusp b) -0.70710677f0 0.70710677f0)))
+             (values (+ (* sa fx) (* sb rx)) (+ (* sa fy) (* sb ry)))))
+          ((> (abs a) (abs b))
+           (if (minusp a) (values (- fx) (- fy)) (values fx fy)))
+          (t
+           (if (minusp b) (values (- rx) (- ry)) (values rx ry))))))
+
+(declaim (inline square-edge-depth))
+(defun square-edge-depth (depth files rank file)
+  "Rangs entre le soldat du rang RANK et de la file FILE et le bord du carré le
+plus proche : 0 au bord."
+  (declare (type fixnum depth files rank file))
+  (min rank (- depth 1 rank) file (- files 1 file)))
+
 (defun grid-point (formation depth rank file files)
   "Emplacement du rang RANK et de la file FILE dans une grille de DEPTH rangs et
 FILES files, et le vecteur unitaire vers la droite du front."

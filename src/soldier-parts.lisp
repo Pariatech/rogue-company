@@ -313,6 +313,9 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (regiment-weapons *regiment-weapons*)
          (regiment-shields *regiment-shields*)
          (regiment-mounts *regiment-mounts*)
+         (regiment-square-depths *regiment-square-depths*)
+         (regiment-square-files *regiment-square-files*)
+         (soldier-files (soldiers-file soldiers))
          (horse-anchor (the single-float *horse-anchor*))
          (horse-seat (the single-float *horse-seat*))
          (horse-hip-forward (the single-float *horse-hip-forward*))
@@ -428,6 +431,7 @@ dans le sens des aiguilles d'une montre à l'écran)."
              (type single-float recoil-distance)
              (type fixnum-array order strike-ticks soldier-ranks stuns marches reloads soldier-regiments bearers lowered-ends
                    regiment-weapons regiment-shields regiment-mounts
+                   regiment-square-depths regiment-square-files soldier-files
                    regiment-guards regiment-crouch regiment-stoop regiment-aim-ranks soldier-weapons)
              (type single-float crouch-height horse-anchor horse-seat horse-hip-forward
                    horse-hip-side horse-hip-height horse-knee-height horse-stride horse-lift
@@ -806,10 +810,24 @@ dans le sens des aiguilles d'une montre à l'écran)."
                                  ((< u 1f0) (hold-halberd halberd-cut halberd-guard
                                                           (/ (- u 0.6f0) 0.4f0)))
                                  (t (hold-halberd halberd-guard halberd-guard 0f0))))))
-                      ((and pikes (= weapon 1) (< (aref soldier-ranks i) (aref lowered-ends regiment-index)))
-                       ;; Pique croisée, à hauteur d'épaule selon le rang ; le coup
-                       ;; la pousse en avant, les mains en suivent une part.
-                       (let* ((rank (aref soldier-ranks i))
+                      ((and pikes (= weapon 1)
+                            (< (let ((depth (aref regiment-square-depths regiment-index)))
+                                 (if (plusp depth)
+                                     (square-edge-depth depth
+                                                        (aref regiment-square-files regiment-index)
+                                                        (aref soldier-ranks i) (aref soldier-files i))
+                                     (aref soldier-ranks i)))
+                               (aref lowered-ends regiment-index)))
+                       ;; Pique croisée, à hauteur d'épaule selon le rang (en carré,
+                       ;; le rang depuis le bord) ; le coup la pousse en avant, les
+                       ;; mains en suivent une part.
+                       (let* ((rank (let ((depth (aref regiment-square-depths regiment-index)))
+                                      (if (plusp depth)
+                                          (square-edge-depth depth
+                                                             (aref regiment-square-files regiment-index)
+                                                             (aref soldier-ranks i)
+                                                             (aref soldier-files i))
+                                          (aref soldier-ranks i))))
                               (h (+ pike-hand (* pike-rise (float rank 1f0))))
                               (age (+ alpha (float (min 1000000 (- tick (aref strike-ticks i))) 1f0)))
                               (thrust (if (< age thrust-ticks)
