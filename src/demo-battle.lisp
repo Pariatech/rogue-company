@@ -113,8 +113,8 @@ poursuite sur les ailes.")
   "Duel de deux régiments d'arquebusiers en contremarche, hors de portée au
 départ, pour observer comment les pertes se comblent.")
 
-(defparameter *matchup-dotations* '(:pikemen :halberdiers :rodeleros :arquebusiers :musketeers
-                                     :light-cavalry)
+(defparameter *matchup-dotations* '(:pikemen :halberdiers :rodeleros :greatswords
+                                     :arquebusiers :musketeers :light-cavalry)
   "Dotations du tournoi : chacune affronte chacune des autres une fois.")
 (defparameter *matchup-count* 105 "Effectif d'un régiment du tournoi, sauf dans *MATCHUP-COUNTS*.")
 (defparameter *matchup-counts* '((:pikemen . 225) (:light-cavalry . 60))
@@ -150,7 +150,7 @@ remplace les paires tirées de DOTATIONS."
                         (list 1 blue (size blue) (+ cx half-gap) y 180 drill))))))
 
 (defparameter *matchup-demo-regiments* (matchup-regiments)
-  "Tournoi : chaque dotation contre chacune des autres, quinze duels côte à côte
+  "Tournoi : chaque dotation contre chacune des autres, vingt et un duels côte à côte
 que C lance ensemble, 105 hommes de chaque côté, sauf 225 piquiers et 60
 chevau-légers (*MATCHUP-COUNTS*). Le tableau des duels (tally-view.lisp) compte
 les survivants.")
@@ -173,6 +173,7 @@ pour une arme de tir ; sans posture, DEFAULT-STANCE (:CHASE pour la cavalerie, :
                               (:halberdiers . "Hallebardiers")
                               (:arquebusiers . "Arquebusiers")
                               (:musketeers . "Mousquetaires")
+                              (:greatswords . "Espadonniers")
                               (:light-cavalry . "Chevau-légers"))
   "Nom affiché de chaque dotation.")
 

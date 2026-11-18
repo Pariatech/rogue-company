@@ -54,6 +54,9 @@
 
 (defparameter *sword-length* 0.8f0 "Lame de l'épée, en mètres.")
 (defparameter *dagger-length* 0.3f0 "Lame de la dague des piquiers, en mètres.")
+(defparameter *greatsword-length* 1.3f0 "Lame de l'espadon, en mètres.")
+(defparameter *greatsword-grip* 0.16f0
+  "Espadon : la main gauche tient la poignée à cette distance sous la droite, en mètres.")
 (defparameter *sword-guard* 0.07f0 "Demi-largeur de la garde, en mètres.")
 (defparameter *sword-guard-color* '(196 150 64))
 (defparameter *sword-strike-seconds* 0.45f0
@@ -379,6 +382,8 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (half-line (* 0.5f0 scale (the single-float *pike-width*)))
          (sword-length (the single-float *sword-length*))
          (dagger-length (the single-float *dagger-length*))
+         (greatsword-length (the single-float *greatsword-length*))
+         (greatsword-grip (the single-float *greatsword-grip*))
          (sword-guard (the single-float *sword-guard*))
          (strike-ticks-sword (* (the single-float *sword-strike-seconds*)
                                 (float +ticks-per-second+ 1f0)))
@@ -429,7 +434,8 @@ dans le sens des aiguilles d'une montre à l'écran)."
              (type single-float gun-stock gun-recoil flash-ticks smoke-ticks smoke-size smoke-rise)
              (type single-float halberd-length halberd-head halberd-grip halberd-gap
                    halberd-axe strike-ticks-halberd)
-             (type single-float sword-length dagger-length sword-guard strike-ticks-sword
+             (type single-float sword-length dagger-length greatsword-length greatsword-grip
+                   sword-guard strike-ticks-sword
                    shield-threshold)
              (type (integer 0 255) brass-r brass-g brass-b)
              (type float-array xs ys prev-xs prev-ys facings prev-facings)
@@ -647,6 +653,21 @@ dans le sens des aiguilles d'une montre à l'écran)."
                              (multiple-value-setq (hand1-x hand1-y hand1-depth)
                                (project (* (- hand-swing) swing) (- hand-side)
                                         (+ hand-height bob))))))
+                      ((and (= weapon 5) (zerop (aref soldier-weapons i)))
+                       ;; Espadon à deux mains : la main gauche sous la droite,
+                       ;; sur la poignée, dans le prolongement de la lame.
+                       (strike-blade (and (not stunned) (= 1 (aref regiment-guards regiment-index)))
+                                     greatsword-length)
+                       (let ((k (/ greatsword-grip greatsword-length)))
+                         (declare (type single-float k))
+                         (setf hand1-x (- hand2-x (* k (- tip-x hand2-x)))
+                               hand1-y (- hand2-y (* k (- tip-y hand2-y)))
+                               hand1-depth hand2-depth)))
+                      ((= weapon 5)
+                       ;; Espadonnier à la dague, trop près pour l'espadon.
+                       (strike-blade t dagger-length)
+                       (multiple-value-setq (hand1-x hand1-y hand1-depth)
+                         (project (* (- hand-swing) swing) (- hand-side) (+ hand-height bob))))
                       ((and (= weapon 4) (= 1 (aref soldier-weapons i)))
                        ;; Tireur à l'épée, au contact.
                        (strike-blade t sword-length)
@@ -1259,10 +1280,13 @@ dans le sens des aiguilles d'une montre à l'écran)."
                                 (values wx wy h))))
                   (multiple-value-bind (wx wy h) (dropped-hand 1f0 4)
                     (declare (type single-float wx wy h))
-                    (when (= weapon 2)
+                    (when (or (= weapon 2) (= weapon 5))
                       (let* ((angle (+ facing (* 1.2f0 (- (* 2f0 (death-jitter serial 5)) 1f0))))
-                             (bdx (cos angle)) (bdy (sin angle)))
-                        (declare (type single-float angle bdx bdy))
+                             (bdx (cos angle)) (bdy (sin angle))
+                             (sword-length (if (= weapon 5)
+                                               (the single-float *greatsword-length*)
+                                               sword-length)))
+                        (declare (type single-float angle bdx bdy sword-length))
                         (multiple-value-bind (hx hy) (ground wx wy h)
                           (declare (type single-float hx hy))
                           (multiple-value-bind (tx ty)

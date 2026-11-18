@@ -124,12 +124,13 @@ usage que *BEARERS*.")
 
 (defun regiment-weapon-look (regiment)
   "Arme à dessiner pour REGIMENT : 1 pique, 2 épée, 3 hallebarde, 4 arme à feu,
-0 rien."
+5 espadon, 0 rien."
   (case (getf (stats-loadout (regiment-stats regiment)) :main)
     (:pike 1)
     (:sword 2)
     (:halberd 3)
     ((:arquebus :musket) 4)
+    (:greatsword 5)
     (t 0)))
 
 (defun update-bearers (battle)

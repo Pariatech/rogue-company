@@ -46,6 +46,15 @@
   :attack '(:kind :melee :reach 1.1 :damage 13 :piercing 2 :accuracy 0.1
             :cooldown 1.0 :ready-time 1.0))
 
+(define-item :greatsword "Espadon"
+  :slots '(:main) :hands 2 :weight 3.5 :price 30
+  ;; Épée à deux mains : longue, lourde, lente ; elle fauche à la charge
+  ;; (:charge-bonus, ajouté au bonus de charge du régiment, charge.lisp). Files
+  ;; plus lâches pour la manier ; sept rangs, 15 files à 105 hommes.
+  :attack '(:kind :melee :reach 1.6 :damage 26 :piercing 4 :accuracy 0.05
+            :cooldown 1.6 :charge-bonus 20 :ready-time 1.0)
+  :modifiers '((:spacing :set 1.3) (:ranks :set 7)))
+
 (define-item :dagger "Dague"
   :slots '(:secondary) :hands 1 :weight 0.5 :price 5
   :attack '(:kind :melee :reach 0.6 :damage 6 :piercing 2 :accuracy 0.05
@@ -152,6 +161,7 @@
     (:arquebusiers :recruit (:main :arquebus :secondary :sword :armor :buff-coat :helmet :morion))
     (:halberdiers :recruit (:main :halberd :secondary :sword :armor :corselet :helmet :morion))
     (:crossbowmen :recruit (:main :crossbow :secondary :sword :shield :pavise :helmet :morion))
+    (:greatswords :recruit (:main :greatsword :secondary :dagger :armor :corselet :helmet :morion))
     (:light-cavalry :recruit (:main :sword :armor :buff-coat :helmet :morion :mount :light-horse))
     (:reiters :recruit (:main :pistols :secondary :sword :armor :buff-coat :mount :light-horse))
     (:lancers :recruit (:main :lance :secondary :sword :armor :cuirassier-armour
