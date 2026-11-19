@@ -45,6 +45,10 @@
 que s'ils changent, ce qui est rare."))
   (:documentation "La bataille de démonstration, son tick et sa vitesse."))
 
+(defclass ai-battle-scene (battle-scene)
+  ((battle :initform (make-ai-battle :seed *demo-seed*)))
+  (:documentation "Bataille rangée : le joueur mène les rouges, l'IA les bleus (ai.lisp)."))
+
 ;;; Vitesse
 
 (defun battle-paused-p (scene)

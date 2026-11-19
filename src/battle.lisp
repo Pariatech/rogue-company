@@ -27,7 +27,13 @@ pour reproduire une bataille.")
    (deaths :initform (make-death-log) :reader battle-deaths
            :documentation "Journal des morts (deaths.lisp), pour les dessiner.")
    (wounds :initform (make-wound-log) :reader battle-wounds
-           :documentation "Journal des blessures (wounds.lisp), pour dessiner le sang.")))
+           :documentation "Journal des blessures (wounds.lisp), pour dessiner le sang.")
+   (commanders :initform nil :accessor battle-commanders
+               :documentation "Commandants des camps menés par l'IA (ai.lisp), réveillés
+en tête de chaque tick.")))
+
+(defgeneric update-commander (commander battle)
+  (:documentation "Donne ses ordres à l'armée de COMMANDER, en tête du tick."))
 
 (defparameter *battlefield-size* 256
   "Côté de la carte, en mètres, centrée sur l'origine.")
@@ -115,7 +121,8 @@ Renvoie le régiment."
 (defun battle-tick (battle)
   "Avance BATTLE d'un tick. Les systèmes s'exécutent toujours dans cet ordre,
 et s'ajoutent ici au fil des étapes :
-  1. copie des positions courantes dans les positions précédentes ;
+  1. copie des positions courantes dans les positions précédentes, puis
+     ordres des commandants de l'IA (ai.lisp) ;
   2. régiments : reformation après un ordre ou au calme (regiment.lisp),
      posture (repli des tirailleurs, stances.lisp), files
      ouvertes au passage d'un ami (open-files.lisp), engagement (avance ou arrêt au contact), puis emplacements,
@@ -129,6 +136,8 @@ et s'ajoutent ici au fil des étapes :
   (let ((soldiers (battle-soldiers battle))
         (regiments (battle-regiments battle)))
     (copy-previous-positions soldiers)
+    (dolist (commander (battle-commanders battle))
+      (update-commander commander battle))
     (loop for regiment across regiments
           do (update-reform regiment soldiers (battle-tick-count battle))
              (update-skirmish battle regiment)
