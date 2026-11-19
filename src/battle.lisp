@@ -137,8 +137,8 @@ et s'ajoutent ici au fil des étapes :
   1. copie des positions courantes dans les positions précédentes, puis
      ordres des commandants de l'IA (ai.lisp) ;
   2. régiments : reformation après un ordre ou au calme (regiment.lisp),
-     posture (repli des tirailleurs, stances.lisp), files
-     ouvertes au passage d'un ami (open-files.lisp), engagement (avance ou arrêt au contact), puis emplacements,
+     posture (repli des tirailleurs, stances.lisp), engagement (avance ou
+     arrêt au contact), puis emplacements,
      rompus pour les régiments en ordre lâche au contact (combat.lisp) ;
   3. soldats : déplacement vers leur emplacement (ou face à leur cible), puis
      grille spatiale et collisions ;
@@ -155,7 +155,6 @@ et s'ajoutent ici au fil des étapes :
     (loop for regiment across regiments
           do (update-reform regiment soldiers (battle-tick-count battle))
              (update-skirmish battle regiment)
-             (update-open-files battle regiment)
              (update-engagement battle regiment)
              (update-charge battle regiment)
              (update-regiment-slots regiment soldiers)

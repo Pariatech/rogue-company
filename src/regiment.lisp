@@ -75,9 +75,6 @@ au prochain tick.")
    (alert :initform nil :accessor regiment-alert-p
           :documentation "Ennemi proche (combat.lisp, UPDATE-ALERT) : en garde, piques
 basses et arquebuses en joue, même sans ordre d'attaque.")
-   (open-until :initform -1 :accessor regiment-open-until :type fixnum
-               :documentation "Files ouvertes pour un ami jusqu'à ce tick (open-files.lisp) ;
--1 en files normales.")
    (volley-rank :initform 0 :accessor regiment-volley-rank :type fixnum
                 :documentation "Feu par rang : rang qui tire la prochaine salve.")
    (crouch :initform 0 :accessor regiment-crouch :type fixnum

@@ -15,8 +15,8 @@
 ;;;   en courant, dos à lui, puis lui refait face et reprend son ordre
 ;;;   d'attaque ; plus tôt si aucune mêlée ennemie libre n'est plus à moins de
 ;;;   *SKIRMISH-CLEAR*, une fois sorti des rangs amis qu'il traverse. Rattrapé au contact, il cesse de se replier et se bat.
-;;;   Pour passer derrière ses piques, les deux régiments ouvrent leurs files
-;;;   (open-files.lisp).
+;;;   Il passe derrière ses piques en les traversant : entre soldats de
+;;;   régiments amis, les collisions tolèrent un chevauchement (collision.lisp).
 
 (defparameter *chase-distance* 100f0
   "Distance maximale d'une poursuite, en mètres, depuis le centre du régiment
@@ -36,6 +36,22 @@ accroché aux piques, les tireurs se retournent et tirent sur la mêlée.")
 (defparameter *skirmish-arrived* 1f0
   "Le repli est fini quand les soldats sont en moyenne à moins de cette distance
 de leur emplacement, en mètres.")
+
+(defparameter *skirmish-friend-distance* 2f0
+  "Un régiment en repli ne s'arrête pas à moins de cette distance, de soldat à
+soldat, d'un régiment ami : jamais au milieu d'un régiment qu'il traverse.")
+
+(defun friend-near-p (battle regiment)
+  "Vrai si un soldat d'un autre régiment vivant du même camp, non débandé, est
+à moins de *SKIRMISH-FRIEND-DISTANCE* d'un soldat de REGIMENT."
+  (let ((soldiers (battle-soldiers battle)))
+    (loop for other across (battle-regiments battle)
+          thereis (and (not (eq other regiment))
+                       (= (regiment-side other) (regiment-side regiment))
+                       (plusp (regiment-alive other))
+                       (not (regiment-routed-p other))
+                       (< (regiment-gap regiment other soldiers *skirmish-friend-distance*)
+                          *skirmish-friend-distance*)))))
 
 (defparameter *skirmish-timeout* 1.5f0
   "Un repli bloqué s'arrête après ce multiple du temps qu'il devrait prendre.")

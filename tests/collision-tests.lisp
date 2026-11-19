@@ -4,10 +4,13 @@
 (in-suite collision)
 
 (defun lone-soldiers (&rest specs)
-  "Bataille d'un soldat par régiment. Chaque SPEC est (dotation x y)."
+  "Bataille d'un soldat par régiment, les camps en alternance (la collision
+pleine, celle des ennemis). Chaque SPEC est (dotation x y [camp])."
   (let ((b (rogue-company::make-battle)))
-    (loop for (dotation x y) in specs
-          do (rogue-company::add-regiment b (rogue-company::dotation-stats dotation) 1 :x x :y y))
+    (loop for (dotation x y side) in specs
+          for k from 0
+          do (rogue-company::add-regiment b (rogue-company::dotation-stats dotation) 1
+                                          :x x :y y :side (or side (mod k 2))))
     b))
 
 (defun collide (battle &optional (passes 1))
@@ -68,6 +71,19 @@
     (collide b 40)
     (is (near 1.3 (gap b 0 1) 1f-3) "rayons 1,0 + 0,3")
     (is (< (abs (first (position-of b 0))) (abs (- (first (position-of b 1)) 1.0))))))
+
+(test friends-of-other-regiments-overlap
+  "Deux soldats amis de régiments différents se chevauchent jusqu'à
+*FRIEND-OVERLAP* de leurs rayons ; deux ennemis non."
+  (let ((friends (lone-soldiers '(:pikemen 0 0 0) '(:pikemen 0.4 0 0)))
+        (enemies (lone-soldiers '(:pikemen 0 0 0) '(:pikemen 0.4 0 1))))
+    (collide friends 40)
+    (collide enemies 40)
+    (is (near 0.4 (gap friends 0 1) 1f-4) "0,4 m : au-delà de 0,24 m, ils ne se poussent pas")
+    (is (near 0.6 (gap enemies 0 1) 1f-3)))
+  (let ((close (lone-soldiers '(:pikemen 0 0 0) '(:pikemen 0.1 0 0))))
+    (collide close 40)
+    (is (near 0.24 (gap close 0 1) 1f-3) "trop près : repoussés jusqu'à 0,24 m")))
 
 (test distant-soldiers-do-not-move
   (let ((b (lone-soldiers '(:pikemen 0 0) '(:pikemen 0.61 0) '(:lancers 5 5))))

@@ -33,7 +33,6 @@
                (:file "combat")
                (:file "shooting")
                (:file "stances")
-               (:file "open-files")
                (:file "morale")
                (:file "charge")
                (:file "penetration")

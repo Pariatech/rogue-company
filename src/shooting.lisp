@@ -574,3 +574,16 @@ STRIKE, appliqués ensuite par APPLY-DAMAGE."
                              (round (* (+ (the single-float *countermarch-delay*)
                                           (the single-float *volley-interval*))
                                        +ticks-per-second+)))))))))))
+
+(defun regiment-base-file-spacing (regiment)
+  "Espacement des files de REGIMENT : ouvertes pour la contremarche, NIL
+(l'espacement des rangs) sinon."
+  (and (eq (regiment-drill regiment) :countermarch)
+       (max (stats-spacing (regiment-stats regiment)) *volley-file-spacing*)))
+
+(defun set-file-spacing (regiment spacing)
+  "Change l'espacement des files de REGIMENT : emplacements à recalculer."
+  (let ((formation (regiment-formation regiment)))
+    (unless (eql (formation-file-spacing formation) spacing)
+      (setf (formation-file-spacing formation) spacing
+            (regiment-slots-dirty-p regiment) t))))

@@ -11,6 +11,12 @@
 ;;;
 ;;; La masse partage la séparation : un cheval bouscule un fantassin bien plus
 ;;; qu'il n'est bousculé. Un soldat étourdi compte pour *STUN-MASS* fois sa masse.
+;;;
+;;; Entre soldats du même camp et de régiments différents, un chevauchement est
+;;; toléré (*FRIEND-OVERLAP*) : deux régiments amis se traversent en se
+;;; glissant l'un dans l'autre (des tireurs qui se replient derrière leurs
+;;; piques), sans ouvrir leurs files. Entre ennemis, la collision reste pleine :
+;;; le contact au combat n'en dépend pas.
 
 (defparameter *collision-stiffness* 0.5f0
   "Part du chevauchement corrigée par tick. 1 sépare d'un coup mais fait vibrer
@@ -19,6 +25,11 @@ les foules serrées.")
 (defparameter *stun-mass* 8f0
   "Facteur de masse d'un soldat étourdi (combat.lisp) dans les collisions : figé
 par le coup, il n'est plus poussé par ceux qui le suivent, qui butent sur lui.")
+
+(defparameter *friend-overlap* 0.6f0
+  "Part de la somme des rayons que deux soldats amis de régiments différents
+peuvent chevaucher sans se repousser : deux fantassins (0,3 m) ne se poussent
+qu'à moins de 0,24 m.")
 
 (defparameter *drive-mass* 20f0
   "Facteur de masse d'un cavalier lancé (penetration.lisp) dans les collisions :
@@ -41,6 +52,9 @@ la bataille : il fixe jusqu'où chercher les voisins."
          (radii (soldiers-radius soldiers)) (masses (soldiers-mass soldiers))
          (stuns (soldiers-stun soldiers))
          (momentums (soldiers-momentum soldiers))
+         (owners (soldiers-regiment soldiers))
+         (sides (soldiers-side soldiers))
+         (friend-reach (- 1f0 (the single-float *friend-overlap*)))
          (push-xs (soldiers-push-x soldiers)) (push-ys (soldiers-push-y soldiers))
          (columns (grid-columns grid))
          (cell-size (grid-cell-size grid))
@@ -51,7 +65,8 @@ la bataille : il fixe jusqu'où chercher les voisins."
     (declare (type fixnum count columns)
              (type float-array xs ys radii masses push-xs push-ys momentums)
              (type single-float cell-size stiffness)
-             (type fixnum-array start sorted soldier-cell stuns))
+             (type fixnum-array start sorted soldier-cell stuns owners sides)
+             (type single-float friend-reach))
     (fill push-xs 0f0 :end count)
     (fill push-ys 0f0 :end count)
     (dotimes (i count)
@@ -80,7 +95,10 @@ la bataille : il fixe jusqu'où chercher les voisins."
                                        (when (> j i)
                                          (let* ((dx (- (aref xs j) xi))
                                                 (dy (- (aref ys j) yi))
-                                                (reach (+ ri (aref radii j)))
+                                                (reach (if (and (= (aref sides i) (aref sides j))
+                                                                (/= (aref owners i) (aref owners j)))
+                                                           (* friend-reach (+ ri (aref radii j)))
+                                                           (+ ri (aref radii j))))
                                                 (d2 (+ (* dx dx) (* dy dy))))
                                            (declare (type single-float dx dy reach d2))
                                            (when (< d2 (* reach reach))
