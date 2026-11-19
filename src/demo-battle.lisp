@@ -148,7 +148,10 @@ son exercice ; sinon DRILL."
           for cx = (* column *matchup-column*)
           for y = (* *matchup-row* (- row (/ (1- rows) 2)))
           nconc (flet ((dotation (entry) (if (consp entry) (first entry) entry))
-                       (entry-drill (entry) (if (consp entry) (second entry) drill)))
+                       (entry-drill (entry)
+                         ;; L'exercice de tir du tournoi, pour les tireurs seulement.
+                         (cond ((consp entry) (second entry))
+                               ((attack-volley-p (stats-primary (dotation-stats entry))) drill))))
                   (flet ((size (entry)
                            (or (cdr (assoc (dotation entry) *matchup-counts*)) count)))
                     (list (list 0 (dotation red) (size red) (- cx half-gap) y 0 (entry-drill red))

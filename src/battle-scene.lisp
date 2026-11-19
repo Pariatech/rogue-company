@@ -21,6 +21,8 @@
                :documentation "Tire les ordres de R, sans toucher au générateur de la bataille.")
    (clock :initform (make-fixed-clock) :reader scene-clock)
    (camera :initform (make-camera) :reader scene-camera)
+   (command :initform (make-instance 'player-command) :reader scene-command
+            :documentation "Sélection et ordres du joueur (command.lisp).")
    (tally :initform (make-tally) :reader scene-tally
           :documentation "Tableau des régiments (tally-view.lisp).")
    (resume-speed :initform 1 :accessor scene-resume-speed
@@ -83,6 +85,7 @@ que s'ils changent, ce qui est rare."))
            (setf *draw-tally* (not *draw-tally*)))
          (when (key-pressed-p :key-v)
            (setf *soldier-style* (if (eq *soldier-style* :parts) :sprites :parts)))
+         (update-command (scene-command scene) (scene-battle scene) (scene-camera scene))
          (update-camera (scene-camera scene) dt)
          (let ((battle (scene-battle scene)))
            (dotimes (i (clock-consume (scene-clock scene) dt))
@@ -120,7 +123,8 @@ que s'ils changent, ce qui est rare."))
   (draw-soldiers (scene-battle scene) (clock-alpha (scene-clock scene)) (scene-camera scene))
   (draw-battle-hud scene)
   (draw-tally (scene-tally scene) (scene-battle scene))
-  (draw-text "Espace : pause   + / - : vitesse   R : nouvel ordre   C : charge   V : morceaux / sprites   Tab : tableau   Flèches, ZQSD, clic droit : caméra   Molette : zoom   F11 : plein écran   Échap : menu"
+  (draw-command (scene-command scene) (scene-battle scene) (scene-camera scene))
+  (draw-text "Clic gauche : choisir   Clic droit : ordre   T : halte   E : exercice   P : posture   Espace : pause   + / - : vitesse   C : charge   V : morceaux / sprites   Tab : tableau   ZQSD, glisser droit : caméra   Échap : menu"
              10 (- *window-height* (text-size 16) 10) (text-size 16) :darkgray))
 
 ;;; Inspection
