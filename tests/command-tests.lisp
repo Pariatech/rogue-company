@@ -39,6 +39,23 @@ marche."
         (is (near 40 (- (third o2) (third o1)) 0.5) "écart de 40 m gardé")
         (is (near (/ pi 2) (fourth o1) 1f-3) "front vers le sud, sens de la marche")))))
 
+(test group-move-turns-to-the-chosen-facing
+  "Une orientation choisie (glisser du clic droit) tourne les fronts et la
+disposition du groupe : deux régiments l'un au nord de l'autre, face à l'est,
+envoyés face au sud, se retrouvent côte à côte d'est en ouest."
+  (let* ((b (command-battle))
+         (rs (subseq (regiments b) 0 2)))
+    (rogue-company::command-move b rs 100 0 (/ pi 2))
+    (destructuring-bind (pikes shooters) rs
+      (let ((o1 (rogue-company::regiment-orders pikes))
+            (o2 (rogue-company::regiment-orders shooters)))
+        (is (near (/ pi 2) (fourth o1) 1f-3))
+        (is (near (/ pi 2) (fourth o2) 1f-3))
+        (is (near 120 (second o1) 0.5) "les piques, au nord, passent à l'est")
+        (is (near 80 (second o2) 0.5) "les tireurs, au sud, passent à l'ouest")
+        (is (near 0 (third o1) 0.5))
+        (is (near 0 (third o2) 0.5))))))
+
 (test attack-and-halt
   (let* ((b (command-battle))
          (rs (regiments b))
@@ -75,3 +92,27 @@ leurs exercices, rangs refaits (deux pour la salve)."
     (is (eq :chase (rogue-company::regiment-stance (first rs))))
     (rogue-company::cycle-stance (second rs))
     (is (eq :skirmish (rogue-company::regiment-stance (second rs))) "des tireurs en tirailleurs")))
+
+(test space-taps-toggle-and-holds-peek
+  "Espace : un clic bref bascule la pause ; tenu, il suspend la bataille le
+temps de la frappe et la rend dans l'état d'avant."
+  (let ((scene (make-instance 'rogue-company::battle-scene)))
+    (flet ((press (seconds)
+             (setf (gethash :key-space rogue-company::*simulated-keys*) 1)
+             (loop repeat (max 1 (round seconds 0.05))
+                   do (rogue-company::update-space scene 0.05))
+             (remhash :key-space rogue-company::*simulated-keys*)
+             (rogue-company::update-space scene 0.05)
+             (rogue-company::battle-paused-p scene)))
+      (is-false (rogue-company::battle-paused-p scene))
+      (is-true (press 0.1) "clic bref : en pause")
+      (is-false (press 0.1) "clic bref depuis la pause : reprise")
+      (setf (gethash :key-space rogue-company::*simulated-keys*) 1)
+      (rogue-company::update-space scene 0.05)
+      (is-true (rogue-company::battle-paused-p scene) "en pause pendant la frappe")
+      (loop repeat 20 do (rogue-company::update-space scene 0.05))
+      (remhash :key-space rogue-company::*simulated-keys*)
+      (rogue-company::update-space scene 0.05)
+      (is-false (rogue-company::battle-paused-p scene) "tenu : la bataille reprend")
+      (press 0.1)
+      (is-true (press 1.0) "tenu depuis la pause : reste en pause"))))

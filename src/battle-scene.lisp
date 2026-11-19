@@ -3,12 +3,18 @@
 ;;; Scène de bataille : fait avancer la simulation (battle.lisp) au rythme de son
 ;;; horloge à pas fixe, lit les commandes et dessine.
 ;;;
-;;; Espace suspend ou reprend la simulation, + et - changent sa vitesse, R donne
+;;; Espace : un clic bref (moins de *SPACE-TAP-SECONDS*) suspend ou reprend la
+;;; simulation ; tenu, il la suspend le temps d'y jeter un œil (l'aperçu des
+;;; ordres, command.lisp) et la reprend au relâcher. + et - changent sa vitesse, R donne
 ;;; un nouvel ordre au hasard à chaque régiment, C lance chaque régiment sur
 ;;; l'ennemi le plus proche, Échap ramène au menu principal.
 ;;; Cette pause est propre à la bataille : celle du jeu (console, game_control)
 ;;; arrête aussi la lecture du clavier. La caméra (camera.lisp) bouge même
 ;;; quand la bataille est suspendue.
+
+(defparameter *space-tap-seconds* 0.25
+  "Espace relâché avant ce délai : un clic, qui bascule la pause. Au-delà, il
+était tenu : la bataille reprend l'état d'avant.")
 
 (defparameter *battle-speeds* '(0.25 0.5 1 2 4)
   "Vitesses proposées par + et -, en ordre croissant.")
@@ -25,6 +31,10 @@
             :documentation "Sélection et ordres du joueur (command.lisp).")
    (tally :initform (make-tally) :reader scene-tally
           :documentation "Tableau des régiments (tally-view.lisp).")
+   (space-held :initform nil :accessor scene-space-held
+               :documentation "Secondes depuis qu'Espace est enfoncé, ou NIL s'il ne l'est pas.")
+   (space-was-paused :initform nil :accessor scene-space-was-paused
+                     :documentation "La bataille était-elle en pause quand Espace a été enfoncé ?")
    (resume-speed :initform 1 :accessor scene-resume-speed
                  :documentation "Vitesse retrouvée quand on reprend après Espace.")
    (tick-text :initform (make-text-buffer) :reader scene-tick-text
@@ -53,6 +63,25 @@ que s'ils changent, ce qui est rare."))
         (setf (scene-resume-speed scene) (clock-time-scale clock)
               (clock-time-scale clock) 0))))
 
+(defun update-space (scene dt)
+  "Espace enfoncé : pause aussitôt. Relâché, un clic bref garde la pause (ou en
+sort si elle y était déjà) ; tenu plus longtemps, la bataille revient à l'état
+d'avant."
+  (let ((down (key-down-p :key-space))
+        (held (scene-space-held scene)))
+    (cond ((and down (null held))
+           (setf (scene-space-was-paused scene) (battle-paused-p scene)
+                 (scene-space-held scene) 0f0)
+           (unless (battle-paused-p scene) (toggle-battle-pause scene)))
+          (down
+           (incf (scene-space-held scene) (float dt 1f0)))
+          (held
+           (setf (scene-space-held scene) nil)
+           ;; Clic bref depuis la pause, ou tenu depuis le jeu : on reprend.
+           (when (and (eq (< held *space-tap-seconds*) (scene-space-was-paused scene))
+                      (battle-paused-p scene))
+             (toggle-battle-pause scene))))))
+
 (defun change-battle-speed (scene direction)
   "Passe à la vitesse suivante (DIRECTION 1) ou précédente (-1) de
 *BATTLE-SPEEDS*. En pause, change la vitesse de reprise sans reprendre."
@@ -71,8 +100,7 @@ que s'ils changent, ce qui est rare."))
   (cond ((key-pressed-p :key-escape)
          (change-scene *state* 'main-menu))
         (t
-         (when (key-pressed-p :key-space)
-           (toggle-battle-pause scene))
+         (update-space scene dt)
          (when (or (key-pressed-p :key-equal) (key-pressed-p :key-kp-add))
            (change-battle-speed scene 1))
          (when (or (key-pressed-p :key-minus) (key-pressed-p :key-kp-subtract))
@@ -123,8 +151,10 @@ que s'ils changent, ce qui est rare."))
   (draw-soldiers (scene-battle scene) (clock-alpha (scene-clock scene)) (scene-camera scene))
   (draw-battle-hud scene)
   (draw-tally (scene-tally scene) (scene-battle scene))
-  (draw-command (scene-command scene) (scene-battle scene) (scene-camera scene))
-  (draw-text "Clic gauche : choisir   Clic droit : ordre   T : halte   E : exercice   P : posture   Espace : pause   + / - : vitesse   C : charge   V : morceaux / sprites   Tab : tableau   ZQSD, glisser droit : caméra   Échap : menu"
+  ;; En pause, ou Espace tenu : les ordres en cours, fantômes et trajets.
+  (draw-command (scene-command scene) (scene-battle scene) (scene-camera scene)
+                (or (battle-paused-p scene) (key-down-p :key-space)))
+  (draw-text "Clic gauche : choisir   Clic droit : ordre (glisser : orientation)   T : halte   E : exercice   P : posture   Espace : pause (tenu : coup d'œil)   + / - : vitesse   C : charge   V : morceaux / sprites   Tab : tableau   Flèches, ZQSD, clic milieu : caméra   Échap : menu"
              10 (- *window-height* (text-size 16) 10) (text-size 16) :darkgray))
 
 ;;; Inspection

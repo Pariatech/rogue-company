@@ -5,9 +5,10 @@
 ;;;
 ;;; Clic gauche : choisit le régiment sous la souris (Maj : l'ajoute ou le
 ;;; retire) ; dans le vide, vide la sélection. Glisser du clic gauche : cadre de
-;;; sélection. Clic droit bref (sans glisser, ce qui fait défiler la caméra) :
-;;; sur un ennemi, l'attaque ; ailleurs, marche vers ce point, front dans le sens
-;;; de la marche, les régiments choisis gardant leurs places relatives.
+;;; sélection. Clic droit : sur un ennemi, l'attaque ; ailleurs, marche vers ce
+;;; point, les régiments choisis gardant leurs places relatives. Glisser du clic
+;;; droit choisit l'orientation d'arrivée (du point enfoncé vers la souris) ;
+;;; sans glisser, front dans le sens de la marche.
 ;;; T : halte sur place. E : exercice suivant (carré pour les piques, exercices
 ;;; de tir pour les tireurs). P : posture suivante.
 ;;;
@@ -83,22 +84,31 @@ moins de *PICK-RADIUS*, ou NIL."
 
 ;;; Ordres
 
-(defun command-move (battle regiments x y)
+(defun command-move (battle regiments x y &optional facing)
   "Envoie REGIMENTS vers le point X, Y : leur centre commun y va, chacun garde sa
-place par rapport à lui, fronts tournés dans le sens de la marche."
+place par rapport à lui. Fronts vers FACING (radians) s'il est donné, la
+disposition du groupe tournant d'autant ; sinon dans le sens de la marche."
   (when regiments
     (let* ((soldiers (battle-soldiers battle))
            (centers (mapcar (lambda (r) (multiple-value-list (regiment-centroid r soldiers)))
                             regiments))
            (cx (/ (reduce #'+ centers :key #'first) (length centers)))
            (cy (/ (reduce #'+ centers :key #'second) (length centers)))
-           (dx (- x cx)) (dy (- y cy)))
+           (dx (- x cx)) (dy (- y cy))
+           (heading (cond (facing (float facing 1f0))
+                          ((> (+ (* dx dx) (* dy dy)) 1f0) (float (atan dy dx) 1f0))))
+           ;; Rotation de la disposition : de l'ancien front du groupe au nouveau.
+           (turn (if (and facing heading)
+                     (wrap-angle (- heading (formation-facing (regiment-formation (first regiments)))))
+                     0f0))
+           (c (cos turn)) (s (sin turn)))
       (loop for regiment in regiments
             for (rx ry) in centers
-            do (order-move regiment (+ rx dx) (+ ry dy)
-                           (if (> (+ (* dx dx) (* dy dy)) 1f0)
-                               (atan dy dx)
-                               (formation-facing (regiment-formation regiment))))))))
+            for ox = (- rx cx) for oy = (- ry cy)
+            do (order-move regiment
+                           (+ x (- (* c ox) (* s oy)))
+                           (+ y (+ (* s ox) (* c oy)))
+                           (or heading (formation-facing (regiment-formation regiment))))))))
 
 (defun command-attack (regiments target)
   (dolist (regiment regiments)
@@ -195,21 +205,24 @@ place par rapport à lui, fronts tournés dans le sens de la marche."
                                    (cons k (command-selection command))))))
                       (t (setf (command-selection command)
                                (list (regiment-index regiment))))))))))
-    ;; Bouton droit : un clic bref donne l'ordre ; un glisser fait défiler.
+    ;; Bouton droit : l'ordre, au point enfoncé ; glisser choisit l'orientation.
     (when (raylib:is-mouse-button-pressed :mouse-button-right)
       (setf (command-right-press command) (cons (raylib:get-mouse-x) (raylib:get-mouse-y))))
     (when (and (command-right-press command) (raylib:is-mouse-button-released :mouse-button-right))
-      (let ((press (command-right-press command)))
+      (let ((press (command-right-press command))
+            (regiments (selected-regiments command battle)))
         (setf (command-right-press command) nil)
-        (unless (mouse-moved-p press)
-          (let ((regiments (selected-regiments command battle)))
-            (when regiments
-              (multiple-value-bind (x y) (mouse-world camera)
-                (let ((target (regiment-at battle x y)))
-                  (if (and target (/= (regiment-side target) *player-side*)
-                           (not (regiment-routed-p target)))
-                      (command-attack regiments target)
-                      (command-move battle regiments x y)))))))))
+        (when regiments
+          (multiple-value-bind (x y) (screen->world camera (float (car press) 1f0)
+                                                    (float (cdr press) 1f0))
+            (let ((target (regiment-at battle x y)))
+              (cond ((and target (/= (regiment-side target) *player-side*)
+                          (not (regiment-routed-p target)))
+                     (command-attack regiments target))
+                    ((mouse-moved-p press)
+                     (multiple-value-bind (mx my) (mouse-world camera)
+                       (command-move battle regiments x y (atan (- my y) (- mx x)))))
+                    (t (command-move battle regiments x y))))))))
     (let ((regiments (selected-regiments command battle)))
       (when (key-pressed-p :key-t) (command-halt battle regiments))
       (when (key-pressed-p :key-e) (mapc #'cycle-drill regiments))
@@ -263,6 +276,77 @@ place par rapport à lui, fronts tournés dans le sens de la marche."
                                             (regiment-centroid target soldiers))
                (draw-line sx sy tx ty *attack-order-color*)))))))))
 
+(defparameter *ghost-color* '(120 230 120 160) "Fantôme d'un régiment à sa destination.")
+(defparameter *dash-pixels* 10 "Longueur d'un tiret du trajet, en pixels.")
+
+(defun draw-dashed-line (x0 y0 x1 y1 color)
+  "Trait en tirets de *DASH-PIXELS*, à l'écran."
+  (let* ((dx (- x1 x0)) (dy (- y1 y0))
+         (length (sqrt (+ (* dx dx) (* dy dy))))
+         (dashes (max 1 (floor length *dash-pixels*))))
+    (loop for k from 0 below dashes by 2
+          for a = (/ k dashes) for b = (/ (min dashes (1+ k)) dashes)
+          do (draw-line (round (+ x0 (* a dx))) (round (+ y0 (* a dy)))
+                        (round (+ x0 (* b dx))) (round (+ y0 (* b dy))) color))))
+
+(defun draw-ghost (regiment camera x y facing)
+  "Fantôme de REGIMENT en X, Y, front vers FACING : le contour de sa formation
+(files et rangs actuels), le front doublé et une flèche vers l'avant."
+  (let* ((formation (regiment-formation regiment))
+         (files (formation-files formation (max 1 (regiment-alive regiment))))
+         (depth (max 1 (regiment-depth regiment)))
+         (half-width (* 0.5f0 (+ 1f0 (* (formation-lateral-spacing formation) (1- files)))))
+         (half-depth (* 0.5f0 (+ 1f0 (* (formation-spacing formation) (1- depth)))))
+         (fx (cos facing)) (fy (sin facing)))
+    (flet ((corner (a b)
+             ;; A vers l'avant, B vers la droite du front.
+             (world->screen camera (+ x (* a fx) (- (* b fy))) (+ y (* a fy) (* b fx)))))
+      (multiple-value-bind (x1 y1) (corner half-depth (- half-width))
+        (multiple-value-bind (x2 y2) (corner half-depth half-width)
+          (multiple-value-bind (x3 y3) (corner (- half-depth) half-width)
+            (multiple-value-bind (x4 y4) (corner (- half-depth) (- half-width))
+              (draw-line x1 y1 x2 y2 *ghost-color*)
+              (draw-line x2 y2 x3 y3 *ghost-color*)
+              (draw-line x3 y3 x4 y4 *ghost-color*)
+              (draw-line x4 y4 x1 y1 *ghost-color*)
+              ;; Front doublé, un peu en retrait.
+              (multiple-value-bind (x5 y5) (corner (- half-depth 0.6f0) (- half-width))
+                (multiple-value-bind (x6 y6) (corner (- half-depth 0.6f0) half-width)
+                  (draw-line x5 y5 x6 y6 *ghost-color*)))
+              ;; Flèche vers l'avant, du centre au-delà du front.
+              (multiple-value-bind (cx cy) (corner 0f0 0f0)
+                (multiple-value-bind (tx ty) (corner (+ half-depth 3f0) 0f0)
+                  (draw-line cx cy tx ty *ghost-color*)
+                  (multiple-value-bind (lx ly) (corner (+ half-depth 1.8f0) -1f0)
+                    (draw-line tx ty lx ly *ghost-color*))
+                  (multiple-value-bind (rx ry) (corner (+ half-depth 1.8f0) 1f0)
+                    (draw-line tx ty rx ry *ghost-color*)))))))))))
+
+(defun draw-orders-preview (battle camera)
+  "Ordres en cours de tous les régiments du joueur : trajet en tirets et fantôme
+à la destination pour une marche, trajet rouge vers le régiment attaqué."
+  (let ((soldiers (battle-soldiers battle)))
+    (loop for regiment across (battle-regiments battle)
+          when (commandable-p regiment)
+            do (let ((orders (regiment-orders regiment)))
+                 (multiple-value-bind (sx sy) (multiple-value-call #'world->screen camera
+                                                (regiment-centroid regiment soldiers))
+                   (case (first orders)
+                     (:move
+                      (destructuring-bind (x y facing) (rest orders)
+                        ;; Déjà arrivé (ou ordre de mise en place) : rien à montrer.
+                        (when (multiple-value-bind (cx cy) (regiment-centroid regiment soldiers)
+                                (> (+ (expt (- x cx) 2) (expt (- y cy) 2)) 9f0))
+                          (multiple-value-bind (tx ty) (world->screen camera x y)
+                            (draw-dashed-line sx sy tx ty *move-order-color*))
+                          (draw-ghost regiment camera x y facing))))
+                     (:attack
+                      (let ((target (aref (battle-regiments battle) (second orders))))
+                        (when (plusp (regiment-alive target))
+                          (multiple-value-bind (tx ty) (multiple-value-call #'world->screen camera
+                                                         (regiment-centroid target soldiers))
+                            (draw-dashed-line sx sy tx ty *attack-order-color*)))))))))))
+
 (defun order-text (regiment battle)
   (let ((orders (regiment-orders regiment)))
     (case (first orders)
@@ -289,10 +373,13 @@ place par rapport à lui, fronts tournés dans le sens de la marche."
           (setf (gethash (regiment-index regiment) (command-panel command)) (cons key text))
           text))))
 
-(defun draw-command (command battle camera)
-  "Sélection, ordres des régiments choisis, cadre en cours et panneau d'état."
+(defun draw-command (command battle camera &optional preview)
+  "Sélection, ordres des régiments choisis, cadre en cours et panneau d'état.
+Avec PREVIEW (bataille en pause, ou Espace tenu), les ordres en cours de tous
+les régiments du joueur (DRAW-ORDERS-PREVIEW)."
   (let ((regiments (selected-regiments command battle))
         (soldiers (battle-soldiers battle)))
+    (when preview (draw-orders-preview battle camera))
     (dolist (regiment regiments)
       (draw-regiment-outline regiment soldiers camera *selection-color*)
       (draw-order-line regiment battle camera))
@@ -305,6 +392,18 @@ place par rapport à lui, fronts tournés dans le sens de la marche."
           (draw-line x1 y0 x1 y1 *selection-color*)
           (draw-line x1 y1 x0 y1 *selection-color*)
           (draw-line x0 y1 x0 y0 *selection-color*))))
+    ;; Orientation en cours de choix : flèche du point d'arrivée vers la souris.
+    (let ((press (command-right-press command)))
+      (when (and regiments (mouse-moved-p press))
+        (let* ((x0 (car press)) (y0 (cdr press))
+               (x1 (raylib:get-mouse-x)) (y1 (raylib:get-mouse-y))
+               (angle (atan (- y1 y0) (- x1 x0)))
+               (head 14))
+          (draw-line x0 y0 x1 y1 *move-order-color*)
+          (dolist (side '(-1 1))
+            (let ((a (+ angle pi (* side 0.5))))
+              (draw-line x1 y1 (round (+ x1 (* head (cos a)))) (round (+ y1 (* head (sin a))))
+                         *move-order-color*))))))
     ;; Panneau : une ligne par régiment choisi, au-dessus de l'aide.
     (when regiments
       (let* ((size (text-size *command-text-size*))

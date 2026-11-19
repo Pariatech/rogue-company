@@ -72,7 +72,8 @@ glisser, NIL sinon.")
 
 (defun update-camera (camera dt)
   "Flèches ou ZQSD/WASD pour défiler, molette ou Page préc./suiv. pour zoomer
-(vers la souris), bouton du milieu ou droit pour glisser."
+(vers la souris), bouton du milieu pour glisser. Le bouton droit donne les
+ordres (command.lisp)."
   (let ((zoom (camera-zoom camera))
         (step (* *camera-pan-speed* (float dt 1f0))))
     (flet ((held (&rest keys) (some #'key-down-p keys)))
@@ -97,8 +98,7 @@ glisser, NIL sinon.")
                  (setf (camera-wheel camera) 0f0
                        (camera-zoom-cooldown camera) *zoom-step-delay*))
                 (t (setf (camera-wheel camera) total)))))
-    (if (or (raylib:is-mouse-button-down :mouse-button-middle)
-            (raylib:is-mouse-button-down :mouse-button-right))
+    (if (raylib:is-mouse-button-down :mouse-button-middle)
         (let ((zoom (camera-zoom camera)))
           (when (camera-drag-x camera)
             (decf (camera-x camera) (/ (- mx (camera-drag-x camera)) zoom))
