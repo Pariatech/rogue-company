@@ -35,6 +35,12 @@ le tournoi ne se décide pas.")
             :documentation "NIL tant que la bataille dure, puis le camp vainqueur, ou :DRAW.")
    (outcome-tick :initform -1 :accessor battle-outcome-tick
                  :documentation "Tick où la bataille s'est décidée, ou -1.")
+   (recipe :initform nil :accessor battle-recipe
+           :documentation "(fonction . arguments) qui recrée cette bataille au tick 0 :
+MAKE-DEMO-BATTLE ou MAKE-AI-BATTLE, avec sa graine et ses régiments (replay.lisp).")
+   (order-log :initform (make-array 0 :adjustable t :fill-pointer t) :reader battle-order-log
+              :documentation "Ordres du joueur, (tick . ordre), dans l'ordre où il les a
+donnés (PLAYER-ORDER, command.lisp).")
    (commanders :initform nil :accessor battle-commanders
                :documentation "Commandants des camps menés par l'IA (ai.lisp), réveillés
 en tête de chaque tick.")))

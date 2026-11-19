@@ -23,12 +23,20 @@
 ;;;    des suivants (*AI-CROWDING*). Si même le combat, distance mise à part, ne
 ;;;    vaut pas le seuil de son rôle (*AI-THRESHOLDS*), un régiment attend à sa
 ;;;    place de départ, face à l'ennemi.
+;;;    Le général (ai-general.lisp) donne d'abord une tâche aux piques, aux
+;;;    tireurs et à la mêlée à pied (ai-tasks.lisp) : seuls les régiments sans
+;;;    tâche (la cavalerie) passent par ce choix.
 ;;; 3. Stabilité : un régiment garde sa cible au moins *AI-COMMIT-SECONDS*, et
 ;;;    n'en change que pour une note *AI-SWITCH-MARGIN* fois meilleure. Aucun
 ;;;    ordre à un régiment en mêlée, à la charge, en repli de tirailleurs, en
 ;;;    poursuite ou débandé : le combat (riposte, cible combattue) s'en charge.
 
 (defparameter *ai-period* 30 "Ticks entre deux réveils du commandant : une seconde.")
+
+(defparameter *ai-use-plan* t
+  "Vrai : le général répartit l'armée en groupes et tâches (ai-general.lisp). Faux :
+chaque régiment choisit seul sa cible (le choix glouton), comme la première IA.
+Un réglage de commandant (COMMANDER-SETTINGS) pour comparer les deux.")
 
 (defparameter *ai-role-weights* '((:pikes . 1f0) (:foot . 1.6f0) (:shooters . 1f0) (:cavalry . 3.5f0))
   "Force d'un homme selon le rôle de son régiment : 225 piquiers, 105 rodeleros
@@ -96,13 +104,32 @@ renvoyé.")
    (assignments :initform (make-hash-table) :reader commander-assignments
                 :documentation "Indice de régiment -> (cible note tick) : sa cible, la
 note qu'elle avait, et le tick où il l'a reçue.")
+   (settings :initarg :settings :initform nil :reader commander-settings
+             :documentation "Plist de réglages propres à ce commandant : variable *AI-…*
+-> valeur, liées pendant son réveil. Deux camps peuvent ainsi suivre deux
+stratégies (ai-bench.lisp).")
+   (plan :initform nil :accessor commander-plan
+         :documentation "Plan du général (ai-general.lisp), ou NIL avant le premier.")
    (attack-orders :initform (make-hash-table) :reader commander-attack-orders
                   :documentation "Indice de régiment -> ordres d'attaque donnés : pour
 mesurer la stabilité."))
   (:documentation "Commandant d'un camp : rôles, réflexes, choix des cibles."))
 
-(defun make-ai-commander (side)
-  (make-instance 'ai-commander :side side))
+(defun ai-setting-p (symbol)
+  "Vrai si SYMBOL peut être réglé par commandant : une variable *AI-…* de ce
+paquet. Un fichier de replay ne peut lier rien d'autre."
+  (and (symbolp symbol)
+       (eq (symbol-package symbol) (find-package '#:rogue-company))
+       (let ((name (symbol-name symbol)))
+         (and (> (length name) 4) (string= "*AI-" name :end2 4)
+              (char= #\* (char name (1- (length name))))
+              (boundp symbol)))))
+
+(defun make-ai-commander (side &optional settings)
+  (loop for (symbol) on settings by #'cddr
+        unless (ai-setting-p symbol)
+          do (error "Réglage d'IA refusé : ~s." symbol))
+  (make-instance 'ai-commander :side side :settings settings))
 
 ;;; Rôles et forces
 
@@ -275,6 +302,7 @@ ni en mêlée, ni à la charge, ni en repli, ni en poursuite."
     ;; Notes de toutes les paires encore à décider.
     (loop for regiment across regiments
           when (and (= (regiment-side regiment) side) (ai-free-p regiment)
+                    (commander-task-free-p commander regiment)
                     (not (gethash (regiment-index regiment) decided)))
             do (dolist (enemy enemies)
                  (multiple-value-bind (score worth) (ai-score battle regiment enemy)
@@ -324,6 +352,7 @@ ni en mêlée, ni à la charge, ni en repli, ni en poursuite."
     (unless enemies
       (loop for regiment across regiments
             when (and (= (regiment-side regiment) side) (ai-free-p regiment)
+                      (commander-task-free-p commander regiment)
                       (not (gethash (regiment-index regiment) decided)))
               do (wait-at-home commander battle regiment)))))
 
@@ -338,10 +367,18 @@ ni en mêlée, ni à la charge, ni en repli, ni en poursuite."
                              (formation-facing formation)))))))
 
 (defmethod update-commander ((commander ai-commander) battle)
-  (when (zerop (mod (+ (battle-tick-count battle) (commander-side commander)) *ai-period*))
-    (remember-homes commander battle)
-    (update-squares commander battle)
-    (assign-targets commander battle)))
+  (let ((settings (commander-settings commander)))
+    (progv (loop for (symbol) on settings by #'cddr collect symbol)
+        (loop for (nil value) on settings by #'cddr collect value)
+      (when (zerop (mod (+ (battle-tick-count battle) (commander-side commander)) *ai-period*))
+        (remember-homes commander battle)
+        (update-squares commander battle)
+        ;; Le général et les tâches de ses groupes (ai-general.lisp, ai-tasks.lisp),
+        ;; puis le choix glouton pour les régiments sans tâche (la cavalerie).
+        (when *ai-use-plan*
+          (update-plan commander battle)
+          (run-tasks commander battle))
+        (assign-targets commander battle)))))
 
 ;;; Bataille contre l'IA
 
@@ -356,6 +393,7 @@ ni en mêlée, ni à la charge, ni en repli, ni en poursuite."
     (0 :greatswords 105 -72 95 0)
     (0 :light-cavalry 60 -78 -140 0)
     (0 :lancers 60 -78 140 0)
+    (0 :halberdiers 105 -100 0 0)
     (1 :pikemen 225 70 -50 180)
     (1 :pikemen 225 70 0 180)
     (1 :pikemen 225 70 50 180)
@@ -365,17 +403,24 @@ ni en mêlée, ni à la charge, ni en repli, ni en poursuite."
     (1 :rodeleros 105 72 95 180)
     (1 :greatswords 105 72 -95 180)
     (1 :light-cavalry 60 78 140 180)
-    (1 :lancers 60 78 -140 180))
+    (1 :lancers 60 78 -140 180)
+    (1 :halberdiers 105 100 0 180))
   "Bataille rangée contre l'IA, en miroir : par camp, trois régiments de piques
 au centre, des arquebusiers en tirailleurs devant chacun, rodeleros et
-espadonniers aux flancs des piques, chevau-légers et lanciers aux ailes.")
+espadonniers aux flancs des piques, chevau-légers et lanciers aux ailes,
+hallebardiers en réserve derrière le centre.")
 
 (defparameter *ai-sides* '(1) "Camps commandés par l'IA dans la bataille contre l'IA.")
 
-(defun make-ai-battle (&key (seed *demo-seed*) (regiments *ai-battle-regiments*) (sides *ai-sides*))
+(defun make-ai-battle (&key (seed *demo-seed*) (regiments *ai-battle-regiments*) (sides *ai-sides*)
+                            settings)
   "Bataille de REGIMENTS, les camps SIDES commandés par l'IA, qui se décide
-(victory.lisp)."
+(victory.lisp). SETTINGS : alist camp -> plist de réglages de son commandant
+(COMMANDER-SETTINGS)."
   (let ((battle (make-demo-battle :seed seed :regiments regiments)))
-    (setf (battle-commanders battle) (mapcar #'make-ai-commander sides)
-          (battle-victory-p battle) t)
+    (setf (battle-commanders battle)
+          (mapcar (lambda (side) (make-ai-commander side (cdr (assoc side settings)))) sides)
+          (battle-victory-p battle) t
+          (battle-recipe battle) (list 'make-ai-battle :seed seed :regiments regiments :sides sides
+                                       :settings settings))
     battle))

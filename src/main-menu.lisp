@@ -10,7 +10,9 @@
 (defparameter *menu-option-spacing* 50)
 
 (defclass main-menu (scene)
-  ((options :initform '(("Bataille contre l'IA" . ai-battle-scene) ("Tournoi" . battle-scene))
+  ((options :initform '(("Bataille contre l'IA" . ai-battle-scene) ("IA contre IA" . ai-vs-ai-scene)
+                         ("Tournoi" . battle-scene)
+                         ("Revoir la dernière bataille" . replay-scene))
             :reader menu-options
             :documentation "Liste de (libellé . scène à ouvrir).")
    (selected :initform 0 :accessor menu-selected)))

@@ -210,19 +210,27 @@ tiennent avec MARGIN mètres autour, arrondi à 64 m."
                                       (and (eq (attack-kind (stats-primary (dotation-stats dotation)))
                                                :ranged)
                                            :at-will))))
+    (setf (battle-recipe battle)
+          (list 'make-demo-battle :seed seed :scatter scatter :regiments regiments))
     battle))
 
-(defun order-random-moves (battle rng &key (half-width 30) (half-height 20))
-  "Envoie chaque régiment vers un point et une orientation tirés avec RNG, dans
-un rectangle centré sur l'origine. RNG n'est pas celui de la bataille : un ordre
-est une commande du joueur, pas un tirage de la simulation."
+(defun random-move-orders (battle rng &key (half-width 30) (half-height 20))
+  "Pour chaque régiment, (indice x y orientation) : un point et une orientation
+tirés avec RNG, dans un rectangle centré sur l'origine. RNG n'est pas celui de
+la bataille : un ordre est une commande du joueur, pas un tirage de la
+simulation."
   (let ((half-width (float half-width 1f0))
         (half-height (float half-height 1f0)))
     (loop for regiment across (battle-regiments battle)
-          do (order-move regiment
-                         (rng-range rng (- half-width) half-width)
-                         (rng-range rng (- half-height) half-height)
-                         (rng-range rng 0f0 (float (* 2 pi) 1f0))))))
+          collect (list (regiment-index regiment)
+                        (rng-range rng (- half-width) half-width)
+                        (rng-range rng (- half-height) half-height)
+                        (rng-range rng 0f0 (float (* 2 pi) 1f0))))))
+
+(defun order-random-moves (battle rng &rest keys)
+  "Envoie chaque régiment vers un point tiré par RANDOM-MOVE-ORDERS."
+  (loop for (index x y facing) in (apply #'random-move-orders battle rng keys)
+        do (order-move (aref (battle-regiments battle) index) x y facing)))
 
 (defparameter *demo-charge-sides* '(0 1)
   "Camps que C lance à l'attaque : les deux. '(1) pour les bleus seuls, les

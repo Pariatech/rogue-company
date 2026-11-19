@@ -1,0 +1,125 @@
+(in-package #:rogue-company/tests)
+
+;;; Couche stratégique de l'IA : groupes, ligne alignée, gardes en laisse,
+;;; réserve qui vient au secours.
+
+(def-suite ai-plan :description "Général de l'IA : groupes et tâches.")
+(in-suite ai-plan)
+
+(defun ai-plan-of (battle)
+  (rogue-company::commander-plan (first (rogue-company::battle-commanders battle))))
+
+(defun task-of (battle regiment)
+  (rogue-company::task-kind (ai-plan-of battle) regiment))
+
+(test groups-follow-the-roles
+  "Bataille contre l'IA : piques en ligne, tireurs en écran, rodeleros et
+espadonniers aux flancs, hallebardiers en réserve, cavalerie libre."
+  (let ((b (rogue-company::make-ai-battle)))
+    (run-ticks b 30)
+    (dolist (r (regiments b))
+      (when (= 1 (rogue-company::regiment-side r))
+        (is (eq (ecase (rogue-company::regiment-role r)
+                  (:pikes :line) (:shooters :screen) (:cavalry :free)
+                  (:foot (if (eq :halberd (getf (rogue-company::stats-loadout
+                                                 (rogue-company::regiment-stats r))
+                                                :main))
+                             :reserve :guard)))
+                (task-of b r))
+            "~a" (rogue-company::regiment-name r))))))
+
+(test line-advances-aligned
+  "Contre une armée qui attend, la ligne de l'IA avance alignée (ses piques à
+moins de 6 m de la même profondeur) jusqu'à s'engager."
+  (let ((b (rogue-company::make-ai-battle))
+        (spread 0f0))
+    (loop repeat (* 30 150)
+          for plan = (ai-plan-of b)
+          until (and plan (eq :engaged (rogue-company::plan-phase plan)))
+          do (rogue-company::battle-tick b)
+             (when plan
+               (let ((depths (loop for k in (rogue-company::plan-line plan)
+                                   for r = (nth k (regiments b))
+                                   when (rogue-company::fighting-p r)
+                                     collect (nth-value 1 (rogue-company::regiment-coordinates
+                                                           plan r (rogue-company::battle-soldiers b))))))
+                 (when depths
+                   (setf spread (max spread (- (reduce #'max depths) (reduce #'min depths))))))))
+    (is (eq :engaged (rogue-company::plan-phase (ai-plan-of b))) "elle s'engage")
+    (is (< spread 6f0) "écart de profondeur ~,1f m" spread)))
+
+(test guards-stay-on-the-leash
+  "Des gardes ne courent pas après des tireurs isolés loin de leur place, que le
+choix glouton aurait attaqués."
+  (let ((b (ai-battle '(0 :pikemen 225 -60 0 0) '(0 :arquebusiers 105 60 160 180)
+                      '(1 :pikemen 225 60 0 180)
+                      '(1 :rodeleros 105 62 -30 180) '(1 :rodeleros 105 62 30 180))))
+    (let ((chased nil))
+      (dotimes (k (* 30 20))
+        (rogue-company::battle-tick b)
+        (dolist (guard (subseq (regiments b) 3 5))
+          (when (equal '(:attack 1) (rogue-company::regiment-orders guard))
+            (setf chased k))))
+      (is (null chased) "poursuite au tick ~a" chased))
+    (is (eq :guard (task-of b (nth 3 (regiments b)))))))
+
+(test reserve-comes-to-a-wavering-line
+  "Quand les piques de la ligne flanchent au combat, la réserve attaque l'ennemi
+qu'elles combattent."
+  (let* ((b (ai-battle '(0 :pikemen 225 -22 0 0)
+                       '(1 :pikemen 225 0 0 180)
+                       '(1 :rodeleros 105 2 -60 180) '(1 :rodeleros 105 2 60 180)
+                       '(1 :halberdiers 105 35 0 180)))
+         (rs (regiments b))
+         (pikes (nth 1 rs))
+         (reserve (nth 4 rs)))
+    (run-ticks b (* 30 12))
+    (is (eq :reserve (task-of b reserve)))
+    (is-true (rogue-company::regiment-in-melee-p pikes) "la ligne se bat")
+    (setf (rogue-company::regiment-morale pikes) 30f0)
+    (run-ticks b (* 30 2))
+    (is (equal '(:attack 0) (rogue-company::regiment-orders reserve)))))
+
+;;; IA contre IA, banc d'essai
+
+(test ai-versus-ai-is-decided
+  "Deux IA s'affrontent et la bataille se décide."
+  (let ((b (rogue-company::make-ai-battle :sides '(0 1))))
+    (loop repeat (* 30 300) until (rogue-company::battle-outcome b)
+          do (rogue-company::battle-tick b))
+    (is (integerp (rogue-company::battle-outcome b)))))
+
+(test settings-belong-to-one-commander
+  "Un réglage ne vaut que pour son commandant : sans plan, les bleus n'ont pas de
+général ; les rouges en ont un."
+  (let ((b (rogue-company::make-ai-battle :sides '(0 1)
+                                          :settings '((1 rogue-company::*ai-use-plan* nil)))))
+    (run-ticks b 60)
+    (destructuring-bind (red blue) (rogue-company::battle-commanders b)
+      (is-true (rogue-company::commander-plan red))
+      (is-false (rogue-company::commander-plan blue)))
+    (is-true rogue-company::*ai-use-plan* "la valeur globale ne bouge pas")))
+
+(test only-ai-settings-are-accepted
+  "Un réglage de commandant ne peut lier qu'une variable *AI-…* : un replay ne
+peut rien lier d'autre."
+  (signals error (rogue-company::make-ai-commander 0 '(*read-eval* t)))
+  (signals error (rogue-company::make-ai-commander 0 '(rogue-company::*battle-seed* 3)))
+  (finishes (rogue-company::make-ai-commander 0 '(rogue-company::*ai-line-bound* 12f0))))
+
+(test plan-beats-greedy
+  "Banc d'essai : la couche stratégique bat le choix glouton seul, chacun dans
+les deux camps, sur deux graines."
+  (let ((result (rogue-company::ai-match :a '() :b '(rogue-company::*ai-use-plan* nil)
+                                         :seeds '(1 4))))
+    (is (> (getf result :a-wins) (getf result :b-wins))
+        "~a" (rogue-company::print-ai-match result nil))))
+
+(test spectator-end-screen-names-the-colour
+  "Entre deux IA, l'écran de fin nomme le camp vainqueur, pas « Victoire »."
+  (let ((b (rogue-company::make-ai-battle :sides '(0 1))))
+    (loop for r in (regiments b)
+          when (= 1 (rogue-company::regiment-side r))
+            do (rogue-company::rout b r))
+    (run-ticks b 1)
+    (is (string= "Victoire des rouges" (getf (rogue-company::end-screen b) :title)))))

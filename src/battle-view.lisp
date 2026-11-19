@@ -47,6 +47,10 @@ second, en lambeaux. Débandé, il pend.")
 (defparameter *overview-flag-scale* 2f0
   "En vue éloignée, échelle du drapeau : fixe, pour rester lisible à tous les zooms.")
 
+(defparameter *flag-enlargement* 2f0
+  "Agrandissement du drapeau, de près comme en vue éloignée : pour la lisibilité,
+il est dessiné ce nombre de fois plus grand que l'échelle des soldats.")
+
 ;;; Piques dessinées : une ligne par piquier, à la longueur réelle, que le
 ;;; sprite de 32 px ne peut pas contenir. Dressée et un peu penchée vers l'avant
 ;;; en marche ; croisée à l'horizontale vers l'ennemi pour les premiers rangs
@@ -269,15 +273,22 @@ lambeaux, 3 pendant (débandade)."
     (rlgl:end)
     (rlgl:set-texture 0)))
 
+(defparameter *emblem-offset* '(7 3)
+  "Coin de l'emblème de l'arme sur le drapeau, en pixels du drapeau : centré sur
+le tissu, et à la même place en miroir (le drapeau a 23 pixels de large).")
+
 (defun draw-flags (battle alpha camera atlas)
   "Le drapeau de chaque régiment, par-dessus les soldats, dans l'état de son
-moral (FLAG-STATE). De près, il s'accroche sous la pointe de la hampe du
-porteur (BEARER-POLE-TOP) et flotte à l'opposé de son regard, en miroir vers
-l'ouest. En vue éloignée, il flotte au-dessus du porteur, à une échelle fixe
-(*OVERVIEW-FLAG-SCALE*) pour rester lisible."
+moral (FLAG-STATE), l'emblème de son arme au centre (REGIMENT-WEAPON-LOOK,
+surimpression :EMBLEM), sauf quand il pend. Agrandi de *FLAG-ENLARGEMENT* pour
+rester lisible. De près, il s'accroche sous la pointe de la hampe du porteur
+(BEARER-POLE-TOP) et flotte à l'opposé de son regard, en miroir vers l'ouest. En
+vue éloignée, il flotte au-dessus du porteur, à une échelle fixe
+(*OVERVIEW-FLAG-SCALE*)."
   (declare (type single-float alpha))
   (multiple-value-bind (flag-row flag-frames flag-width flag-height) (atlas-overlay atlas :flag)
     (declare (ignore flag-frames))
+    (multiple-value-bind (emblem-row emblem-frames emblem-size) (atlas-overlay atlas :emblem)
     (when flag-row
       (let* ((soldiers (battle-soldiers battle))
              (xs (soldiers-x soldiers)) (ys (soldiers-y soldiers))
@@ -285,7 +296,7 @@ l'ouest. En vue éloignée, il flotte au-dessus du porteur, à une échelle fixe
              (facings (soldiers-facing soldiers)) (prev-facings (soldiers-prev-facing soldiers))
              (zoom (camera-zoom camera))
              (scale (camera-sprite-scale camera))
-             (flag-scale (or scale *overview-flag-scale*))
+             (flag-scale (* *flag-enlargement* (or scale *overview-flag-scale*)))
              (origin-x (- (* 0.5f0 (float *window-width* 1f0)) (* zoom (camera-x camera))))
              (origin-y (- (* 0.5f0 (float *window-height* 1f0)) (* zoom (camera-y camera))))
              (cell (float (atlas-cell atlas) 1f0))
@@ -338,6 +349,23 @@ l'ouest. En vue éloignée, il flotte au-dessus du porteur, à une échelle fixe
                               (rlgl::texcoord-2f u1 tv1) (rlgl:vertex-2f right bottom)
                               (rlgl::texcoord-2f u1 tv0) (rlgl:vertex-2f right top)))
                        (quad 255 255 255 v0 v1)
-                       (quad (first color) (second color) (third color) mask-v0 mask-v1))))
+                       (quad (first color) (second color) (third color) mask-v0 mask-v1))
+                     ;; L'emblème de l'arme, au centre du tissu déployé.
+                     (let ((look (regiment-weapon-look regiment)))
+                       (when (and emblem-row (<= 1 look emblem-frames) (< (flag-state regiment) 3))
+                         (let* ((e-left (+ left (* flag-scale (first *emblem-offset*))))
+                                (e-top (+ top (* flag-scale (second *emblem-offset*))))
+                                (e-size (* flag-scale emblem-size))
+                                (e-u-left (* cell-u (1- look)))
+                                (e-u-right (+ e-u-left (/ (float emblem-size 1f0) (atlas-width atlas))))
+                                (e-v0 (* cell-v emblem-row))
+                                (e-v1 (+ e-v0 (/ (float emblem-size 1f0) (atlas-height atlas))))
+                                (e-u0 (if mirror e-u-right e-u-left))
+                                (e-u1 (if mirror e-u-left e-u-right)))
+                           (rlgl:color-4ub 255 255 255 255)
+                           (rlgl::texcoord-2f e-u0 e-v0) (rlgl:vertex-2f e-left e-top)
+                           (rlgl::texcoord-2f e-u0 e-v1) (rlgl:vertex-2f e-left (+ e-top e-size))
+                           (rlgl::texcoord-2f e-u1 e-v1) (rlgl:vertex-2f (+ e-left e-size) (+ e-top e-size))
+                           (rlgl::texcoord-2f e-u1 e-v0) (rlgl:vertex-2f (+ e-left e-size) e-top))))))
         (rlgl:end)
-        (rlgl:set-texture 0)))))
+        (rlgl:set-texture 0))))))

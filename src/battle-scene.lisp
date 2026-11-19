@@ -20,7 +20,7 @@
   "Secondes de bataille entre la décision (victory.lisp) et l'écran de fin : on
 voit l'armée brisée se débander.")
 
-(defparameter *battle-speeds* '(0.25 0.5 1 2 4)
+(defparameter *battle-speeds* '(0.25 0.5 1 2 4 8)
   "Vitesses proposées par + et -, en ordre croissant.")
 
 (defclass battle-scene (scene)
@@ -46,6 +46,8 @@ voit l'armée brisée se débander.")
    (speed-text :initform "" :accessor scene-speed-text)
    (end-screen :initform nil :accessor scene-end-screen
                :documentation "Bilan de l'écran de fin (END-SCREEN), figé à son affichage.")
+   (saved :initform nil :accessor scene-saved-p
+          :documentation "Le replay de la bataille décidée est écrit (replay.lisp).")
    (speed-key :initform nil :accessor scene-speed-key
               :documentation "Vitesse et pause de SPEED-TEXT : le texte n'est reconstruit
 que s'ils changent, ce qui est rare."))
@@ -54,6 +56,58 @@ que s'ils changent, ce qui est rare."))
 (defclass ai-battle-scene (battle-scene)
   ((battle :initform (make-ai-battle :seed *demo-seed*)))
   (:documentation "Bataille rangée : le joueur mène les rouges, l'IA les bleus (ai.lisp)."))
+
+(defclass replay-scene (battle-scene)
+  ((battle :initform nil)
+   (replay :initform nil :accessor scene-replay
+           :documentation "Replay revu (replay.lisp), ou NIL s'il n'y en a pas.")
+   (cursor :initform 0 :accessor scene-cursor :documentation "Prochain ordre du replay.")
+   (status :initform nil :accessor scene-replay-status
+           :documentation ":MATCH ou :DESYNC une fois le tick de l'enregistrement atteint."))
+  (:documentation "La dernière bataille, revue : ses ordres rejoués à leur tick,
+sans commandement. Vitesse, pause et caméra restent libres."))
+
+(defmethod initialize-instance :after ((scene replay-scene) &key)
+  (let ((replay (handler-case (load-replay)
+                  (error (e) (warn "Replay illisible : ~a" e) nil))))
+    (setf (scene-replay scene) replay
+          (slot-value scene 'battle) (if replay (replay-start replay) (make-battle)))))
+
+(defclass ai-vs-ai-scene (battle-scene)
+  ((battle :initform (make-ai-battle :seed *demo-seed* :sides '(0 1))))
+  (:documentation "Bataille rangée entre deux IA, à regarder : le joueur ne
+commande rien. Le banc d'essai des stratégies (ai-bench.lisp) joue les mêmes
+batailles sans fenêtre."))
+
+(defgeneric scene-live-p (scene)
+  (:documentation "Vrai pour une bataille qui se joue : faux pour un replay. Une
+bataille qui se joue écrit son replay.")
+  (:method ((scene battle-scene)) t)
+  (:method ((scene replay-scene)) nil))
+
+(defgeneric scene-player-p (scene)
+  (:documentation "Vrai si le joueur commande : ni en replay, ni entre deux IA.")
+  (:method ((scene battle-scene)) t)
+  (:method ((scene replay-scene)) nil)
+  (:method ((scene ai-vs-ai-scene)) nil))
+
+(defgeneric advance-battle (scene)
+  (:documentation "Un tick de la bataille de SCENE.")
+  (:method ((scene battle-scene))
+    (battle-tick (scene-battle scene)))
+  (:method ((scene replay-scene))
+    (let ((replay (scene-replay scene)))
+      (if replay
+          (multiple-value-bind (cursor status)
+              (replay-tick (scene-battle scene) replay (scene-cursor scene))
+            (setf (scene-cursor scene) cursor)
+            (when status (setf (scene-replay-status scene) status)))
+          (battle-tick (scene-battle scene))))))
+
+(defmethod scene-exit ((scene battle-scene))
+  ;; La dernière bataille jouée, à revoir depuis le menu.
+  (when (and (scene-live-p scene) (plusp (battle-tick-count (scene-battle scene))))
+    (save-replay (scene-battle scene))))
 
 ;;; Vitesse
 
@@ -118,26 +172,34 @@ d'avant."
          (change-scene *state* 'main-menu))
         ((and (end-screen-p scene)
               (or (key-pressed-p :key-enter) (key-pressed-p :key-kp-enter)))
-         ;; Rejouer : la même bataille, neuve.
+         ;; Rejouer : la même bataille, neuve (un replay : revu depuis le début).
          (change-scene *state* (class-name (class-of scene))))
+        ((and (end-screen-p scene) (scene-live-p scene) (key-pressed-p :key-v))
+         ;; Revoir la bataille qui vient de finir (SCENE-EXIT l'écrit).
+         (change-scene *state* 'replay-scene))
         (t
+         (when (and (scene-live-p scene) (end-screen-p scene) (not (scene-saved-p scene)))
+           (save-replay (scene-battle scene))
+           (setf (scene-saved-p scene) t))
          (update-space scene dt)
          (when (or (key-pressed-p :key-equal) (key-pressed-p :key-kp-add))
            (change-battle-speed scene 1))
          (when (or (key-pressed-p :key-minus) (key-pressed-p :key-kp-subtract))
            (change-battle-speed scene -1))
-         (when (key-pressed-p :key-r)
-           (order-random-moves (scene-battle scene) (scene-orders-rng scene)))
-         (when (key-pressed-p :key-c)
-           (order-charge (scene-battle scene) :sides *demo-charge-sides*))
+         (when (and (scene-player-p scene) (key-pressed-p :key-r))
+           (loop for order in (random-move-orders (scene-battle scene) (scene-orders-rng scene))
+                 do (player-order (scene-battle scene) (cons :place order))))
+         (when (and (scene-player-p scene) (key-pressed-p :key-c))
+           (player-order (scene-battle scene) (list :charge *demo-charge-sides*)))
          (when (key-pressed-p :key-tab)
            (setf *draw-tally* (not *draw-tally*)))
-         (unless (end-screen-p scene)
+         (when (key-pressed-p :key-i)
+           (setf *draw-ai-plan* (not *draw-ai-plan*)))
+         (when (and (scene-player-p scene) (not (end-screen-p scene)))
            (update-command (scene-command scene) (scene-battle scene) (scene-camera scene)))
          (update-camera (scene-camera scene) dt)
-         (let ((battle (scene-battle scene)))
-           (dotimes (i (clock-consume (scene-clock scene) dt))
-             (battle-tick battle))))))
+         (dotimes (i (clock-consume (scene-clock scene) dt))
+           (advance-battle scene)))))
 
 ;;; Dessin
 
@@ -170,14 +232,42 @@ d'avant."
   (clear-background :black)
   (draw-soldiers (scene-battle scene) (clock-alpha (scene-clock scene)) (scene-camera scene))
   (draw-battle-hud scene)
+  (draw-ai-plan (scene-battle scene) (scene-camera scene))
   (draw-tally (scene-tally scene) (scene-battle scene))
   ;; En pause, ou Espace tenu : les ordres en cours, fantômes et trajets.
   (draw-command (scene-command scene) (scene-battle scene) (scene-camera scene)
                 (or (battle-paused-p scene) (key-down-p :key-space)))
+  (draw-replay-banner scene)
   (when (end-screen-p scene)
     (draw-end-screen scene))
-  (draw-text "Clic gauche : choisir   Clic droit : ordre (glisser : orientation)   T : halte   E : exercice   P : posture   Espace : pause (tenu : coup d'œil)   + / - : vitesse   C : charge   Tab : tableau   Flèches, ZQSD, clic milieu : caméra   Échap : menu"
-             10 (- *window-height* (text-size 16) 10) (text-size 16) :darkgray))
+  (draw-text (help-text scene) 10 (- *window-height* (text-size 16) 10) (text-size 16) :darkgray))
+
+(defgeneric help-text (scene)
+  (:method ((scene battle-scene))
+    "Clic gauche : choisir   Clic droit : ordre (glisser : orientation)   T : halte   E : exercice   P : posture   Espace : pause (tenu : coup d'œil)   + / - : vitesse   C : charge   Tab : tableau   I : plan de l'IA   Flèches, ZQSD, clic milieu : caméra   Échap : menu")
+  (:method ((scene ai-vs-ai-scene))
+    "IA contre IA : Espace : pause (tenu : coup d'œil)   + / - : vitesse   Tab : tableau   I : plan de l'IA   Flèches, ZQSD, clic milieu : caméra   Échap : menu")
+  (:method ((scene replay-scene))
+    "Revoir : Espace : pause (tenu : coup d'œil)   + / - : vitesse   Tab : tableau   I : plan de l'IA   Flèches, ZQSD, clic milieu : caméra   Échap : menu"))
+
+(defgeneric draw-replay-banner (scene)
+  (:documentation "En haut au centre, pour un replay : ce qu'on regarde, et s'il
+s'est désynchronisé.")
+  (:method ((scene battle-scene)))
+  (:method ((scene replay-scene))
+    (let* ((replay (scene-replay scene))
+           (size (text-size 24))
+           (cx (floor *window-width* 2))
+           (y (+ 10 (text-size 20))))
+      (cond ((null replay)
+             (draw-text-centered "Aucune bataille enregistrée" cx y size :lightgray))
+            ((eq (scene-replay-status scene) :desync)
+             (draw-text-centered "Revoir : désynchronisé, la simulation a changé depuis l'enregistrement"
+                                 cx y size '(230 80 70 255)))
+            ((> (battle-tick-count (scene-battle scene)) (replay-end-tick replay))
+             (draw-text-centered "Revoir : fin de l'enregistrement, la bataille continue sans ordres"
+                                 cx y size :lightgray))
+            (t (draw-text-centered "Revoir la dernière bataille" cx y size :gold))))))
 
 ;;; Écran de fin
 
@@ -196,14 +286,22 @@ d'avant."
          (summaries (mapcar (lambda (side) (army-summary battle side)) sides))
          (seconds (floor (battle-outcome-tick battle) +ticks-per-second+)))
     (flet ((row (label fn)
-             (cons label (mapcar fn summaries))))
+             (cons label (mapcar fn summaries)))
+           (spectator-p ()
+             ;; Le camp du joueur est mené par l'IA : il regarde, sans camp.
+             (find *player-side* (battle-commanders battle) :key #'commander-side)))
       (list :title (cond ((eq outcome :draw) "Match nul")
+                         ((spectator-p) (if (zerop outcome) "Victoire des rouges" "Victoire des bleus"))
                          ((= outcome *player-side*) "Victoire")
                          (t "Défaite"))
             :color (cond ((eq outcome :draw) :lightgray)
+                         ((spectator-p) (side-color outcome))
                          ((= outcome *player-side*) :gold)
                          (t '(230 80 70 255)))
             :subtitle (cond ((eq outcome :draw) "Les deux armées sont brisées.")
+                            ((spectator-p) (if (zerop outcome)
+                                               "L'armée bleue est brisée."
+                                               "L'armée rouge est brisée."))
                             ((= outcome *player-side*) "L'armée ennemie est brisée.")
                             (t "Votre armée est brisée."))
             :duration (format nil "Durée : ~d min ~2,'0d s" (floor seconds 60) (mod seconds 60))
@@ -225,7 +323,9 @@ d'avant."
          (widths (loop for column below (length (first rows))
                        collect (+ pad (loop for row in rows maximize (measure-text (nth column row) size)))))
          (table-width (reduce #'+ widths))
-         (footer "Entrée : rejouer      Échap : menu")
+         (footer (if (scene-live-p scene)
+                     "Entrée : rejouer      V : revoir      Échap : menu"
+                     "Entrée : revoir encore      Échap : menu"))
          (width (+ pad (max table-width (measure-text (getf screen :title) big)
                             (measure-text (getf screen :subtitle) size))))
          (height (+ size big (round size 2) (* 2 line) (round line 2) (* line (length rows)) line small size))

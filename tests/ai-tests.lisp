@@ -20,8 +20,10 @@
                (map 'list #'rogue-company::regiment-role (regiments b))))))
 
 (test ai-attacks-a-passive-enemy
+  "Des piques de l'IA (sa ligne) avancent sur des piques qui attendent, et les
+attaquent une fois engagées."
   (let ((b (ai-battle '(0 :pikemen 225 0 0 0) '(1 :pikemen 225 60 0 180))))
-    (run-ticks b 45)
+    (run-ticks b (* 30 30))
     (is (equal '(:attack 0) (rogue-company::regiment-orders (nth-regiment b 1))))))
 
 (test cavalry-avoids-pikes-from-the-front

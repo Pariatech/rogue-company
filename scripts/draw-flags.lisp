@@ -11,6 +11,11 @@
 ;;; Le pixel (0, 0) s'accroche au sommet de la hampe ; le drapeau flotte vers
 ;;; la droite (vers la gauche en miroir). Tirages fixes, sans hasard : relancer
 ;;; le script redonne les mêmes images.
+;;;
+;;; Écrit aussi assets/overlays/emblem/frame_000.png à frame_005.png :
+;;; l'emblème de l'arme du régiment (pique, épée, hallebarde, arme à feu,
+;;; espadon, lance, dans l'ordre de REGIMENT-WEAPON-LOOK), un écusson clair de
+;;; 9 × 9 posé au centre du drapeau. Aucun pixel cramoisi : il n'est pas teint.
 
 (require :asdf)
 (load (merge-pathnames "quicklisp/setup.lisp" (user-homedir-pathname)))
@@ -118,6 +123,99 @@ du tissu retirés ; CUT : prédicat (x y) des pixels arrachés."
     (zpng:write-png (make-instance 'zpng:png :color-type :truecolor-alpha
                                              :width *width* :height *height* :image-data data)
                     path)))
+
+;;; Emblèmes
+
+(defparameter *emblem-size* 9)
+(defparameter *emblem-fill* '(236 222 186) "Fond de l'écusson, crème.")
+(defparameter *emblem-edge* '(52 32 20) "Bord de l'écusson.")
+(defparameter *emblem-ink* '(70 44 28) "Trait de l'arme.")
+(defparameter *emblem-steel* '(120 128 140) "Fer de l'arme.")
+
+(defparameter *emblems*
+  ;; 7 × 7 à l'intérieur du bord : # bois, + fer, * or.
+  '((".....++"
+     ".....++"
+     "....#.."
+     "...#..."
+     "..#...."
+     ".#....."
+     "#......")
+    ("...+..."
+     "...+..."
+     "...+..."
+     "...+..."
+     ".#####."
+     "...#..."
+     "...#...")
+    ("...+..."
+     "...+++."
+     "..#+++."
+     "...#++."
+     "...#..."
+     "...#..."
+     "...#...")
+    ("......."
+     "......."
+     "++++##."
+     "..#.###"
+     ".....##"
+     "......."
+     ".......")
+    ("......+"
+     ".....+."
+     "..*.+.."
+     "...#..."
+     "..#.*.."
+     ".#....."
+     "#......")
+    ("......+"
+     ".....#."
+     "....#**"
+     "...#.*."
+     "..##..."
+     ".##...."
+     "#......"))
+  "Pique, épée, hallebarde, arme à feu, espadon (en diagonale, garde
+perpendiculaire), lance (avec sa banderole).")
+
+(defun emblem (rows)
+  "Écusson de 9 × 9 : bord, fond clair, coins arrondis, l'arme de ROWS dedans."
+  (let* ((n *emblem-size*)
+         (canvas (make-array (list n n) :initial-element nil)))
+    (dotimes (y n)
+      (dotimes (x n)
+        (let ((corner (and (member x (list 0 (1- n))) (member y (list 0 (1- n)))))
+              (edge (or (member x (list 0 (1- n))) (member y (list 0 (1- n))))))
+          (setf (aref canvas y x)
+                (cond (corner nil)
+                      (edge *emblem-edge*)
+                      (t (case (char (nth (1- y) rows) (1- x))
+                           (#\# *emblem-ink*)
+                           (#\+ *emblem-steel*)
+                           (#\* *gold*)
+                           (t *emblem-fill*))))))))
+    canvas))
+
+(defun write-emblem (canvas path)
+  (let* ((n *emblem-size*)
+         (data (make-array (* n n 4) :element-type '(unsigned-byte 8) :initial-element 0)))
+    (dotimes (y n)
+      (dotimes (x n)
+        (let ((color (aref canvas y x)) (i (* 4 (+ x (* y n)))))
+          (when color
+            (setf (aref data i) (first color) (aref data (+ i 1)) (second color)
+                  (aref data (+ i 2)) (third color) (aref data (+ i 3)) 255)))))
+    (ensure-directories-exist path)
+    (zpng:write-png (make-instance 'zpng:png :color-type :truecolor-alpha
+                                             :width n :height n :image-data data)
+                    path)))
+
+(loop for rows in *emblems*
+      for i from 0
+      do (write-emblem (emblem rows)
+                       (merge-pathnames (format nil "assets/overlays/emblem/frame_~3,'0d.png" i) *root*)))
+(format t "~d emblèmes dans assets/overlays/emblem/~%" (length *emblems*))
 
 (loop for canvas in (list (intact) (holed) (tattered) (fallen))
       for i from 0

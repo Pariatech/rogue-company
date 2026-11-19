@@ -13,7 +13,10 @@
 ;;; de tir pour les tireurs). P : posture suivante.
 ;;;
 ;;; Les fonctions d'ordre prennent la bataille et des coordonnées du monde, sans
-;;; raylib : elles se testent sans fenêtre.
+;;; raylib : elles se testent sans fenêtre. Tout ordre du joueur passe par
+;;; PLAYER-ORDER, qui l'exécute (EXECUTE-ORDER) et l'inscrit au journal de la
+;;; bataille avec son tick (BATTLE-ORDER-LOG) : de quoi revoir la bataille
+;;; (replay.lisp).
 
 (defparameter *player-side* 0 "Camp du joueur : 0, les rouges.")
 
@@ -148,21 +151,65 @@ disposition du groupe tournant d'autant ; sinon dans le sens de la marche."
     (set-file-spacing regiment (regiment-base-file-spacing regiment))
     regiment))
 
-(defun cycle-drill (regiment)
+(defun next-drill (regiment)
+  "Exercice qui suit celui de REGIMENT dans DRILL-CHOICES (E), ou NIL s'il n'en
+a pas."
   (let ((choices (drill-choices regiment)))
-    (when choices
-      (set-regiment-drill regiment
-                          (or (second (member (regiment-drill regiment) choices))
-                              (first choices))))))
+    (and choices
+         (or (second (member (regiment-drill regiment) choices))
+             (first choices)))))
+
+(defun cycle-drill (regiment)
+  (when (drill-choices regiment)
+    (set-regiment-drill regiment (next-drill regiment))))
 
 (defun stance-choices (regiment)
   (cond ((ranged-regiment-p regiment) '(:hold :skirmish))
         (t '(:hold :chase))))
 
-(defun cycle-stance (regiment)
+(defun next-stance (regiment)
   (let ((choices (stance-choices regiment)))
-    (setf (regiment-stance regiment)
-          (or (second (member (regiment-stance regiment) choices)) (first choices)))))
+    (or (second (member (regiment-stance regiment) choices)) (first choices))))
+
+(defun cycle-stance (regiment)
+  (setf (regiment-stance regiment) (next-stance regiment)))
+
+;;; Ordres enregistrés
+
+(defun execute-order (battle spec)
+  "Exécute l'ordre SPEC, une liste de données seulement (indices de régiments,
+nombres, mots-clés), pour qu'il s'écrive et se relise tel quel :
+  (:move indices x y orientation-ou-NIL)  COMMAND-MOVE
+  (:attack indices cible)                 COMMAND-ATTACK
+  (:halt indices)                         COMMAND-HALT
+  (:drill indice exercice)                SET-REGIMENT-DRILL
+  (:stance indice posture)
+  (:place indice x y orientation)         ORDER-MOVE d'un seul régiment (R)
+  (:charge camps)                         ORDER-CHARGE (C)"
+  (let ((regiments (battle-regiments battle)))
+    (flet ((pick (indices) (mapcar (lambda (k) (aref regiments k)) indices)))
+      (destructuring-bind (kind &rest args) spec
+        (ecase kind
+          (:move (destructuring-bind (indices x y facing) args
+                   (command-move battle (pick indices) x y facing)))
+          (:attack (destructuring-bind (indices target) args
+                     (command-attack (pick indices) (aref regiments target))))
+          (:halt (command-halt battle (pick (first args))))
+          (:drill (destructuring-bind (index drill) args
+                    (set-regiment-drill (aref regiments index) drill)))
+          (:stance (destructuring-bind (index stance) args
+                     (setf (regiment-stance (aref regiments index)) stance)))
+          (:place (destructuring-bind (index x y facing) args
+                    (order-move (aref regiments index) x y facing)))
+          (:charge (order-charge battle :sides (first args))))))))
+
+(defun player-order (battle spec)
+  "Exécute l'ordre SPEC du joueur et l'inscrit au journal de BATTLE, avec le tick
+où il prend effet (avant ce tick)."
+  (execute-order battle spec)
+  (vector-push-extend (cons (battle-tick-count battle) (copy-tree spec))
+                      (battle-order-log battle))
+  spec)
 
 ;;; Saisie
 
@@ -216,17 +263,25 @@ disposition du groupe tournant d'autant ; sinon dans le sens de la marche."
           (multiple-value-bind (x y) (screen->world camera (float (car press) 1f0)
                                                     (float (cdr press) 1f0))
             (let ((target (regiment-at battle x y)))
-              (cond ((and target (/= (regiment-side target) *player-side*)
-                          (not (regiment-routed-p target)))
-                     (command-attack regiments target))
-                    ((mouse-moved-p press)
-                     (multiple-value-bind (mx my) (mouse-world camera)
-                       (command-move battle regiments x y (atan (- my y) (- mx x)))))
-                    (t (command-move battle regiments x y))))))))
+              (let ((indices (mapcar #'regiment-index regiments)))
+                (cond ((and target (/= (regiment-side target) *player-side*)
+                            (not (regiment-routed-p target)))
+                       (player-order battle (list :attack indices (regiment-index target))))
+                      ((mouse-moved-p press)
+                       (multiple-value-bind (mx my) (mouse-world camera)
+                         (player-order battle (list :move indices x y
+                                                    (float (atan (- my y) (- mx x)) 1f0)))))
+                      (t (player-order battle (list :move indices x y nil))))))))))
     (let ((regiments (selected-regiments command battle)))
-      (when (key-pressed-p :key-t) (command-halt battle regiments))
-      (when (key-pressed-p :key-e) (mapc #'cycle-drill regiments))
-      (when (key-pressed-p :key-p) (mapc #'cycle-stance regiments)))))
+      (when (and regiments (key-pressed-p :key-t))
+        (player-order battle (list :halt (mapcar #'regiment-index regiments))))
+      (when (key-pressed-p :key-e)
+        (dolist (regiment regiments)
+          (when (drill-choices regiment)
+            (player-order battle (list :drill (regiment-index regiment) (next-drill regiment))))))
+      (when (key-pressed-p :key-p)
+        (dolist (regiment regiments)
+          (player-order battle (list :stance (regiment-index regiment) (next-stance regiment))))))))
 
 ;;; Dessin
 

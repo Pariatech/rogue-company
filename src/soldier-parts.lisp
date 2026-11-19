@@ -40,7 +40,9 @@
   "Pique dressée et hampe du porteur : pied en avant du soldat, en mètres.")
 (defparameter *part-upright-low-hand* 0.5f0 "Pique dressée : main basse, en mètres du sol.")
 (defparameter *part-upright-high-hand* 0.8f0 "Pique dressée : main haute, en mètres du sol.")
-(defparameter *bearer-pole-height* 2.6f0 "Hampe du porteur, en mètres.")
+(defparameter *bearer-pole-height* 3.5f0
+  "Hampe du porteur, en mètres : assez haute pour que le drapeau, agrandi
+(*FLAG-ENLARGEMENT*), flotte au-dessus des têtes.")
 (defparameter *bearer-pole-lean* 0.15f0 "Hampe du porteur : avance du sommet, en mètres.")
 (defparameter *finial-color* '(232 190 64))
 ;;; Épée et rondache : l'épée est un trait (lame d'acier, garde dorée) tenu par

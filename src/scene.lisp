@@ -39,9 +39,11 @@
 
 (defun change-scene (state scene)
   "Remplace la scène courante de STATE par SCENE (une instance, ou le nom de sa
-classe)."
+classe, créée après la sortie de l'ancienne)."
+  ;; L'ancienne scène sort d'abord : ce qu'elle écrit en sortant (le replay de
+  ;; la bataille) est prêt quand la nouvelle se crée.
+  (scene-exit (current-scene state))
   (let ((scene (if (symbolp scene) (make-instance scene) scene)))
-    (scene-exit (current-scene state))
     (setf (current-scene state) scene)
     (scene-enter scene)
     scene))

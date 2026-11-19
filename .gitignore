@@ -3,3 +3,4 @@ captures/
 node_modules/
 .mcp-token
 .DS_Store
+replays/
