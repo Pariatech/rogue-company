@@ -2,13 +2,11 @@
 
 ;;; Dessin des soldats, vus par une caméra (camera.lisp). Deux modes selon le zoom :
 ;;;
-;;; - Sprites (zoom d'au moins *SPRITE-PIXELS-PER-METER*) : le sprite en vue de
-;;;   trois quarts de la direction la plus proche parmi 8 : l'animation d'attaque
-;;;   juste après un coup, sinon l'image de marche si le soldat a bougé pendant
-;;;   le tick, sinon la pose immobile ; puis son masque teint
-;;;   de la couleur du camp. Un soldat plus bas sur l'écran passe devant : les
-;;;   soldats sont parcourus dans l'ordre de la grille spatiale, triée par
-;;;   rangées de 1 m à chaque tick. Les soldats hors de l'écran sont sautés.
+;;; - Morceaux (zoom d'au moins *SPRITE-PIXELS-PER-METER*, soldier-parts.lisp) :
+;;;   corps, tête, mains, pieds et armes, en vue de trois quarts. Un soldat plus
+;;;   bas sur l'écran passe devant : les soldats sont parcourus dans l'ordre de
+;;;   la grille spatiale, triée par rangées de 1 m à chaque tick. Les soldats
+;;;   hors de l'écran sont sautés.
 ;;; - Vue d'ensemble : un rectangle par soldat, tourné selon son orientation,
 ;;;   l'avant plus clair.
 ;;;
@@ -27,30 +25,16 @@
 (defparameter *side-colors* #((205 70 60) (70 115 220))
   "Couleur de chaque camp, en r g b.")
 
-(defvar *soldier-style* :parts
-  "Dessin des soldats au zoom des sprites : :PARTS (morceaux) ou :SPRITES
-(sprites PixelLab).")
-
 (defparameter *finial-length* 0.12f0
   "Pointe dorée de la hampe du porteur dessiné en morceaux, en mètres.")
 
-(defparameter *regiment-sprite* :pikeman
-  "Sprite de tous les régiments, en attendant un sprite par silhouette.")
-
 (defparameter *walk-frames-per-second* 9f0
-  "Images de marche par seconde de bataille : un cycle de 8 images (deux pas)
-en 0,9 s, pour 1,3 m/s.")
-
-(defparameter *attack-frames-per-second* 10f0
-  "Images de l'animation d'attaque par seconde de bataille : le coup de pique
-(6 images) dure 0,6 s, moins que la recharge de la pique (1,5 s).")
+  "Cadence de la marche dessinée, en huitièmes de cycle (deux pas) par seconde
+de bataille : un cycle en 0,9 s, pour 1,3 m/s.")
 
 (defparameter *walk-threshold* 0.01f0
   "Déplacement minimum en un tick, en mètres, pour dessiner la marche : une
 légère poussée de collision ne fait pas marcher.")
-
-(defparameter *bearer-sprite* :standard-bearer
-  "Sprite du porteur d'étendard de chaque régiment.")
 
 (defparameter *flag-morale-steps* #(0.6667f0 0.3333f0)
   "Seuils de l'état du drapeau, en part du moral entre le seuil de débandade et
@@ -203,32 +187,11 @@ usage que *BEARERS*.")
 (defun draw-soldiers (battle alpha camera)
   (let ((atlas (ensure-atlas)))
     (cond ((not (camera-sprite-scale camera)) (draw-soldier-markers battle alpha camera))
-          ((eq *soldier-style* :parts)
-           (draw-blood battle alpha camera atlas 0)
-           (draw-corpses battle alpha camera atlas)
-           (draw-soldier-parts battle alpha camera atlas)
-           (draw-blood battle alpha camera atlas 1))
           (t (draw-blood battle alpha camera atlas 0)
-             (draw-soldier-sprites battle alpha camera atlas)
+             (draw-corpses battle alpha camera atlas)
+             (draw-soldier-parts battle alpha camera atlas)
              (draw-blood battle alpha camera atlas 1)))
     (draw-flags battle alpha camera atlas)))
-
-(declaim (inline walk-frame))
-(defun walk-frame (walk-phase i frames dx dy threshold2)
-  "Image de marche du soldat I : la première s'il n'a pas bougé pendant le tick
-(DX, DY), sinon la phase commune décalée pour lui, pour que le régiment ne
-marche pas au pas."
-  (declare (type fixnum walk-phase i frames) (type single-float dx dy threshold2))
-  (if (> (+ (* dx dx) (* dy dy)) threshold2)
-      (mod (+ walk-phase (* 3 i)) frames)
-      0))
-
-(defun walk-phase (battle alpha)
-  "Image de marche commune à l'instant dessiné, avant le décalage de chaque soldat."
-  (declare (type single-float alpha))
-  (floor (* (the single-float *walk-frames-per-second*)
-            (/ (+ (float (the fixnum (battle-tick-count battle)) 1f0) alpha)
-               (float +ticks-per-second+ 1f0)))))
 
 (defun flag-state (regiment)
   "Image du drapeau de REGIMENT selon son moral : 0 intact, 1 troué, 2 en
@@ -245,188 +208,6 @@ lambeaux, 3 pendant (débandade)."
 
 (defun side-color (side)
   (svref *side-colors* (mod side (length *side-colors*))))
-
-(defun draw-soldier-sprites (battle alpha camera atlas)
-  (declare (optimize (speed 3) (safety 1))
-           (type single-float alpha))
-  (multiple-value-bind (walk-row walk-frames) (atlas-walk atlas *regiment-sprite*)
-    (declare (type fixnum walk-row walk-frames))
-    (multiple-value-bind (attack-row attack-frames) (atlas-animation atlas *regiment-sprite* :attack)
-    (multiple-value-bind (bearer-row bearer-frames)
-        (atlas-walk atlas *bearer-sprite* *regiment-sprite*)
-      (declare (type fixnum bearer-row bearer-frames))
-    (multiple-value-bind (solid-row) (atlas-overlay atlas :solid)
-    (let* ((soldiers (battle-soldiers battle))
-           ;; Centre du carré blanc de l'atlas : la couleur unie des piques.
-           (solid-u (/ 2f0 (float (the fixnum (atlas-width atlas)) 1f0)))
-           (solid-v (/ (+ 2f0 (* (float (the fixnum (atlas-cell atlas)) 1f0)
-                                 (float (the fixnum (or solid-row 0)) 1f0)))
-                       (float (the fixnum (atlas-height atlas)) 1f0)))
-           (pi-f (float pi 1f0))
-           (attack-row (or attack-row 0))
-           (attack-frames (or attack-frames 0))
-           (strike-ticks (soldiers-strike-tick soldiers))
-           (soldier-ranks (soldiers-rank soldiers))
-           (tick (battle-tick-count battle))
-           ;; Images d'attaque par tick, pour l'âge du dernier coup.
-           (attack-rate (/ (the single-float *attack-frames-per-second*)
-                           (float +ticks-per-second+ 1f0)))
-           ;; Vivants seulement, dans l'ordre de la grille.
-           (count (grid-size (battle-grid battle)))
-           (order (grid-sorted (battle-grid battle)))
-           (xs (soldiers-x soldiers)) (ys (soldiers-y soldiers))
-           (prev-xs (soldiers-prev-x soldiers)) (prev-ys (soldiers-prev-y soldiers))
-           (facings (soldiers-facing soldiers)) (prev-facings (soldiers-prev-facing soldiers))
-           (soldier-regiments (soldiers-regiment soldiers))
-           (regiments (battle-regiments battle))
-           (bearers (update-bearers battle))
-           (lowered-ends *lowered-ends*)
-           (regiment-weapons *regiment-weapons*)
-           (pike-rise (the single-float *pike-rank-rise*))
-           (pikes (and *draw-pikes* solid-row t))
-           (pike-length (the single-float *pike-length*))
-           (pike-head (the single-float *pike-head*))
-           (pike-half-width (* 0.5f0 (the single-float (camera-sprite-scale camera))
-                                (the single-float *pike-width*)))
-           (pike-lean (the single-float *pike-lean*))
-           (pike-hand (the single-float *pike-hand-height*))
-           (pike-behind (the single-float *pike-behind*))
-           (pike-thrust (the single-float *pike-thrust*))
-           (thrust-ticks (* (the single-float *pike-thrust-seconds*) (float +ticks-per-second+ 1f0)))
-           (wood *pike-wood*) (steel *pike-steel*)
-           (wood-r (first wood)) (wood-g (second wood)) (wood-b (third wood))
-           (steel-r (first steel)) (steel-g (second steel)) (steel-b (third steel))
-           (zoom (camera-zoom camera))
-           (scale (camera-sprite-scale camera))
-           (width (float (the fixnum *window-width*) 1f0))
-           (height (float (the fixnum *window-height*) 1f0))
-           ;; Écran = monde × zoom + origine.
-           (origin-x (- (* 0.5f0 width) (* zoom (the single-float (camera-x camera)))))
-           (origin-y (- (* 0.5f0 height) (* zoom (the single-float (camera-y camera)))))
-           (cell (float (the fixnum (atlas-cell atlas)) 1f0))
-           (size (* cell scale))
-           (foot-x (* scale (+ (* 0.5f0 cell) (the single-float *sprite-foot-x*))))
-           (foot-y (* scale (+ (* 0.5f0 cell) (the single-float *sprite-foot-y*))))
-           (cell-u (/ cell (float (the fixnum (atlas-width atlas)) 1f0)))
-           (cell-v (/ cell (float (the fixnum (atlas-height atlas)) 1f0)))
-           (strips *direction-strips*)
-           (mirrored *direction-mirrored*)
-           (walk-phase (walk-phase battle alpha))
-           (threshold (the single-float *walk-threshold*))
-           (threshold2 (* threshold threshold))
-           (eighth (/ (float pi 1f0) 4f0)))
-      (declare (type fixnum count walk-phase attack-row attack-frames tick)
-               (type fixnum-array order soldier-regiments strike-ticks soldier-ranks bearers lowered-ends
-                     regiment-weapons)
-               (type single-float pike-rise)
-               (type single-float pike-length pike-head pike-half-width pike-lean pike-hand
-                     pike-behind pike-thrust thrust-ticks solid-u solid-v pi-f)
-               (type (integer 0 255) wood-r wood-g wood-b steel-r steel-g steel-b)
-               (type single-float attack-rate)
-               (type float-array xs ys prev-xs prev-ys facings prev-facings)
-               (type simple-vector strips mirrored)
-               (type vector regiments)
-               (type single-float zoom scale width height origin-x origin-y cell size
-                     foot-x foot-y cell-u cell-v threshold threshold2 eighth))
-      (rlgl:set-texture (raylib:texture-id (atlas-texture atlas)))
-      (rlgl:begin 7)                    ; RL_QUADS
-      (dotimes (k count)
-        (let* ((i (aref order k))
-               (px (aref prev-xs i)) (py (aref prev-ys i))
-               (dx (- (aref xs i) px)) (dy (- (aref ys i) py))
-               ;; Coin haut gauche du sprite, sur un pixel entier pour rester net.
-               (left (fround (- (+ origin-x (* zoom (+ px (* alpha dx)))) foot-x)))
-               (top (fround (- (+ origin-y (* zoom (+ py (* alpha dy)))) foot-y))))
-          (declare (type fixnum i) (type single-float px py dx dy left top))
-          (when (and (< (- size) left width) (< (- size) top height))
-            (let* ((pf (aref prev-facings i))
-                   (facing (+ pf (* alpha (wrap-angle (- (aref facings i) pf)))))
-                   (direction (mod (the fixnum (round facing eighth)) 8))
-                   (regiment-index (aref soldier-regiments i))
-                   (bearer (= i (aref bearers regiment-index)))
-                   ;; Âge du dernier coup, en images d'attaque.
-                   (attack-frame (floor (* attack-rate
-                                           (+ alpha (float (min 1000000
-                                                                (- tick (aref strike-ticks i)))
-                                                           1f0)))))
-                   (attacking (and (not bearer) (not pikes) (< attack-frame attack-frames)))
-                   (frame (if attacking
-                              attack-frame
-                              (walk-frame walk-phase i (if bearer bearer-frames walk-frames)
-                                          dx dy threshold2)))
-                   (row (+ (cond (attacking attack-row) (bearer bearer-row) (t walk-row))
-                           (* 2 (the fixnum (svref strips direction)))))
-                   (v0 (* cell-v (float row 1f0)))
-                   (v1 (+ v0 cell-v))
-                   (mask-v1 (+ v1 cell-v))
-                   (left-u (* cell-u (float frame 1f0)))
-                   (right-u (+ left-u cell-u))
-                   ;; Miroir : on inverse les u de gauche et de droite.
-                   (u0 (if (eql 1 (svref mirrored direction)) right-u left-u))
-                   (u1 (if (eql 1 (svref mirrored direction)) left-u right-u))
-                   (right (+ left size))
-                   (bottom (+ top size))
-                   (color (side-color (regiment-side (aref regiments regiment-index)))))
-              (declare (type single-float pf facing v0 v1 mask-v1 left-u right-u u0 u1 right bottom)
-                       (type fixnum direction attack-frame frame row))
-              (macrolet ((quad (red green blue tv0 tv1)
-                           `(progn
-                              (rlgl:color-4ub ,red ,green ,blue 255)
-                              (rlgl::texcoord-2f u0 ,tv0) (rlgl:vertex-2f left top)
-                              (rlgl::texcoord-2f u0 ,tv1) (rlgl:vertex-2f left bottom)
-                              (rlgl::texcoord-2f u1 ,tv1) (rlgl:vertex-2f right bottom)
-                              (rlgl::texcoord-2f u1 ,tv0) (rlgl:vertex-2f right top))))
-                (quad 255 255 255 v0 v1)
-                (let ((red (first color)) (green (second color)) (blue (third color)))
-                  (declare (type (integer 0 255) red green blue))
-                  (quad red green blue v1 mask-v1)))
-              (when (and pikes (not bearer) (= 1 (aref regiment-weapons regiment-index)))
-                (let* ((sx (+ left foot-x)) (sy (+ top foot-y))
-                       (fx (cos facing)) (fy (sin facing))
-                       (age (+ alpha (float (min 1000000 (- tick (aref strike-ticks i))) 1f0)))
-                       (thrust (if (< age thrust-ticks)
-                                   (* pike-thrust (sin (* pi-f (/ age thrust-ticks))))
-                                   0f0))
-                       (ax 0f0) (ay 0f0) (bx 0f0) (by 0f0))
-                  (declare (type single-float sx sy fx fy age thrust ax ay bx by))
-                  (if (< (aref soldier-ranks i) (aref lowered-ends regiment-index))
-                      ;; Croisée : horizontale à hauteur des mains, vers l'avant.
-                      (let* ((rank (aref soldier-ranks i))
-                             (hand-y (- sy (* zoom (+ pike-hand (* pike-rise (float rank 1f0))))))
-                             (back (- thrust pike-behind)))
-                        (declare (type fixnum rank) (type single-float hand-y back))
-                        (setf ax (+ sx (* zoom fx back))
-                              ay (+ hand-y (* zoom fy back))
-                              bx (+ ax (* zoom fx pike-length))
-                              by (+ ay (* zoom fy pike-length))))
-                      ;; Dressée, le fer un peu en avant du soldat.
-                      (setf ax sx
-                            ay sy
-                            bx (+ sx (* zoom fx pike-lean))
-                            by (- (+ sy (* zoom fy pike-lean))
-                                  (* zoom (sqrt (- (* pike-length pike-length)
-                                                   (* pike-lean pike-lean)))))))
-                  (let* ((head (- 1f0 (/ pike-head pike-length)))
-                         (hx (+ ax (* head (- bx ax))))
-                         (hy (+ ay (* head (- by ay))))
-                         (length (sqrt (+ (expt (- bx ax) 2) (expt (- by ay) 2))))
-                         (nx (if (plusp length) (* pike-half-width (/ (- ay by) length)) 0f0))
-                         (ny (if (plusp length) (* pike-half-width (/ (- bx ax) length)) 0f0)))
-                    (declare (type single-float head hx hy length nx ny))
-                    ;; Coins dans l'ordre des quads de sprite : départ -n, départ +n,
-                    ;; arrivée +n, arrivée -n.
-                    (macrolet ((segment (x0 y0 x1 y1 red green blue)
-                                 `(progn
-                                    (rlgl:color-4ub ,red ,green ,blue 255)
-                                    (rlgl::texcoord-2f solid-u solid-v)
-                                    (rlgl:vertex-2f (- ,x0 nx) (- ,y0 ny))
-                                    (rlgl:vertex-2f (+ ,x0 nx) (+ ,y0 ny))
-                                    (rlgl:vertex-2f (+ ,x1 nx) (+ ,y1 ny))
-                                    (rlgl:vertex-2f (- ,x1 nx) (- ,y1 ny)))))
-                      (segment ax ay hx hy wood-r wood-g wood-b)
-                      (segment hx hy bx by steel-r steel-g steel-b)))))))))
-      (rlgl:end)
-      (rlgl:set-texture 0)))))))
 
 (defun draw-soldier-markers (battle alpha camera)
   (declare (optimize (speed 3) (safety 1))
@@ -490,93 +271,73 @@ lambeaux, 3 pendant (débandade)."
 
 (defun draw-flags (battle alpha camera atlas)
   "Le drapeau de chaque régiment, par-dessus les soldats, dans l'état de son
-moral (FLAG-STATE). Avec les sprites, il s'accroche au sommet de la hampe du
-porteur, image par image (sommets de l'atlas), et flotte à l'opposé de son
-regard en miroir. En vue éloignée, il flotte au-dessus du porteur, à une
-échelle fixe (*OVERVIEW-FLAG-SCALE*) pour rester lisible."
+moral (FLAG-STATE). De près, il s'accroche sous la pointe de la hampe du
+porteur (BEARER-POLE-TOP) et flotte à l'opposé de son regard, en miroir vers
+l'ouest. En vue éloignée, il flotte au-dessus du porteur, à une échelle fixe
+(*OVERVIEW-FLAG-SCALE*) pour rester lisible."
   (declare (type single-float alpha))
   (multiple-value-bind (flag-row flag-frames flag-width flag-height) (atlas-overlay atlas :flag)
     (declare (ignore flag-frames))
     (when flag-row
-      (multiple-value-bind (bearer-row bearer-frames tips)
-          (atlas-walk atlas *bearer-sprite* *regiment-sprite*)
-        (declare (ignore bearer-row) (type fixnum bearer-frames))
-        (let* ((soldiers (battle-soldiers battle))
-               (xs (soldiers-x soldiers)) (ys (soldiers-y soldiers))
-               (prev-xs (soldiers-prev-x soldiers)) (prev-ys (soldiers-prev-y soldiers))
-               (facings (soldiers-facing soldiers)) (prev-facings (soldiers-prev-facing soldiers))
-               (zoom (camera-zoom camera))
-               (scale (camera-sprite-scale camera))
-               (flag-scale (or scale *overview-flag-scale*))
-               (origin-x (- (* 0.5f0 (float *window-width* 1f0)) (* zoom (camera-x camera))))
-               (origin-y (- (* 0.5f0 (float *window-height* 1f0)) (* zoom (camera-y camera))))
-               (cell (float (atlas-cell atlas) 1f0))
-               (cell-u (/ cell (atlas-width atlas)))
-               (cell-v (/ cell (atlas-height atlas)))
-               (flag-u (/ (float flag-width 1f0) (atlas-width atlas)))
-               (flag-v (/ (float flag-height 1f0) (atlas-height atlas)))
-               (walk-phase (walk-phase battle alpha))
-               (threshold2 (expt *walk-threshold* 2))
-               (eighth (/ (float pi 1f0) 4f0)))
-          (rlgl:set-texture (raylib:texture-id (atlas-texture atlas)))
-          (rlgl:begin 7)                ; RL_QUADS
-          (loop for regiment across (battle-regiments battle)
-                for i = (regiment-bearer regiment)
-                when (>= i 0)
-                  do (let* ((px (aref prev-xs i)) (py (aref prev-ys i))
-                            (dx (- (aref xs i) px)) (dy (- (aref ys i) py))
-                            (x (+ origin-x (* zoom (+ px (* alpha dx)))))
-                            (y (+ origin-y (* zoom (+ py (* alpha dy)))))
-                            (pf (aref prev-facings i))
-                            (facing (+ pf (* alpha (wrap-angle (- (aref facings i) pf)))))
-                            (direction (mod (round facing eighth) 8))
-                            (mirror (eql 1 (svref *direction-mirrored* direction)))
-                            (strip (svref *direction-strips* direction))
-                            (frame (walk-frame walk-phase i bearer-frames dx dy threshold2))
-                            (tip (* 2 (+ (* strip bearer-frames) frame)))
-                            ;; Colonne de pixels de la hampe, depuis le centre de la case ;
-                            ;; en miroir, la colonne -1 - x.
-                            (pole (cond ((not scale) 0)
-                                        (mirror (- -1 (aref tips tip)))
-                                        (t (aref tips tip))))
-                            (center-x (- (fround x) (* flag-scale *sprite-foot-x*)))
-                            (center-y (- (fround y) (* flag-scale *sprite-foot-y*)))
-                            (parts (and scale (eq *soldier-style* :parts)))
-                            ;; Porteur à cheval : sa hampe part de la selle.
-                            (pole-y (if (getf (stats-loadout (regiment-stats regiment)) :mount)
-                                        (- y (* zoom *horse-seat*))
-                                        y))
-                            ;; Le drapeau touche la hampe, un pixel sous son sommet ; en
-                            ;; morceaux, sous la pointe dorée.
-                            (pole-left (if parts
-                                           (fround (bearer-pole-top x pole-y facing zoom))
-                                           (+ center-x (* flag-scale pole))))
-                            (top (cond (parts
-                                        (fround (+ (nth-value 1 (bearer-pole-top x pole-y facing zoom))
-                                                   (* zoom *finial-length*))))
-                                       (scale
-                                        (+ center-y (* flag-scale (1+ (aref tips (1+ tip))))))
-                                       (t (fround (- y (* zoom *overview-flag-height*))))))
-                            (w (* flag-scale flag-width))
-                            (left (if mirror (- pole-left w) (+ pole-left flag-scale)))
-                            (right (+ left w))
-                            (bottom (+ top (* flag-scale flag-height)))
-                            (u-left (* cell-u (flag-state regiment)))
-                            (u-right (+ u-left flag-u))
-                            (u0 (if mirror u-right u-left))
-                            (u1 (if mirror u-left u-right))
-                            (v0 (* cell-v flag-row))
-                            (v1 (+ v0 flag-v))
-                            (mask-v0 (+ v0 cell-v))
-                            (mask-v1 (+ mask-v0 flag-v))
-                            (color (side-color (regiment-side regiment))))
-                       (flet ((quad (red green blue tv0 tv1)
-                                (rlgl:color-4ub red green blue 255)
-                                (rlgl::texcoord-2f u0 tv0) (rlgl:vertex-2f left top)
-                                (rlgl::texcoord-2f u0 tv1) (rlgl:vertex-2f left bottom)
-                                (rlgl::texcoord-2f u1 tv1) (rlgl:vertex-2f right bottom)
-                                (rlgl::texcoord-2f u1 tv0) (rlgl:vertex-2f right top)))
-                         (quad 255 255 255 v0 v1)
-                         (quad (first color) (second color) (third color) mask-v0 mask-v1))))
-          (rlgl:end)
-          (rlgl:set-texture 0))))))
+      (let* ((soldiers (battle-soldiers battle))
+             (xs (soldiers-x soldiers)) (ys (soldiers-y soldiers))
+             (prev-xs (soldiers-prev-x soldiers)) (prev-ys (soldiers-prev-y soldiers))
+             (facings (soldiers-facing soldiers)) (prev-facings (soldiers-prev-facing soldiers))
+             (zoom (camera-zoom camera))
+             (scale (camera-sprite-scale camera))
+             (flag-scale (or scale *overview-flag-scale*))
+             (origin-x (- (* 0.5f0 (float *window-width* 1f0)) (* zoom (camera-x camera))))
+             (origin-y (- (* 0.5f0 (float *window-height* 1f0)) (* zoom (camera-y camera))))
+             (cell (float (atlas-cell atlas) 1f0))
+             (cell-u (/ cell (atlas-width atlas)))
+             (cell-v (/ cell (atlas-height atlas)))
+             (flag-u (/ (float flag-width 1f0) (atlas-width atlas)))
+             (flag-v (/ (float flag-height 1f0) (atlas-height atlas)))
+             (eighth (/ (float pi 1f0) 4f0)))
+        (rlgl:set-texture (raylib:texture-id (atlas-texture atlas)))
+        (rlgl:begin 7)                  ; RL_QUADS
+        (loop for regiment across (battle-regiments battle)
+              for i = (regiment-bearer regiment)
+              when (>= i 0)
+                do (let* ((px (aref prev-xs i)) (py (aref prev-ys i))
+                          (x (+ origin-x (* zoom (+ px (* alpha (- (aref xs i) px))))))
+                          (y (+ origin-y (* zoom (+ py (* alpha (- (aref ys i) py))))))
+                          (pf (aref prev-facings i))
+                          (facing (+ pf (* alpha (wrap-angle (- (aref facings i) pf)))))
+                          (direction (mod (round facing eighth) 8))
+                          (mirror (eql 1 (svref *direction-mirrored* direction)))
+                          ;; Porteur à cheval : sa hampe part de la selle.
+                          (pole-y (if (getf (stats-loadout (regiment-stats regiment)) :mount)
+                                      (- y (* zoom *horse-seat*))
+                                      y))
+                          ;; Le drapeau touche la hampe, sous la pointe dorée.
+                          (pole-left (if scale
+                                         (fround (bearer-pole-top x pole-y facing zoom))
+                                         (fround x)))
+                          (top (if scale
+                                   (fround (+ (nth-value 1 (bearer-pole-top x pole-y facing zoom))
+                                              (* zoom *finial-length*)))
+                                   (fround (- y (* zoom *overview-flag-height*)))))
+                          (w (* flag-scale flag-width))
+                          (left (if mirror (- pole-left w) (+ pole-left flag-scale)))
+                          (right (+ left w))
+                          (bottom (+ top (* flag-scale flag-height)))
+                          (u-left (* cell-u (flag-state regiment)))
+                          (u-right (+ u-left flag-u))
+                          (u0 (if mirror u-right u-left))
+                          (u1 (if mirror u-left u-right))
+                          (v0 (* cell-v flag-row))
+                          (v1 (+ v0 flag-v))
+                          (mask-v0 (+ v0 cell-v))
+                          (mask-v1 (+ mask-v0 flag-v))
+                          (color (side-color (regiment-side regiment))))
+                     (flet ((quad (red green blue tv0 tv1)
+                              (rlgl:color-4ub red green blue 255)
+                              (rlgl::texcoord-2f u0 tv0) (rlgl:vertex-2f left top)
+                              (rlgl::texcoord-2f u0 tv1) (rlgl:vertex-2f left bottom)
+                              (rlgl::texcoord-2f u1 tv1) (rlgl:vertex-2f right bottom)
+                              (rlgl::texcoord-2f u1 tv0) (rlgl:vertex-2f right top)))
+                       (quad 255 255 255 v0 v1)
+                       (quad (first color) (second color) (third color) mask-v0 mask-v1))))
+        (rlgl:end)
+        (rlgl:set-texture 0)))))

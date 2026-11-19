@@ -1,32 +1,23 @@
 (in-package #:rogue-company)
 
 ;;; Atlas des soldats : assets/atlas.png et assets/atlas.sexp, construits par
-;;; scripts/build-atlas.lisp à partir de assets/sprites/<type>/ (exports PixelLab).
-;;;
-;;; Chaque animation d'un type occupe deux rangées par direction stockée (est,
-;;; sud-est, sud, nord-est, nord) : ses images en colonnes, puis leurs masques
-;;; de couleur de camp, dessinés par-dessus et teintés. Sud-ouest, ouest et
-;;; nord-ouest sont les miroirs de sud-est, est et nord-est.
+;;; scripts/build-atlas.lisp à partir de assets/overlays/ (morceaux des soldats,
+;;; drapeau, carré blanc). Chaque surimpression occupe deux rangées : ses
+;;; images en colonnes, puis leurs masques de couleur de camp, dessinés
+;;; par-dessus et teintés. Les morceaux qui ont une direction en ont cinq
+;;; (est, sud-est, sud, nord-est, nord) : sud-ouest, ouest et nord-ouest sont
+;;; les miroirs de sud-est, est et nord-est.
 ;;;
 ;;; La texture vit dans le GPU : elle se charge sur le thread principal, au
 ;;; premier dessin. RELOAD-ATLAS la recharge après une reconstruction.
 
 (defparameter *atlas-directory* (asdf:system-relative-pathname :rogue-company "assets/"))
 
-(defparameter *sprite-foot-x* 0f0
-  "Pixel du sprite posé sur la position du soldat, le milieu entre les pieds,
-compté depuis le centre de la case : les images y sont centrées.")
-(defparameter *sprite-foot-y* 12f0)
-
 (defclass atlas ()
   ((texture :initarg :texture :reader atlas-texture)
    (cell :initarg :cell :reader atlas-cell :documentation "Côté d'une case, en pixels.")
    (width :initarg :width :reader atlas-width)
    (height :initarg :height :reader atlas-height)
-   (units :initarg :units :reader atlas-units
-          :documentation "Plist type -> plist animation -> (rangée images sommets).
-SOMMETS : tableau de fixnums, pour chaque direction stockée puis chaque image,
-x et y du pixel le plus haut depuis le centre de la case.")
    (overlays :initarg :overlays :reader atlas-overlays
              :documentation "Plist surimpression -> (rangée images largeur hauteur).")))
 
@@ -53,25 +44,12 @@ et le format de sa description a pu changer.")
                    :cell (getf description :cell)
                    :width (raylib:texture-width texture)
                    :height (raylib:texture-height texture)
-                   :units (loop for (unit animations) in (getf description :units)
-                                append (list unit
-                                             (loop for (name . properties) in animations
-                                                   append (list name
-                                                                (list (getf properties :row)
-                                                                      (getf properties :frames)
-                                                                      (tips-array (getf properties :tips)))))))
                    :overlays (loop for (name . properties) in (getf description :overlays)
                                    append (list name
                                                 (list (getf properties :row)
                                                       (getf properties :frames)
                                                       (getf properties :width)
                                                       (getf properties :height)))))))
-
-(defun tips-array (tips)
-  "Les sommets d'une animation, par direction puis par image, à plat : x et y."
-  (coerce (loop for frames in tips
-                append (loop for (x y) in frames append (list x y)))
-          '(simple-array fixnum (*))))
 
 (defun ensure-atlas ()
   "L'atlas, chargé au premier appel et relu après un rechargement de ce
@@ -89,25 +67,9 @@ fichier. Thread principal seulement."
     (setf *atlas* nil))
   (ensure-atlas))
 
-(defun atlas-animation (atlas unit animation)
-  "Première rangée, nombre d'images et sommets de l'ANIMATION de UNIT, ou NIL."
-  (let ((entry (getf (getf (atlas-units atlas) unit) animation)))
-    (when entry (values-list entry))))
-
 (defun atlas-overlay (atlas name)
   "Rangée, nombre d'images, largeur et hauteur de la surimpression NAME, ou NIL."
   (values-list (getf (atlas-overlays atlas) name)))
-
-(defun atlas-walk (atlas unit &optional fallback)
-  "Rangée, nombre d'images et sommets de la marche de UNIT. Sans marche, la pose
-immobile : une seule image. Sans sprite pour UNIT, ceux de FALLBACK."
-  (multiple-value-bind (row frames tips) (atlas-animation atlas unit :walk)
-    (if row
-        (values row frames tips)
-        (multiple-value-bind (row frames tips) (atlas-animation atlas unit :idle)
-          (cond (row (values row frames tips))
-                (fallback (atlas-walk atlas fallback))
-                (t (error "Pas de sprite ~s dans l'atlas" unit)))))))
 
 (defparameter *direction-strips* #(0 1 2 1 0 3 4 3)
   "Pour chacune des 8 directions (est, sud-est, sud, sud-ouest, ouest,

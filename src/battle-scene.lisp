@@ -111,8 +111,6 @@ d'avant."
            (order-charge (scene-battle scene) :sides *demo-charge-sides*))
          (when (key-pressed-p :key-tab)
            (setf *draw-tally* (not *draw-tally*)))
-         (when (key-pressed-p :key-v)
-           (setf *soldier-style* (if (eq *soldier-style* :parts) :sprites :parts)))
          (update-command (scene-command scene) (scene-battle scene) (scene-camera scene))
          (update-camera (scene-camera scene) dt)
          (let ((battle (scene-battle scene)))
@@ -154,7 +152,7 @@ d'avant."
   ;; En pause, ou Espace tenu : les ordres en cours, fantômes et trajets.
   (draw-command (scene-command scene) (scene-battle scene) (scene-camera scene)
                 (or (battle-paused-p scene) (key-down-p :key-space)))
-  (draw-text "Clic gauche : choisir   Clic droit : ordre (glisser : orientation)   T : halte   E : exercice   P : posture   Espace : pause (tenu : coup d'œil)   + / - : vitesse   C : charge   V : morceaux / sprites   Tab : tableau   Flèches, ZQSD, clic milieu : caméra   Échap : menu"
+  (draw-text "Clic gauche : choisir   Clic droit : ordre (glisser : orientation)   T : halte   E : exercice   P : posture   Espace : pause (tenu : coup d'œil)   + / - : vitesse   C : charge   Tab : tableau   Flèches, ZQSD, clic milieu : caméra   Échap : menu"
              10 (- *window-height* (text-size 16) 10) (text-size 16) :darkgray))
 
 ;;; Inspection
