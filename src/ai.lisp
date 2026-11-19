@@ -17,10 +17,12 @@
 ;;;    (*AI-MATCHUPS*) × côté abordé (flanc, dos) × occasion (ennemi déjà en
 ;;;    mêlée, moral bas) × proximité (temps de marche) ; de la cavalerie ou de
 ;;;    la mêlée devant des piques de face, un carré ou des tireurs couverts par
-;;;    leurs piques notent bas. Affectation gloutonne, meilleure paire d'abord,
-;;;    chaque régiment déjà affecté à un ennemi rabattant la note des suivants
-;;;    (*AI-CROWDING*). Sous le seuil de son rôle (*AI-THRESHOLDS*), un régiment
-;;;    attend à sa place de départ, face à l'ennemi.
+;;;    leurs piques notent bas. La proximité pèse lourd : l'ennemi le plus proche
+;;;    passe avant un meilleur combat lointain. Affectation gloutonne, meilleure
+;;;    paire d'abord, chaque régiment déjà affecté à un ennemi rabattant la note
+;;;    des suivants (*AI-CROWDING*). Si même le combat, distance mise à part, ne
+;;;    vaut pas le seuil de son rôle (*AI-THRESHOLDS*), un régiment attend à sa
+;;;    place de départ, face à l'ennemi.
 ;;; 3. Stabilité : un régiment garde sa cible au moins *AI-COMMIT-SECONDS*, et
 ;;;    n'en change que pour une note *AI-SWITCH-MARGIN* fois meilleure. Aucun
 ;;;    ordre à un régiment en mêlée, à la charge, en repli de tirailleurs, en
@@ -58,15 +60,17 @@ couverts : la cavalerie et la mêlée à pied qui les visent les y trouveraient.
 
 (defparameter *ai-screened* 0.5f0 "Avantage sur des tireurs couverts par leurs piques.")
 
-(defparameter *ai-march-seconds* 180f0
-  "Proximité : une cible à T secondes de marche (au pas de course) compte pour
-1 / (1 + T / *AI-MARCH-SECONDS*).")
+(defparameter *ai-march-seconds* 20f0
+  "Proximité : une cible à T secondes de course compte pour
+1 / (1 + T / *AI-MARCH-SECONDS*). Des piquiers notent des piques à 20 m (7 s)
+0,75, de la cavalerie à 150 m (50 s) 0,29 : ils vont aux piques.")
 
 (defparameter *ai-crowding* 0.6f0
   "Facteur sur la note d'un ennemi par régiment ami déjà affecté contre lui.")
 
 (defparameter *ai-thresholds* '((:pikes . 0.5f0) (:shooters . 0.4f0) (:foot . 0.8f0) (:cavalry . 1f0))
-  "Note minimale pour attaquer, selon le rôle : la cavalerie attend une occasion.")
+  "Valeur minimale d'un combat (sa note, distance mise à part) pour attaquer,
+selon le rôle : la cavalerie attend une occasion.")
 
 (defparameter *ai-commit-seconds* 8 "Durée minimale d'un engagement avant de changer de cible.")
 
@@ -179,7 +183,8 @@ flanc, 2 de dos. Un carré n'a que des faces."
 
 (defun ai-score (battle regiment enemy)
   "Note de l'attaque de REGIMENT sur ENEMY : plus elle est haute, meilleure est
-l'attaque ; 1 pour un combat égal tout proche."
+l'attaque ; 1 pour un combat égal tout proche. Second retour : sa valeur,
+distance mise à part, comparée au seuil du rôle."
   (let* ((soldiers (battle-soldiers battle))
          (sector (approach-sector regiment enemy soldiers))
          (ratio (/ (regiment-strength regiment) (max 1f0 (regiment-strength enemy))))
@@ -188,8 +193,9 @@ l'attaque ; 1 pour un combat égal tout proche."
                                    (max 0f0 (- 1f0 (morale-ratio enemy)))))))
          (gap (regiment-gap regiment enemy soldiers 1000f0))
          (seconds (/ gap (max 0.5f0 (stats-run-speed (regiment-stats regiment)))))
-         (proximity (/ 1f0 (+ 1f0 (/ seconds *ai-march-seconds*)))))
-    (* (ai-matchup battle regiment enemy sector) ratio opportunity proximity)))
+         (proximity (/ 1f0 (+ 1f0 (/ seconds *ai-march-seconds*))))
+         (worth (* (ai-matchup battle regiment enemy sector) ratio opportunity)))
+    (values (* worth proximity) worth)))
 
 ;;; Décisions
 
@@ -271,24 +277,25 @@ ni en mêlée, ni à la charge, ni en repli, ni en poursuite."
           when (and (= (regiment-side regiment) side) (ai-free-p regiment)
                     (not (gethash (regiment-index regiment) decided)))
             do (dolist (enemy enemies)
-                 (push (list (ai-score battle regiment enemy) regiment enemy) pairs)))
+                 (multiple-value-bind (score worth) (ai-score battle regiment enemy)
+                   (push (list score regiment enemy worth) pairs))))
     (setf pairs (sort pairs #'> :key #'first))
     ;; Gloutonne : la meilleure paire d'abord, la foule rabat les suivantes.
     (loop while pairs
           do (let ((best nil) (best-score 0f0))
                (dolist (pair pairs)
-                 (destructuring-bind (score regiment enemy) pair
+                 (destructuring-bind (score regiment enemy worth) pair
                    (unless (gethash (regiment-index regiment) decided)
                      (let ((crowded (* score (expt *ai-crowding* (gethash enemy crowd 0)))))
                        (when (> crowded best-score)
-                         (setf best (list crowded regiment enemy) best-score crowded))))))
+                         (setf best (list crowded regiment enemy worth) best-score crowded))))))
                (unless best (return))
-               (destructuring-bind (score regiment enemy) best
+               (destructuring-bind (score regiment enemy worth) best
                  (let* ((index (regiment-index regiment))
                         (current (current-target regiment battle))
                         (threshold (cdr (assoc (regiment-role regiment) *ai-thresholds*))))
                    (setf (gethash index decided) t)
-                   (cond ((< score threshold)
+                   (cond ((< worth threshold)
                           ;; Rien qui vaille : il garde sa cible, ou attend.
                           (if current
                               (incf (gethash current crowd 0))

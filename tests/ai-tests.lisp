@@ -54,17 +54,29 @@ reviennent en ligne quand elle n'est plus en état de combattre."
     (is-false (rogue-company::regiment-square-p pikes))))
 
 (test targets-stay-put
-  "Dans la bataille rangée contre l'IA, le commandant ne change pas de cible à
-tout bout de champ : au plus cinq ordres d'attaque par régiment en deux
-minutes, un toutes les 24 s (les changements de cible du combat lui-même ne
-comptent pas ; une cible débandée ou des tireurs qui se replient derrière leurs
-piques en appellent un nouveau)."
-  (let ((b (rogue-company::make-ai-battle)))
-    (run-ticks b (* 30 120))
-    (let ((orders (rogue-company::commander-attack-orders
-                   (first (rogue-company::battle-commanders b)))))
-      (is (plusp (hash-table-count orders)) "il a donné des ordres")
-      (is (<= (loop for n being the hash-values of orders maximize n) 5)))))
+  "Dans la bataille rangée contre l'IA, le commandant ne papillonne pas : en deux
+minutes, il fait lâcher au plus deux fois à un régiment une cible encore en état
+de combattre (une cible débandée en appelle une autre sans compter ; les
+changements de cible du combat lui-même ne comptent pas)."
+  (let* ((b (rogue-company::make-ai-battle))
+         (orders (rogue-company::commander-attack-orders
+                  (first (rogue-company::battle-commanders b))))
+         (given (make-hash-table))
+         (before (make-hash-table))
+         (switches (make-hash-table)))
+    (dotimes (tick (* 30 120))
+      (rogue-company::battle-tick b)
+      (loop for r in (regiments b)
+            for k = (rogue-company::regiment-index r)
+            for n = (gethash k orders 0)
+            for old = (gethash k before)
+            when (and (/= n (gethash k given 0)) (eq :attack (first old))
+                      (rogue-company::fighting-p (nth (second old) (regiments b))))
+              do (incf (gethash k switches 0))
+            do (setf (gethash k given) n
+                     (gethash k before) (copy-list (rogue-company::regiment-orders r)))))
+    (is (plusp (hash-table-count orders)) "il a donné des ordres")
+    (is (<= (loop for n being the hash-values of switches maximize n) 2))))
 
 (test ai-battles-replay
   "Deux batailles contre l'IA de même graine sont identiques."
@@ -86,3 +98,11 @@ gagnée (victory.lisp)."
                        (regiments b))))
       (is (> (routed 0) (+ 2 (routed 1))))
       (is (eql 1 (rogue-company::battle-outcome b)) "et elle a gagné"))))
+
+(test nearest-enemy-comes-first
+  "Des piquiers de l'IA avec des piques ennemies à 25 m et de la cavalerie à
+150 m attaquent les piques, même si les piques battent la cavalerie."
+  (let ((b (ai-battle '(0 :pikemen 225 -25 0 0) '(0 :light-cavalry 60 0 150 270)
+                      '(1 :pikemen 225 15 0 180))))
+    (run-ticks b 45)
+    (is (equal '(:attack 0) (rogue-company::regiment-orders (nth-regiment b 2))))))
