@@ -16,6 +16,10 @@
   "Espace relâché avant ce délai : un clic, qui bascule la pause. Au-delà, il
 était tenu : la bataille reprend l'état d'avant.")
 
+(defparameter *end-screen-seconds* 3
+  "Secondes de bataille entre la décision (victory.lisp) et l'écran de fin : on
+voit l'armée brisée se débander.")
+
 (defparameter *battle-speeds* '(0.25 0.5 1 2 4)
   "Vitesses proposées par + et -, en ordre croissant.")
 
@@ -40,6 +44,8 @@
    (tick-text :initform (make-text-buffer) :reader scene-tick-text
               :documentation "Chiffres du tick, réécrits à chaque image sans allouer.")
    (speed-text :initform "" :accessor scene-speed-text)
+   (end-screen :initform nil :accessor scene-end-screen
+               :documentation "Bilan de l'écran de fin (END-SCREEN), figé à son affichage.")
    (speed-key :initform nil :accessor scene-speed-key
               :documentation "Vitesse et pause de SPEED-TEXT : le texte n'est reconstruit
 que s'ils changent, ce qui est rare."))
@@ -100,9 +106,20 @@ d'avant."
 
 ;;; Mise à jour
 
+(defun end-screen-p (scene)
+  "Vrai quand la bataille est décidée depuis *END-SCREEN-SECONDS*."
+  (let ((battle (scene-battle scene)))
+    (and (battle-outcome battle)
+         (>= (- (battle-tick-count battle) (battle-outcome-tick battle))
+             (* *end-screen-seconds* +ticks-per-second+)))))
+
 (defmethod scene-update ((scene battle-scene) dt)
   (cond ((key-pressed-p :key-escape)
          (change-scene *state* 'main-menu))
+        ((and (end-screen-p scene)
+              (or (key-pressed-p :key-enter) (key-pressed-p :key-kp-enter)))
+         ;; Rejouer : la même bataille, neuve.
+         (change-scene *state* (class-name (class-of scene))))
         (t
          (update-space scene dt)
          (when (or (key-pressed-p :key-equal) (key-pressed-p :key-kp-add))
@@ -115,7 +132,8 @@ d'avant."
            (order-charge (scene-battle scene) :sides *demo-charge-sides*))
          (when (key-pressed-p :key-tab)
            (setf *draw-tally* (not *draw-tally*)))
-         (update-command (scene-command scene) (scene-battle scene) (scene-camera scene))
+         (unless (end-screen-p scene)
+           (update-command (scene-command scene) (scene-battle scene) (scene-camera scene)))
          (update-camera (scene-camera scene) dt)
          (let ((battle (scene-battle scene)))
            (dotimes (i (clock-consume (scene-clock scene) dt))
@@ -156,8 +174,86 @@ d'avant."
   ;; En pause, ou Espace tenu : les ordres en cours, fantômes et trajets.
   (draw-command (scene-command scene) (scene-battle scene) (scene-camera scene)
                 (or (battle-paused-p scene) (key-down-p :key-space)))
+  (when (end-screen-p scene)
+    (draw-end-screen scene))
   (draw-text "Clic gauche : choisir   Clic droit : ordre (glisser : orientation)   T : halte   E : exercice   P : posture   Espace : pause (tenu : coup d'œil)   + / - : vitesse   C : charge   Tab : tableau   Flèches, ZQSD, clic milieu : caméra   Échap : menu"
              10 (- *window-height* (text-size 16) 10) (text-size 16) :darkgray))
+
+;;; Écran de fin
+
+(defun side-label (battle side)
+  "« Rouges (vous) », « Bleus (IA) »."
+  (format nil "~a~a" (if (zerop side) "Rouges" "Bleus")
+          (cond ((find side (battle-commanders battle) :key #'commander-side) " (IA)")
+                ((= side *player-side*) " (vous)")
+                (t ""))))
+
+(defun end-screen (battle)
+  "Bilan de la bataille décidée : plist :TITLE, :COLOR, :SUBTITLE, :DURATION,
+:ROWS (en-tête puis une ligne par mesure, une colonne par camp)."
+  (let* ((outcome (battle-outcome battle))
+         (sides (army-sides battle))
+         (summaries (mapcar (lambda (side) (army-summary battle side)) sides))
+         (seconds (floor (battle-outcome-tick battle) +ticks-per-second+)))
+    (flet ((row (label fn)
+             (cons label (mapcar fn summaries))))
+      (list :title (cond ((eq outcome :draw) "Match nul")
+                         ((= outcome *player-side*) "Victoire")
+                         (t "Défaite"))
+            :color (cond ((eq outcome :draw) :lightgray)
+                         ((= outcome *player-side*) :gold)
+                         (t '(230 80 70 255)))
+            :subtitle (cond ((eq outcome :draw) "Les deux armées sont brisées.")
+                            ((= outcome *player-side*) "L'armée ennemie est brisée.")
+                            (t "Votre armée est brisée."))
+            :duration (format nil "Durée : ~d min ~2,'0d s" (floor seconds 60) (mod seconds 60))
+            :rows (list (cons "" (mapcar (lambda (side) (side-label battle side)) sides))
+                        (row "Hommes" (lambda (s) (format nil "~d / ~d" (getf s :alive) (getf s :start))))
+                        (row "Pertes" (lambda (s) (format nil "~d" (- (getf s :start) (getf s :alive)))))
+                        (row "Ennemis tués" (lambda (s) (format nil "~d" (getf s :kills))))
+                        (row "Régiments brisés"
+                             (lambda (s) (format nil "~d / ~d" (getf s :routed) (getf s :regiments)))))))))
+
+(defun draw-end-screen (scene)
+  "Panneau du bilan au centre de l'écran, par-dessus la bataille qui continue."
+  (let* ((screen (or (scene-end-screen scene)
+                     (setf (scene-end-screen scene) (end-screen (scene-battle scene)))))
+         (rows (getf screen :rows))
+         (big (text-size 64)) (size (text-size 26)) (small (text-size 18))
+         (line (round (* size 1.6)))
+         (pad (* 2 size))
+         (widths (loop for column below (length (first rows))
+                       collect (+ pad (loop for row in rows maximize (measure-text (nth column row) size)))))
+         (table-width (reduce #'+ widths))
+         (footer "Entrée : rejouer      Échap : menu")
+         (width (+ pad (max table-width (measure-text (getf screen :title) big)
+                            (measure-text (getf screen :subtitle) size))))
+         (height (+ size big (round size 2) (* 2 line) (round line 2) (* line (length rows)) line small size))
+         (cx (floor *window-width* 2))
+         (top (floor (- *window-height* height) 2))
+         (y (+ top size)))
+    (draw-rectangle (- cx (floor width 2)) top width height '(0 0 0 210))
+    (draw-text-centered (getf screen :title) cx y big (getf screen :color))
+    (incf y (+ big (round size 2)))
+    (draw-text-centered (getf screen :subtitle) cx y size :white)
+    (incf y line)
+    (draw-text-centered (getf screen :duration) cx y size :lightgray)
+    (incf y (+ line (round line 2)))
+    (loop for row in rows
+          for header = t then nil
+          do (loop for cell in row
+                   for cell-width in widths
+                   for x = (- cx (floor table-width 2)) then (+ x previous)
+                   for previous = cell-width
+                   for first = t then nil
+                   do (draw-text cell
+                                 (if first
+                                     (+ x (floor pad 2))
+                                     (+ x (floor (- cell-width (measure-text cell size)) 2)))
+                                 y size (cond (header :gray) (first :lightgray) (t :white))))
+             (incf y line))
+    (incf y (round line 2))
+    (draw-text-centered footer cx y small :gray)))
 
 ;;; Inspection
 
@@ -169,5 +265,7 @@ d'avant."
           (gethash "resume_speed" snapshot) (float (scene-resume-speed scene) 1d0)
           (gethash "alpha" snapshot) (float (clock-alpha clock) 1d0)
           (gethash "dropped_seconds" snapshot) (float (clock-dropped clock) 1d0)
-          (gethash "camera" snapshot) (camera-snapshot (scene-camera scene)))
+          (gethash "camera" snapshot) (camera-snapshot (scene-camera scene))
+          (gethash "outcome" snapshot) (let ((outcome (battle-outcome (scene-battle scene))))
+                                         (if (symbolp outcome) (string-downcase (or outcome "")) outcome)))
     snapshot))

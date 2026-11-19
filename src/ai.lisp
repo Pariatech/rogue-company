@@ -366,7 +366,9 @@ espadonniers aux flancs des piques, chevau-légers et lanciers aux ailes.")
 (defparameter *ai-sides* '(1) "Camps commandés par l'IA dans la bataille contre l'IA.")
 
 (defun make-ai-battle (&key (seed *demo-seed*) (regiments *ai-battle-regiments*) (sides *ai-sides*))
-  "Bataille de REGIMENTS, les camps SIDES commandés par l'IA."
+  "Bataille de REGIMENTS, les camps SIDES commandés par l'IA, qui se décide
+(victory.lisp)."
   (let ((battle (make-demo-battle :seed seed :regiments regiments)))
-    (setf (battle-commanders battle) (mapcar #'make-ai-commander sides))
+    (setf (battle-commanders battle) (mapcar #'make-ai-commander sides)
+          (battle-victory-p battle) t)
     battle))

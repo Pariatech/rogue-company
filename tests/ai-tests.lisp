@@ -76,11 +76,13 @@ piques en appellent un nouveau)."
 
 (test ai-beats-a-passive-army
   "L'IA lancée contre la même armée qui ne bouge pas la met en déroute : plus de
-régiments rouges débandés que de bleus après quatre minutes."
+régiments rouges débandés que de bleus après quatre minutes, et la bataille est
+gagnée (victory.lisp)."
   (let ((b (rogue-company::make-ai-battle)))
     (run-ticks b (* 30 240))
     (flet ((routed (side)
              (count-if (lambda (r) (and (= side (rogue-company::regiment-side r))
                                         (rogue-company::regiment-routed-p r)))
                        (regiments b))))
-      (is (> (routed 0) (+ 2 (routed 1)))))))
+      (is (> (routed 0) (+ 2 (routed 1))))
+      (is (eql 1 (rogue-company::battle-outcome b)) "et elle a gagné"))))

@@ -28,6 +28,13 @@ pour reproduire une bataille.")
            :documentation "Journal des morts (deaths.lisp), pour les dessiner.")
    (wounds :initform (make-wound-log) :reader battle-wounds
            :documentation "Journal des blessures (wounds.lisp), pour dessiner le sang.")
+   (victory :initarg :victory :initform nil :accessor battle-victory-p
+            :documentation "Vrai pour une bataille rangée qui se décide (victory.lisp) ;
+le tournoi ne se décide pas.")
+   (outcome :initform nil :accessor battle-outcome
+            :documentation "NIL tant que la bataille dure, puis le camp vainqueur, ou :DRAW.")
+   (outcome-tick :initform -1 :accessor battle-outcome-tick
+                 :documentation "Tick où la bataille s'est décidée, ou -1.")
    (commanders :initform nil :accessor battle-commanders
                :documentation "Commandants des camps menés par l'IA (ai.lisp), réveillés
 en tête de chaque tick.")))
@@ -132,7 +139,8 @@ et s'ajoutent ici au fil des étapes :
   4. combat (combat.lisp) : ciblage par régiment, attaques de flanc et de dos
      comptées (flanks.lisp), coups en séquence, tirs (shooting.lisp), puis
      dégâts appliqués et morts retirés ;
-  5. poussée et moral (morale.lisp), débandade sous le seuil."
+  5. poussée et moral (morale.lisp), débandade sous le seuil ;
+  6. condition de victoire (victory.lisp)."
   (let ((soldiers (battle-soldiers battle))
         (regiments (battle-regiments battle)))
     (copy-previous-positions soldiers)
@@ -165,7 +173,8 @@ et s'ajoutent ici au fil des étapes :
     (fire-shots battle)
     (apply-damage battle)
     (loop for regiment across regiments
-          do (update-morale battle regiment)))
+          do (update-morale battle regiment))
+    (update-outcome battle))
   (incf (battle-tick-count battle))
   battle)
 
