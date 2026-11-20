@@ -226,8 +226,11 @@ ennemi en état de combattre, ou NIL sans ligne ou sans ennemi."
       (let ((regiment (aref regiments k)))
         (when (fighting-p regiment)
           (dolist (enemy enemies)
-            (let ((gap (box-gap regiment enemy)))
-              (when (or (null best) (< gap best)) (setf best gap)))))))))
+            ;; Une cavalerie libre qui rôde n'engage pas la ligne : elle ne la
+            ;; rattraperait pas (CATCHABLE-P, ai-tasks.lisp).
+            (when (catchable-p regiment enemy)
+              (let ((gap (box-gap regiment enemy)))
+                (when (or (null best) (< gap best)) (setf best gap))))))))))
 
 (defun update-plan (commander battle)
   "Refait le plan quand il est dû : repère, groupes, phase de la ligne."

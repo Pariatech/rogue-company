@@ -187,6 +187,26 @@ pas redonné.")
   (let ((target (target-of battle regiment)))
     (and target (fighting-p target) target)))
 
+(defparameter *ai-foot-lets-cavalry-go* t
+  "Vrai : un régiment à pied de mêlée ne poursuit pas une cavalerie libre
+(CATCHABLE-P). Faux : l'ancienne conduite, que la cavalerie d'un joueur
+promenait sur tout le champ de bataille.")
+
+(defun catchable-p (regiment enemy)
+  "Vrai si REGIMENT peut rattraper ENEMY : sauf de la cavalerie libre (pas en
+mêlée) pour un régiment à pied de mêlée, qui la poursuivrait sans fin. Les
+tireurs la visent de loin, la cavalerie la rattrape."
+  (or (not *ai-foot-lets-cavalry-go*)
+      (member (regiment-role regiment) '(:cavalry :shooters))
+      (not (eq (regiment-role enemy) :cavalry))
+      (regiment-in-melee-p enemy)))
+
+(defun held-target (battle regiment)
+  "Le régiment qu'attaque REGIMENT, s'il est en état de combattre et qu'il peut
+le rattraper (CATCHABLE-P) ; sinon NIL, et sa tâche le rappelle."
+  (let ((target (fighting-target battle regiment)))
+    (and target (catchable-p regiment target) target)))
+
 (defun ai-attack (commander battle regiment enemy)
   "Lance REGIMENT sur ENEMY, sauf s'il l'attaque déjà."
   (unless (eq enemy (target-of battle regiment))
@@ -240,7 +260,7 @@ latéral compté *AI-LATERAL-WEIGHT* fois, à moins de *AI-ENGAGE-REACH* ; ou NI
   (let ((soldiers (battle-soldiers battle)) (best nil) (best-cost most-positive-single-float))
     (dolist (enemy (plan-enemies battle (regiment-side regiment)))
       (let ((gap (box-gap regiment enemy)))
-        (when (< gap *ai-engage-reach*)
+        (when (and (< gap *ai-engage-reach*) (catchable-p regiment enemy))
           (let ((cost (+ gap (* *ai-lateral-weight*
                                 (abs (- lateral (nth-value 0 (regiment-coordinates plan enemy soldiers))))))))
             (when (< cost best-cost) (setf best enemy best-cost cost))))))
@@ -329,9 +349,18 @@ ses régiments libres sont à leur place, en avance ou à l'assaut."
     (multiple-value-bind (x y facing) (task-destination plan regiment)
       (ai-move regiment x y facing))))
 
+(defun drop-lost-target (battle regiment)
+  "Un régiment qui attaque un ennemi qu'il ne rattrapera pas (CATCHABLE-P)
+s'arrête. GO-TO-PLACE le ramène ensuite à sa place ; pas un carré, qui sinon
+garderait son ordre et repartirait à la poursuite en reprenant la ligne."
+  (let ((target (target-of battle regiment)))
+    (when (and target (fighting-p target) (not (catchable-p regiment target)))
+      (command-halt battle (list regiment)))))
+
 (defun run-line (commander battle plan regiment task)
+  (drop-lost-target battle regiment)
   (if (eq (plan-phase plan) :engaged)
-      (unless (fighting-target battle regiment)
+      (unless (held-target battle regiment)
         (let ((enemy (facing-enemy battle plan regiment (getf task :lateral))))
           (if enemy
               (ai-attack commander battle regiment enemy)
@@ -375,8 +404,9 @@ derrière elle et n'en bougent plus jusqu'au contact (PLAN-RETIRED)."
                    (go-to-place plan regiment))))))))
 
 (defun run-guard (commander battle plan regiment)
+  (drop-lost-target battle regiment)
   (multiple-value-bind (x y) (task-destination plan regiment)
-    (let* ((target (fighting-target battle regiment))
+    (let* ((target (held-target battle regiment))
            (engaged (eq (plan-phase plan) :engaged))
            (radius (if engaged *ai-guard-engaged-radius* *ai-guard-radius*))
            (leash (if engaged *ai-guard-engaged-leash* *ai-guard-leash*)))
@@ -388,6 +418,7 @@ derrière elle et n'en bougent plus jusqu'au contact (PLAN-RETIRED)."
                                 for other in (plan-enemies battle (regiment-side regiment))
                                 for d = (point-box-distance other x y)
                                 when (and (< d best-d)
+                                          (catchable-p regiment other)
                                           (>= (nth-value 1 (ai-score battle regiment other))
                                               *ai-guard-worth*))
                                   do (setf best other best-d d)
@@ -412,10 +443,11 @@ mêlée, ou NIL."
     best))
 
 (defun run-reserve (commander battle plan regiment)
-  (unless (fighting-target battle regiment)
+  (drop-lost-target battle regiment)
+  (unless (held-target battle regiment)
     (let* ((wavering (wavering-regiment plan battle (regiment-side regiment)))
            (enemy (and wavering (fought-regiment battle wavering))))
-      (if (and enemy (fighting-p enemy))
+      (if (and enemy (fighting-p enemy) (catchable-p regiment enemy))
           (ai-attack commander battle regiment enemy)
           (go-to-place plan regiment)))))
 

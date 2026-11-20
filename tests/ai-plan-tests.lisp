@@ -258,3 +258,19 @@ une garde à portée de l'appel attaque la cavalerie."
     (is (= 2 (rogue-company::script-cursor script)))
     (is (not (eq :attack (first (rogue-company::regiment-orders
                                  (aref (rogue-company::battle-regiments battle) 1))))))))
+
+(test foot-lets-free-cavalry-go
+  ;; Des piques qui attaquent une cavalerie libre, qu'elles ne rattraperont pas,
+  ;; s'arrêtent ; des tireurs peuvent la viser.
+  (let* ((battle (rogue-company::make-ai-battle :seed 1 :sides '(1)))
+         (regiments (rogue-company::battle-regiments battle))
+         (pikes (aref regiments 12))
+         (shooters (aref regiments 15))
+         (lancers (aref regiments 9)))
+    (rogue-company::battle-tick battle)
+    (is (not (rogue-company::catchable-p pikes lancers)))
+    (is (rogue-company::catchable-p shooters lancers))
+    (is (rogue-company::catchable-p pikes (aref regiments 1)))
+    (rogue-company::order-attack pikes lancers)
+    (rogue-company::drop-lost-target battle pikes)
+    (is (eq :move (first (rogue-company::regiment-orders pikes))))))

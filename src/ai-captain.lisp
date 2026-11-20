@@ -108,15 +108,18 @@ normal, si sa mission change."
 l'attaque. Vrai s'il répond, ou s'il attaque déjà l'assaillant d'un appel : sa
 tâche ne doit pas l'en rappeler."
   (when (and *ai-use-help*
-             (let ((target (fighting-target battle regiment)))
+             (let ((target (held-target battle regiment)))
                (and target (find (regiment-index target) (commander-calls commander) :key #'first))))
     (return-from answer-call t))
-  (when (and *ai-use-help* (not (fighting-target battle regiment)))
+  (when (and *ai-use-help* (not (held-target battle regiment)))
     (let ((best nil) (best-gap *ai-help-radius*))
       (dolist (call (commander-calls commander))
         (let* ((assailant (aref (battle-regiments battle) (first call)))
                (gap (box-gap regiment assailant)))
-          (when (< gap best-gap) (setf best assailant best-gap gap))))
+          ;; Une cavalerie libre ne se rattrape pas : on ne répond qu'à celle
+          ;; qui s'est accrochée (CATCHABLE-P).
+          (when (and (< gap best-gap) (catchable-p regiment assailant))
+            (setf best assailant best-gap gap))))
       (when best
         (ai-attack commander battle regiment best)
         t))))
