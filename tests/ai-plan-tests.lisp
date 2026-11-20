@@ -206,3 +206,55 @@ leur portée."
                                        (rogue-company::safe-wing-place b plan lancers))
           (is-true (rogue-company::infantry-danger-p b 1 x y) "place d'origine menacée")
           (is-false (rogue-company::infantry-danger-p b 1 sx sy) "place reculée hors de portée"))))))
+
+(test guards-answer-the-shooters-call
+  "Des tireurs de l'écran que de la cavalerie ennemie charge appellent à l'aide ;
+une garde à portée de l'appel attaque la cavalerie."
+  (let* ((b (ai-battle '(0 :light-cavalry 60 -20 30 0)
+                       '(1 :pikemen 225 60 0 180) '(1 :arquebusiers 105 40 0 180)
+                       '(1 :rodeleros 105 62 -30 180) '(1 :halberdiers 105 62 30 180)))
+         (cavalry (nth-regiment b 0))
+         (called nil) (answered nil))
+    (rogue-company::order-attack cavalry (nth-regiment b 2))
+    (loop repeat (* 30 20)
+          until answered
+          do (rogue-company::battle-tick b)
+             (when (rogue-company::commander-calls (first (rogue-company::battle-commanders b)))
+               (setf called t))
+             (setf answered (some (lambda (k) (eq cavalry (rogue-company::target-of b (nth-regiment b k))))
+                                  '(3 4))))
+    (is-true called "les tireurs appellent")
+    (is-true answered "une garde répond")))
+
+(test scripted-orders-mirror-the-armies
+  ;; Le banc d'essai contre un joueur scripté (ai-bench.lisp) : un ordre du camp
+  ;; rouge redonné aux bleus vise le régiment symétrique, au point symétrique.
+  (let ((regiments rogue-company::*ai-battle-regiments*))
+    (is (= 13 (rogue-company::mirror-index regiments 0)))
+    (is (= 0 (rogue-company::mirror-index regiments 13)))
+    (is (equal '(:attack (11 18) 0)
+               (rogue-company::mirror-order regiments '(:attack (2 7) 13))))
+    (destructuring-bind (kind indices x y facing)
+        (rogue-company::mirror-order regiments '(:move (8) 100f0 -136f0 0f0))
+      (is (eq :move kind))
+      (is (equal '(19) indices))
+      (is (= -100 x))
+      (is (= 136 y))
+      (is (< (abs (- facing pi)) 1e-5)))))
+
+(test scripted-orders-replay-at-their-tick
+  ;; Le commandant scripté donne chaque ordre à son tick, et saute un ordre
+  ;; devenu sans objet (cible morte).
+  (let* ((battle (rogue-company::make-ai-battle :seed 1 :sides '(1)))
+         (script (make-instance 'rogue-company::script-commander
+                                :side 0
+                                :orders (vector '(3 :attack (0) 13) '(5 :attack (1) 12)))))
+    (push script (rogue-company::battle-commanders battle))
+    (setf (rogue-company::regiment-alive (aref (rogue-company::battle-regiments battle) 12)) 0)
+    (loop repeat 4 do (rogue-company::battle-tick battle))
+    (is (equal '(:attack 13)
+               (rogue-company::regiment-orders (aref (rogue-company::battle-regiments battle) 0))))
+    (loop repeat 3 do (rogue-company::battle-tick battle))
+    (is (= 2 (rogue-company::script-cursor script)))
+    (is (not (eq :attack (first (rogue-company::regiment-orders
+                                 (aref (rogue-company::battle-regiments battle) 1))))))))

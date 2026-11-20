@@ -48,6 +48,7 @@
                (:file "ai")
                (:file "ai-general")
                (:file "ai-tasks")
+               (:file "ai-captain")
                (:file "ai-bench")
                (:file "replay")
                (:file "ai-view")

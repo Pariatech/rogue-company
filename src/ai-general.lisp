@@ -64,6 +64,9 @@ aient l'ennemi à portée), :SKIRMISH (la ligne attend, les tireurs font feu),
    (retired :initform '() :accessor plan-retired
             :documentation "Indices des tireurs effacés derrière la ligne à l'assaut :
 ils y restent jusqu'à une nouvelle avance.")
+   (line-half-depth :initform 0f0 :accessor plan-line-half-depth :type single-float
+                    :documentation "Demi-profondeur, en mètres, du régiment le plus profond de
+la ligne : les tireurs effacés se placent derrière (SCREEN-BEHIND).")
    (tasks :initform (make-hash-table) :accessor plan-tasks
           :documentation "Indice de régiment -> tâche, plist (:KIND … :LATERAL …).")
    (line :initform nil :accessor plan-line

@@ -115,6 +115,11 @@ stratégies (ai-bench.lisp).")
    (objectives :initform (make-hash-table) :reader commander-objectives
                :documentation "Indice d'un régiment de cavalerie -> indice de l'ennemi qu'il
 manœuvre pour tourner (ai-tasks.lisp) : gardé d'un plan à l'autre.")
+   (captains :initform (make-hash-table) :reader commander-captains
+             :documentation "Indice de régiment -> son capitaine (ai-captain.lisp).")
+   (calls :initform '() :accessor commander-calls
+          :documentation "Appels à l'aide des capitaines : (assaillant appelant tick),
+indices de régiments.")
    (plan :initform nil :accessor commander-plan
          :documentation "Plan du général (ai-general.lisp), ou NIL avant le premier.")
    (attack-orders :initform (make-hash-table) :reader commander-attack-orders

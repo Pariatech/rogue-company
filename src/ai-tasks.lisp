@@ -54,7 +54,13 @@ d'essai : il lançait l'assaut trop tôt, sur les pertes des premiers combats de
 cavalerie, et perdait (19 contre 13 au lieu de 26 contre 6).")
 
 (defparameter *ai-screen-behind* 12f0
-  "À l'assaut et engagés, les tireurs se placent à cette distance derrière la ligne.")
+  "À l'assaut, la ligne rattrape les tireurs à cette distance d'eux : ils
+s'effacent alors derrière elle (LINE-CAUGHT-UP-P).")
+
+(defparameter *ai-screen-clearance* 5f0
+  "Effacés derrière la ligne, les tireurs gardent cette marge, en mètres, au-delà
+de *SKIRMISH-TRIGGER* entre leur front et celui de la ligne : l'ennemi au
+contact de la ligne ne les fait pas replier en tirailleurs (SCREEN-BEHIND).")
 
 (defparameter *ai-line-tolerance* 5f0
   "Un régiment de la ligne à moins de cette distance de sa place y est : le bond
@@ -189,6 +195,26 @@ pas redonné.")
 
 ;;; Places
 
+(defun regiment-half-depth (regiment)
+  "Demi-profondeur de REGIMENT en formation, en mètres."
+  (* 0.5f0 (max 0 (1- (regiment-depth regiment)))
+     (formation-spacing (regiment-formation regiment))))
+
+(defun line-half-depth (plan battle)
+  "Demi-profondeur du régiment le plus profond de la ligne de PLAN."
+  (loop for k in (plan-line plan)
+        for regiment = (aref (battle-regiments battle) k)
+        when (fighting-p regiment)
+          maximize (regiment-half-depth regiment) into best
+        finally (return (float (or best 0) 1f0))))
+
+(defun screen-behind (plan regiment)
+  "Distance entre la ligne et les tireurs REGIMENT effacés derrière elle : son
+front et le leur à *SKIRMISH-TRIGGER* plus *AI-SCREEN-CLEARANCE*, assez loin
+pour que l'ennemi au contact de la ligne ne les fasse pas replier."
+  (+ (plan-line-half-depth plan) (regiment-half-depth regiment)
+     *skirmish-trigger* *ai-screen-clearance*))
+
 (defun task-destination (plan regiment)
   "Place de REGIMENT dans le plan : X, Y et orientation, ou NIL s'il est libre."
   (let* ((task (gethash (regiment-index regiment) (plan-tasks plan)))
@@ -201,7 +227,7 @@ pas redonné.")
                         (:line depth)
                         (:screen (if (or (eq (plan-phase plan) :engaged)
                                          (member (regiment-index regiment) (plan-retired plan)))
-                                     (- depth *ai-screen-behind*)
+                                     (- depth (screen-behind plan regiment))
                                      (+ depth *ai-screen-ahead*)))
                         (:guard (- depth *ai-guard-setback*))
                         (:reserve (- depth *ai-reserve-depth*))
@@ -274,6 +300,7 @@ plus de tireurs."
 ses régiments libres sont à leur place, en avance ou à l'assaut."
   (let* ((side (line-side plan battle))
          (gap (line-gap-to-enemy plan battle side)))
+    (setf (plan-line-half-depth plan) (line-half-depth plan battle))
     (when (and gap (< gap *ai-engage-distance*))
       (setf (plan-phase plan) :engaged))
     (case (plan-phase plan)
@@ -414,13 +441,13 @@ moins de DISTANCE."
                      (fighting-p friend)
                      (< (box-gap friend enemy) *ai-cavalry-threat-radius*))))
 
-(defparameter *ai-cavalry-defended-distance* 0f0
+(defparameter *ai-cavalry-defended-distance* 40f0
   "Des tireurs à moins de cette distance de piques amies en bon ordre, pas en
 mêlée, ne sont pas une occasion pour la cavalerie : en tirailleurs, ils se
-replient derrière elles, et la charge finit dans les piques (contre un joueur
-qui défend ses tireurs). 0 : jamais. Éteint parce que l'IA, elle, ne défend pas
-les siens (ses piques passent en carré, immobiles) : au banc d'essai, 40 m perd
-1 bataille contre 31, 15 m aussi ; à rallumer quand elle saura les défendre.")
+replient derrière elles, et la charge finit dans les piques. 0 : jamais.
+Mesuré contre un joueur scripté (ai-script-match) : 40 m gagne 32 batailles
+sur 32, contre 15 sans la règle. Entre deux IA, elle perd 1 contre 31, parce que
+l'IA ne défend pas ses propres tireurs comme un joueur : gardée pour le joueur.")
 
 (defun defended-p (battle enemy)
   "Vrai si des piques en bon ordre du camp d'ENEMY, pas en mêlée, sont à moins de
@@ -579,21 +606,3 @@ pour la rallier avant qu'elle n'atteigne des piques."
            (and (not (regiment-in-melee-p regiment))
                 (not (regiment-charging-p regiment))))
        (not (eq (first (regiment-orders regiment)) :retreat))))
-
-(defun run-tasks (commander battle)
-  "Fait exécuter à chaque régiment libre du camp sa tâche du plan."
-  (let ((plan (commander-plan commander)))
-    (when (and plan (plan-line plan))
-      (advance-line plan battle))
-    (when plan
-      (maphash (lambda (k task)
-                 (let ((regiment (aref (battle-regiments battle) k)))
-                   (when (and (eq (getf task :kind) :wing) (wing-free-p regiment))
-                     (run-wing commander battle plan regiment))
-                   (when (ai-free-p regiment)
-                     (case (getf task :kind)
-                       (:line (run-line commander battle plan regiment task))
-                       (:screen (run-screen commander battle plan regiment))
-                       (:guard (run-guard commander battle plan regiment))
-                       (:reserve (run-reserve commander battle plan regiment))))))
-               (plan-tasks plan)))))
