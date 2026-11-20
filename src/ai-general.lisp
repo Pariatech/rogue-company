@@ -20,7 +20,9 @@
 ;;; - :GUARD : la mêlée à pied la plus à gauche et la plus à droite, au bout de
 ;;;   la ligne, un peu en retrait ;
 ;;; - :RESERVE : la mêlée à pied qui reste, derrière le centre ;
-;;; - :FREE : la cavalerie, qui garde le choix glouton des cibles (ai.lisp).
+;;; - :WING : la cavalerie, sur l'aile de son côté, au-delà des gardes
+;;;   (*AI-WING-OFFSET*), un peu en retrait ; elle attend une occasion
+;;;   (ai-tasks.lisp). Sans *AI-USE-WINGS*, :FREE : le choix glouton (ai.lisp).
 
 (defparameter *ai-plan-seconds* 5 "Secondes entre deux plans du général, sans événement.")
 
@@ -40,6 +42,12 @@ distance reprend son avance.")
 
 (defparameter *ai-reserve-depth* 35f0 "Distance de la réserve derrière la ligne, en mètres.")
 
+(defparameter *ai-wing-offset* 45f0
+  "Distance du bout de la ligne au bord intérieur de la cavalerie d'une aile, en
+mètres : la place des gardes, et de l'air.")
+
+(defparameter *ai-wing-setback* 15f0 "Retrait de la cavalerie derrière la ligne, en mètres.")
+
 (defclass ai-plan ()
   ((origin-x :initarg :origin-x :accessor plan-origin-x :type single-float)
    (origin-y :initarg :origin-y :accessor plan-origin-y :type single-float)
@@ -48,7 +56,11 @@ distance reprend son avance.")
    (depth :initform 0f0 :accessor plan-depth :type single-float
           :documentation "Profondeur de la ligne le long de l'axe, depuis l'origine.")
    (phase :initform :advance :accessor plan-phase
-          :documentation ":ADVANCE (la ligne avance par bonds) ou :ENGAGED.")
+          :documentation ":ADVANCE (la ligne avance par bonds jusqu'à ce que ses tireurs
+aient l'ennemi à portée), :SKIRMISH (la ligne attend, les tireurs font feu),
+:ASSAULT (la ligne avance jusqu'au contact) ou :ENGAGED.")
+   (skirmish-tick :initform nil :accessor plan-skirmish-tick
+                  :documentation "Tick du début de l'escarmouche, NIL avant.")
    (tasks :initform (make-hash-table) :accessor plan-tasks
           :documentation "Indice de régiment -> tâche, plist (:KIND … :LATERAL …).")
    (line :initform nil :accessor plan-line
@@ -171,6 +183,18 @@ ligne, tâche de chaque régiment."))
               (guard left (if (minusp (nth-value 0 (regiment-coordinates plan left soldiers))) -1 1))))
         (dolist (regiment (butlast (rest others)))
           (setf (gethash (regiment-index regiment) tasks) (list :kind :reserve :lateral 0f0)))))
+    ;; La cavalerie sur l'aile de son côté, les régiments d'une même aile côte à côte.
+    (when *ai-use-wings*
+      (let ((outer (list (cons -1 (+ (/ total 2) *ai-wing-offset*))
+                         (cons 1 (+ (/ total 2) *ai-wing-offset*)))))
+        (dolist (regiment (funcall by-lateral (remove-if-not (lambda (r) (eq (regiment-role r) :cavalry))
+                                                             mine)))
+          (let* ((side (if (minusp (nth-value 0 (regiment-coordinates plan regiment soldiers))) -1 1))
+                 (width (regiment-frontage regiment))
+                 (edge (cdr (assoc side outer))))
+            (setf (gethash (regiment-index regiment) tasks)
+                  (list :kind :wing :side side :lateral (* side (+ edge (/ width 2)))))
+            (setf (cdr (assoc side outer)) (+ edge width *ai-line-gap*))))))
     (setf (plan-tasks plan) tasks
           (plan-line plan) (mapcar #'regiment-index line))))
 
@@ -226,4 +250,5 @@ ennemi en état de combattre, ou NIL sans ligne ou sans ennemi."
                               (or (null gap) (> gap *ai-disengage-distance*))))
                      ;; Nouvelle avance, depuis là où la ligne se trouve.
                      (setf (plan-phase plan) :advance
+                           (plan-skirmish-tick plan) nil
                            (plan-depth plan) (line-depth plan battle)))))))))))

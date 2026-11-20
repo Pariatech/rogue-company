@@ -10,14 +10,16 @@
 
 (defparameter *ai-task-colors*
   '((:line 120 200 255 190) (:screen 120 230 160 190) (:guard 235 200 90 190)
-    (:reserve 200 140 235 190) (:free 170 170 170 160))
+    (:reserve 200 140 235 190) (:wing 240 130 110 190) (:free 170 170 170 160))
   "Couleur de chaque tâche, en r g b a.")
 
 (defparameter *ai-task-names*
-  '((:line . "ligne") (:screen . "écran") (:guard . "garde") (:reserve . "réserve") (:free . "libre"))
+  '((:line . "ligne") (:screen . "écran") (:guard . "garde") (:reserve . "réserve") (:wing . "aile") (:free . "libre"))
   "Nom affiché de chaque tâche.")
 
-(defparameter *ai-phase-names* '((:advance . "IA : la ligne avance") (:engaged . "IA : la ligne est engagée")))
+(defparameter *ai-phase-names*
+  '((:advance . "IA : la ligne avance") (:skirmish . "IA : escarmouche, la ligne attend")
+    (:assault . "IA : la ligne donne l'assaut") (:engaged . "IA : la ligne est engagée")))
 
 (defun draw-world-circle (camera x y radius color &optional (segments 40))
   "Cercle de RADIUS mètres autour du point X, Y du monde."
@@ -48,7 +50,8 @@
                   when (and (= (regiment-side regiment) (commander-side commander))
                             (fighting-p regiment))
                     do (let* ((kind (task-kind plan regiment))
-                              (color (cdr (assoc kind *ai-task-colors*))))
+                              (color (or (cdr (assoc kind *ai-task-colors*))
+                                         (cdr (assoc :free *ai-task-colors*)))))
                          (multiple-value-bind (x y facing) (task-destination plan regiment)
                            (when x
                              (let ((*ghost-color* color))
@@ -61,5 +64,5 @@
                                                   color))))
                          (multiple-value-bind (cx cy) (regiment-centroid regiment soldiers)
                            (multiple-value-bind (sx sy) (world->screen camera cx cy)
-                             (draw-text-centered (cdr (assoc kind *ai-task-names*))
+                             (draw-text-centered (or (cdr (assoc kind *ai-task-names*)) (string-downcase kind))
                                                  sx (- sy (* 2 size)) size color)))))))))))

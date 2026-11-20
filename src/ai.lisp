@@ -33,6 +33,10 @@
 
 (defparameter *ai-period* 30 "Ticks entre deux réveils du commandant : une seconde.")
 
+(defparameter *ai-use-wings* t
+  "Vrai : la cavalerie a une tâche d'aile (ai-tasks.lisp : attendre, fixer puis
+tourner, se rallier). Faux : elle garde le choix glouton. Réglage de commandant.")
+
 (defparameter *ai-use-plan* t
   "Vrai : le général répartit l'armée en groupes et tâches (ai-general.lisp). Faux :
 chaque régiment choisit seul sa cible (le choix glouton), comme la première IA.
@@ -108,6 +112,9 @@ note qu'elle avait, et le tick où il l'a reçue.")
              :documentation "Plist de réglages propres à ce commandant : variable *AI-…*
 -> valeur, liées pendant son réveil. Deux camps peuvent ainsi suivre deux
 stratégies (ai-bench.lisp).")
+   (objectives :initform (make-hash-table) :reader commander-objectives
+               :documentation "Indice d'un régiment de cavalerie -> indice de l'ennemi qu'il
+manœuvre pour tourner (ai-tasks.lisp) : gardé d'un plan à l'autre.")
    (plan :initform nil :accessor commander-plan
          :documentation "Plan du général (ai-general.lisp), ou NIL avant le premier.")
    (attack-orders :initform (make-hash-table) :reader commander-attack-orders
@@ -147,10 +154,18 @@ paquet. Un fichier de replay ne peut lier rien d'autre."
   "Moral de REGIMENT en part de son moral de départ."
   (/ (regiment-morale regiment) (max 1f0 (stats-morale (regiment-stats regiment)))))
 
+(defparameter *ai-cavalry-reference-mass* 6f0
+  "Masse d'un cavalier de référence (chevau-léger) : la force d'un cavalier
+croît avec sa masse, un lancier (9) en vaut 1,5.")
+
 (defun regiment-strength (regiment)
-  "Force estimée de REGIMENT : hommes × poids du rôle × moral × ordre."
+  "Force estimée de REGIMENT : hommes × poids du rôle × moral × ordre ; la
+cavalerie, en plus, au prorata de sa masse."
   (* (regiment-alive regiment)
      (cdr (assoc (regiment-role regiment) *ai-role-weights*))
+     (if (eq (regiment-role regiment) :cavalry)
+         (/ (stats-mass (regiment-stats regiment)) *ai-cavalry-reference-mass*)
+         1f0)
      (min 1.2f0 (morale-ratio regiment))
      (- 1f0 (* 0.5f0 (regiment-disorder regiment)))))
 
@@ -208,12 +223,14 @@ flanc, 2 de dos. Un carré n'a que des faces."
            (* base *ai-screened* (svref *ai-sector-bonus* sector)))
           (t (* base (svref *ai-sector-bonus* sector))))))
 
-(defun ai-score (battle regiment enemy)
+(defun ai-score (battle regiment enemy &key sector)
   "Note de l'attaque de REGIMENT sur ENEMY : plus elle est haute, meilleure est
 l'attaque ; 1 pour un combat égal tout proche. Second retour : sa valeur,
-distance mise à part, comparée au seuil du rôle."
+distance mise à part, comparée au seuil du rôle. SECTOR : le côté d'ENEMY
+abordé (0 face, 1 flanc, 2 dos), celui de l'approche directe par défaut ; la
+cavalerie qui compte tourner l'ennemi le note de flanc."
   (let* ((soldiers (battle-soldiers battle))
-         (sector (approach-sector regiment enemy soldiers))
+         (sector (or sector (approach-sector regiment enemy soldiers)))
          (ratio (/ (regiment-strength regiment) (max 1f0 (regiment-strength enemy))))
          (opportunity (* (if (regiment-in-melee-p enemy) *ai-engaged-bonus* 1f0)
                          (+ 1f0 (* *ai-low-morale-bonus*
@@ -370,7 +387,10 @@ ni en mêlée, ni à la charge, ni en repli, ni en poursuite."
   (let ((settings (commander-settings commander)))
     (progv (loop for (symbol) on settings by #'cddr collect symbol)
         (loop for (nil value) on settings by #'cddr collect value)
-      (when (zerop (mod (+ (battle-tick-count battle) (commander-side commander)) *ai-period*))
+      ;; Pas au tick 0 : les boîtes des régiments (BOX-GAP) n'y sont pas encore
+      ;; calculées, et la ligne se croirait au contact.
+      (when (and (plusp (battle-tick-count battle))
+                 (zerop (mod (+ (battle-tick-count battle) (commander-side commander)) *ai-period*)))
         (remember-homes commander battle)
         (update-squares commander battle)
         ;; Le général et les tâches de ses groupes (ai-general.lisp, ai-tasks.lisp),
