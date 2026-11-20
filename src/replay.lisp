@@ -22,7 +22,7 @@
 (defparameter *replay-builders* '(make-demo-battle make-ai-battle)
   "Seules fonctions qu'une recette lue d'un fichier peut appeler.")
 
-(defparameter *replay-orders* '(:move :attack :halt :drill :stance :place :charge)
+(defparameter *replay-orders* '(:move :line :attack :halt :drill :stance :place :charge)
   "Seuls ordres qu'un fichier de replay peut contenir (EXECUTE-ORDER).")
 
 (defclass replay ()

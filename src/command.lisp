@@ -8,7 +8,9 @@
 ;;; sélection. Clic droit : sur un ennemi, l'attaque ; ailleurs, marche vers ce
 ;;; point, les régiments choisis gardant leurs places relatives. Glisser du clic
 ;;; droit choisit l'orientation d'arrivée (du point enfoncé vers la souris) ;
-;;; sans glisser, front dans le sens de la marche.
+;;; sans glisser, front dans le sens de la marche. Ctrl + clic droit : en ligne,
+;;; les régiments choisis côte à côte centrés sur ce point (COMMAND-LINE), dans
+;;; l'ordre où ils sont de gauche à droite ; glisser choisit aussi le front.
 ;;; T : halte sur place. E : exercice suivant (carré pour les piques, exercices
 ;;; de tir pour les tireurs). P : posture suivante.
 ;;;
@@ -25,6 +27,9 @@
 
 (defparameter *pick-radius* 2f0
   "Distance, en mètres, d'un soldat au point cliqué pour choisir son régiment.")
+
+(defparameter *line-gap* 3f0
+  "Intervalle, en mètres, entre deux régiments mis en ligne (COMMAND-LINE).")
 
 (defparameter *selection-color* '(255 230 120 255))
 (defparameter *move-order-color* '(120 230 120 200))
@@ -87,10 +92,11 @@ moins de *PICK-RADIUS*, ou NIL."
 
 ;;; Ordres
 
-(defun command-move (battle regiments x y &optional facing)
-  "Envoie REGIMENTS vers le point X, Y : leur centre commun y va, chacun garde sa
-place par rapport à lui. Fronts vers FACING (radians) s'il est donné, la
-disposition du groupe tournant d'autant ; sinon dans le sens de la marche."
+(defun move-places (battle regiments x y &optional facing)
+  "Places d'une marche de REGIMENTS vers X, Y : liste de (régiment x y front).
+Leur centre commun va en X, Y, chacun garde sa place par rapport à lui ; fronts
+vers FACING (radians) s'il est donné, la disposition du groupe tournant
+d'autant ; sinon dans le sens de la marche."
   (when regiments
     (let* ((soldiers (battle-soldiers battle))
            (centers (mapcar (lambda (r) (multiple-value-list (regiment-centroid r soldiers)))
@@ -108,10 +114,63 @@ disposition du groupe tournant d'autant ; sinon dans le sens de la marche."
       (loop for regiment in regiments
             for (rx ry) in centers
             for ox = (- rx cx) for oy = (- ry cy)
-            do (order-move regiment
-                           (+ x (- (* c ox) (* s oy)))
-                           (+ y (+ (* s ox) (* c oy)))
-                           (or heading (formation-facing (regiment-formation regiment))))))))
+            collect (list regiment
+                          (+ x (- (* c ox) (* s oy)))
+                          (+ y (+ (* s ox) (* c oy)))
+                          (or heading (formation-facing (regiment-formation regiment))))))))
+
+(defun command-move (battle regiments x y &optional facing)
+  "Envoie REGIMENTS vers le point X, Y, en gardant la disposition du groupe
+(MOVE-PLACES)."
+  (loop for (regiment px py front) in (move-places battle regiments x y facing)
+        do (order-move regiment px py front)))
+
+(defun regiment-front-width (regiment)
+  "Largeur du front de REGIMENT en formation, en mètres."
+  (let ((formation (regiment-formation regiment)))
+    (+ 1f0 (* (formation-lateral-spacing formation)
+              (1- (formation-files formation (max 1 (regiment-alive regiment))))))))
+
+(defun line-facing (battle regiments x y facing)
+  "Front d'une mise en ligne de REGIMENTS en X, Y : FACING s'il est donné, sinon
+le sens de la marche depuis leur centre commun, ou le front du premier s'ils y
+sont déjà."
+  (if facing
+      (float facing 1f0)
+      (let* ((soldiers (battle-soldiers battle))
+             (centers (mapcar (lambda (r) (multiple-value-list (regiment-centroid r soldiers)))
+                              regiments))
+             (dx (- x (/ (reduce #'+ centers :key #'first) (length centers))))
+             (dy (- y (/ (reduce #'+ centers :key #'second) (length centers)))))
+        (if (> (+ (* dx dx) (* dy dy)) 1f0)
+            (float (atan dy dx) 1f0)
+            (formation-facing (regiment-formation (first regiments)))))))
+
+(defun line-places (battle regiments x y facing)
+  "Places d'une mise en ligne : liste de (régiment x y), côte à côte le long du
+front FACING, centrée sur X, Y, *LINE-GAP* entre deux, rangés de gauche à
+droite selon leur position actuelle (ils ne se croisent pas en chemin)."
+  (let* ((soldiers (battle-soldiers battle))
+         (rx (- (sin facing))) (ry (cos facing)) ; vers la droite du front
+         (sorted (sort (copy-list regiments) #'<
+                       :key (lambda (r) (multiple-value-bind (cx cy) (regiment-centroid r soldiers)
+                                          (+ (* cx rx) (* cy ry))))))
+         (widths (mapcar #'regiment-front-width sorted))
+         (total (+ (reduce #'+ widths) (* *line-gap* (1- (length sorted)))))
+         (offset (* -0.5f0 total)))
+    (loop for regiment in sorted
+          for width in widths
+          for center = (+ offset (* 0.5f0 width))
+          collect (list regiment (+ x (* center rx)) (+ y (* center ry)))
+          do (incf offset (+ width *line-gap*)))))
+
+(defun command-line (battle regiments x y &optional facing)
+  "Met REGIMENTS en ligne, côte à côte centrés sur X, Y (LINE-PLACES), fronts
+vers FACING s'il est donné, sinon dans le sens de la marche."
+  (when regiments
+    (let ((facing (line-facing battle regiments x y facing)))
+      (loop for (regiment px py) in (line-places battle regiments x y facing)
+            do (order-move regiment px py facing)))))
 
 (defun command-attack (regiments target)
   (dolist (regiment regiments)
@@ -180,6 +239,7 @@ a pas."
   "Exécute l'ordre SPEC, une liste de données seulement (indices de régiments,
 nombres, mots-clés), pour qu'il s'écrive et se relise tel quel :
   (:move indices x y orientation-ou-NIL)  COMMAND-MOVE
+  (:line indices x y orientation-ou-NIL)  COMMAND-LINE
   (:attack indices cible)                 COMMAND-ATTACK
   (:halt indices)                         COMMAND-HALT
   (:drill indice exercice)                SET-REGIMENT-DRILL
@@ -192,6 +252,8 @@ nombres, mots-clés), pour qu'il s'écrive et se relise tel quel :
         (ecase kind
           (:move (destructuring-bind (indices x y facing) args
                    (command-move battle (pick indices) x y facing)))
+          (:line (destructuring-bind (indices x y facing) args
+                   (command-line battle (pick indices) x y facing)))
           (:attack (destructuring-bind (indices target) args
                      (command-attack (pick indices) (aref regiments target))))
           (:halt (command-halt battle (pick (first args))))
@@ -222,9 +284,13 @@ où il prend effet (avant ce tick)."
                (abs (- (raylib:get-mouse-y) (cdr press))))
           *click-slop*)))
 
+(defun ctrl-down-p ()
+  (or (key-down-p :key-left-control) (key-down-p :key-right-control)))
+
 (defun update-command (command battle camera)
   "Lit la souris et les touches de commandement, une fois par image."
-  (let ((shift (or (key-down-p :key-left-shift) (key-down-p :key-right-shift))))
+  (let ((shift (or (key-down-p :key-left-shift) (key-down-p :key-right-shift)))
+        (move (if (ctrl-down-p) :line :move)))
     ;; Bouton gauche : clic (choix) ou glisser (cadre).
     (when (raylib:is-mouse-button-pressed :mouse-button-left)
       (setf (command-left-press command) (cons (raylib:get-mouse-x) (raylib:get-mouse-y))))
@@ -269,9 +335,9 @@ où il prend effet (avant ce tick)."
                        (player-order battle (list :attack indices (regiment-index target))))
                       ((mouse-moved-p press)
                        (multiple-value-bind (mx my) (mouse-world camera)
-                         (player-order battle (list :move indices x y
+                         (player-order battle (list move indices x y
                                                     (float (atan (- my y) (- mx x)) 1f0)))))
-                      (t (player-order battle (list :move indices x y nil))))))))))
+                      (t (player-order battle (list move indices x y nil))))))))))
     (let ((regiments (selected-regiments command battle)))
       (when (and regiments (key-pressed-p :key-t))
         (player-order battle (list :halt (mapcar #'regiment-index regiments))))
@@ -447,6 +513,24 @@ les régiments du joueur (DRAW-ORDERS-PREVIEW)."
           (draw-line x1 y0 x1 y1 *selection-color*)
           (draw-line x1 y1 x0 y1 *selection-color*)
           (draw-line x0 y1 x0 y0 *selection-color*))))
+    ;; Ordre de marche en cours (bouton droit tenu) : fantôme de chaque régiment
+    ;; à sa place d'arrivée, en ligne avec Ctrl ; rien sur un ennemi (attaque).
+    (let ((press (command-right-press command)))
+      (when (and regiments press)
+        (multiple-value-bind (x y) (screen->world camera (float (car press) 1f0)
+                                                  (float (cdr press) 1f0))
+          (let ((target (regiment-at battle x y))
+                (facing (when (mouse-moved-p press)
+                          (multiple-value-bind (mx my) (mouse-world camera)
+                            (float (atan (- my y) (- mx x)) 1f0)))))
+            (unless (and target (/= (regiment-side target) *player-side*)
+                         (not (regiment-routed-p target)))
+              (if (ctrl-down-p)
+                  (let ((front (line-facing battle regiments x y facing)))
+                    (loop for (regiment px py) in (line-places battle regiments x y front)
+                          do (draw-ghost regiment camera px py front)))
+                  (loop for (regiment px py front) in (move-places battle regiments x y facing)
+                        do (draw-ghost regiment camera px py front))))))))
     ;; Orientation en cours de choix : flèche du point d'arrivée vers la souris.
     (let ((press (command-right-press command)))
       (when (and regiments (mouse-moved-p press))

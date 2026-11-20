@@ -244,7 +244,7 @@ d'avant."
 
 (defgeneric help-text (scene)
   (:method ((scene battle-scene))
-    "Clic gauche : choisir   Clic droit : ordre (glisser : orientation)   T : halte   E : exercice   P : posture   Espace : pause (tenu : coup d'œil)   + / - : vitesse   C : charge   Tab : tableau   I : plan de l'IA   Flèches, ZQSD, clic milieu : caméra   Échap : menu")
+    "Clic gauche : choisir   Clic droit : ordre (glisser : orientation, Ctrl : en ligne)   T : halte   E : exercice   P : posture   Espace : pause (tenu : coup d'œil)   + / - : vitesse   C : charge   Tab : tableau   I : plan de l'IA   Flèches, ZQSD, clic milieu : caméra   Échap : menu")
   (:method ((scene ai-vs-ai-scene))
     "IA contre IA : Espace : pause (tenu : coup d'œil)   + / - : vitesse   Tab : tableau   I : plan de l'IA   Flèches, ZQSD, clic milieu : caméra   Échap : menu")
   (:method ((scene replay-scene))

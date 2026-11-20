@@ -56,6 +56,29 @@ envoyés face au sud, se retrouvent côte à côte d'est en ouest."
         (is (near 0 (third o1) 0.5))
         (is (near 0 (third o2) 0.5))))))
 
+(test line-puts-regiments-side-by-side
+  "Ctrl + clic droit : les régiments choisis côte à côte, centrés sur le point,
+dans l'ordre où ils sont de gauche à droite, front dans le sens de la marche."
+  (let* ((b (command-battle))
+         (rs (subseq (regiments b) 0 2)))
+    (rogue-company::execute-order b '(:line (1 0) 50 0 nil))
+    (destructuring-bind (pikes shooters) rs
+      (let* ((o1 (rogue-company::regiment-orders pikes))
+             (o2 (rogue-company::regiment-orders shooters))
+             (w1 (rogue-company::regiment-front-width pikes))
+             (w2 (rogue-company::regiment-front-width shooters)))
+        (is (eq :move (first o1)))
+        (is (near 0 (fourth o1) 1f-3) "front vers l'est, sens de la marche")
+        (is (near 0 (fourth o2) 1f-3))
+        (is (near 50 (second o1) 1f-3))
+        (is (near 50 (second o2) 1f-3))
+        (is (< (third o1) 0 (third o2)) "les piques, au nord, restent à gauche")
+        (is (near rogue-company::*line-gap*
+                  (- (third o2) (third o1) (* 0.5 w1) (* 0.5 w2)) 1f-3)
+            "un intervalle entre les deux")
+        (is (near 0 (+ (- (third o1) (* 0.5 w1)) (+ (third o2) (* 0.5 w2))) 1f-3)
+            "ligne centrée sur le point")))))
+
 (test attack-and-halt
   (let* ((b (command-battle))
          (rs (regiments b))
