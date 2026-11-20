@@ -20,6 +20,8 @@ pour reproduire une bataille.")
    (regiments :initform (make-array 0 :adjustable t :fill-pointer t) :reader battle-regiments)
    (soldiers :initform (make-soldiers) :reader battle-soldiers
              :documentation "Tableaux typés des soldats de tous les régiments.")
+   (terrain :initarg :terrain :initform nil :accessor battle-terrain
+            :documentation "Carte d'élévation (terrain.lisp), ou NIL : terrain plat.")
    (grid :initarg :grid :reader battle-grid
          :documentation "Grille spatiale, reconstruite à chaque tick.")
    (max-radius :initform 0f0 :accessor battle-max-radius

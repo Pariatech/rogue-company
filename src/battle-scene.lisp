@@ -230,6 +230,7 @@ d'avant."
 
 (defmethod scene-draw ((scene battle-scene))
   (clear-background :black)
+  (draw-terrain (scene-battle scene) (scene-camera scene))
   (draw-soldiers (scene-battle scene) (clock-alpha (scene-clock scene)) (scene-camera scene))
   (draw-battle-hud scene)
   (draw-ai-plan (scene-battle scene) (scene-camera scene))

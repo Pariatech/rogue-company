@@ -297,6 +297,28 @@ dans le sens des aiguilles d'une montre à l'écran)."
                                   shield-row (float shield-w 1f0) (float shield-h 1f0)
                                   horse-row (float horse-w 1f0) (float horse-h 1f0))))))))))
 
+
+(defvar *first-tick-grid* nil
+  "Grille spatiale propre au dessin, pour une bataille au tick 0 (DRAWING-GRID).")
+
+(defun drawing-grid (battle)
+  "Grille qui donne l'ordre de dessin des soldats : celle de la bataille, ou, au
+tick 0, avant que le premier tick ne l'ait construite, une grille à part. La
+grille de la bataille n'est jamais remplie hors d'un tick : le tick suivant
+lit celle du tick précédent (LOOSEN-FORMATION), et la simulation dessinée doit
+rester celle d'un banc d'essai sans fenêtre."
+  (let ((grid (battle-grid battle))
+        (soldiers (battle-soldiers battle)))
+    (if (or (plusp (grid-size grid)) (plusp (battle-tick-count battle)))
+        grid
+        (let ((size (* (grid-columns grid) (grid-cell-size grid))))
+          (unless (and *first-tick-grid*
+                       (= (grid-columns *first-tick-grid*) (grid-columns grid)))
+            (setf *first-tick-grid* (make-spatial-grid :size size)))
+          (ensure-grid-capacity *first-tick-grid* (soldiers-capacity soldiers))
+          (rebuild-grid *first-tick-grid* soldiers)
+          *first-tick-grid*))))
+
 (defun draw-parts-batch (battle alpha camera atlas
                          body-row body-w body-h head-row head-w head-h
                          hand-row hand-w hand-h foot-row foot-w foot-h solid-row
@@ -313,8 +335,9 @@ dans le sens des aiguilles d'une montre à l'écran)."
          (texel-u (/ 1f0 atlas-w)) (texel-v (/ 1f0 atlas-h))
          (solid-u (/ 2f0 atlas-w))
          (solid-v (/ (+ 2f0 (* cell (float solid-row 1f0))) atlas-h))
-         (count (grid-size (battle-grid battle)))
-         (order (grid-sorted (battle-grid battle)))
+         (grid (drawing-grid battle))
+         (count (grid-size grid))
+         (order (grid-sorted grid))
          (xs (soldiers-x soldiers)) (ys (soldiers-y soldiers))
          (prev-xs (soldiers-prev-x soldiers)) (prev-ys (soldiers-prev-y soldiers))
          (facings (soldiers-facing soldiers)) (prev-facings (soldiers-prev-facing soldiers))

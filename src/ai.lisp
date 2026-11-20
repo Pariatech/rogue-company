@@ -437,6 +437,10 @@ hallebardiers en réserve derrière le centre.")
 
 (defparameter *ai-sides* '(1) "Camps commandés par l'IA dans la bataille contre l'IA.")
 
+(defparameter *ai-battle-hills* t
+  "Vrai : la bataille contre l'IA se livre sur des collines tirées de sa graine
+(MAKE-HILLS) ; faux : terrain plat.")
+
 (defun make-ai-battle (&key (seed *demo-seed*) (regiments *ai-battle-regiments*) (sides *ai-sides*)
                             settings)
   "Bataille de REGIMENTS, les camps SIDES commandés par l'IA, qui se décide
@@ -446,6 +450,8 @@ hallebardiers en réserve derrière le centre.")
     (setf (battle-commanders battle)
           (mapcar (lambda (side) (make-ai-commander side (cdr (assoc side settings)))) sides)
           (battle-victory-p battle) t
+          (battle-terrain battle) (when *ai-battle-hills*
+                                    (make-hills :seed seed :size (demo-battlefield-size regiments)))
           (battle-recipe battle) (list 'make-ai-battle :seed seed :regiments regiments :sides sides
                                        :settings settings))
     battle))
