@@ -199,7 +199,8 @@ pas redonné.")
           (plan-point plan lateral
                       (ecase (getf task :kind)
                         (:line depth)
-                        (:screen (if (member (plan-phase plan) '(:assault :engaged))
+                        (:screen (if (or (eq (plan-phase plan) :engaged)
+                                         (member (regiment-index regiment) (plan-retired plan)))
                                      (- depth *ai-screen-behind*)
                                      (+ depth *ai-screen-ahead*)))
                         (:guard (- depth *ai-guard-setback*))
@@ -317,11 +318,19 @@ ses régiments libres sont à leur place, en avance ou à l'assaut."
          *ai-screen-behind*)))
 
 (defun run-screen (commander battle plan regiment)
+  "Devant la ligne, les tireurs attaquent l'ennemi le plus proche à portée (plus
+10 m), s'il est assez près de leur place pour qu'ils ne le lâchent pas aussitôt
+(*AI-SCREEN-LEASH*). À l'assaut, quand la ligne les rattrape, ils s'effacent
+derrière elle et n'en bougent plus jusqu'au contact (PLAN-RETIRED)."
+  (when (and (eq (plan-phase plan) :assault)
+             (not (member (regiment-index regiment) (plan-retired plan)))
+             (line-caught-up-p plan battle regiment))
+    (push (regiment-index regiment) (plan-retired plan)))
   (multiple-value-bind (x y) (task-destination plan regiment)
     (let ((target (fighting-target battle regiment))
           (reach (attack-reach (stats-primary (regiment-stats regiment)))))
-      (cond ((and (eq (plan-phase plan) :assault) (line-caught-up-p plan battle regiment))
-             ;; La ligne passe : les tireurs s'effacent derrière elle.
+      (cond ((and (eq (plan-phase plan) :assault)
+                  (member (regiment-index regiment) (plan-retired plan)))
              (go-to-place plan regiment))
             ((and target (> (point-box-distance target x y) *ai-screen-leash*))
              (go-to-place plan regiment))
@@ -330,7 +339,9 @@ ses régiments libres sont à leur place, en avance ou à l'assaut."
              (let ((enemy (loop with best = nil and best-gap = (+ reach 10f0)
                                 for other in (plan-enemies battle (regiment-side regiment))
                                 for gap = (box-gap regiment other)
-                                when (< gap best-gap) do (setf best other best-gap gap)
+                                when (and (< gap best-gap)
+                                          (<= (point-box-distance other x y) *ai-screen-leash*))
+                                  do (setf best other best-gap gap)
                                 finally (return best))))
                (if enemy
                    (ai-attack commander battle regiment enemy)
@@ -403,6 +414,24 @@ moins de DISTANCE."
                      (fighting-p friend)
                      (< (box-gap friend enemy) *ai-cavalry-threat-radius*))))
 
+(defparameter *ai-cavalry-defended-distance* 0f0
+  "Des tireurs à moins de cette distance de piques amies en bon ordre, pas en
+mêlée, ne sont pas une occasion pour la cavalerie : en tirailleurs, ils se
+replient derrière elles, et la charge finit dans les piques (contre un joueur
+qui défend ses tireurs). 0 : jamais. Éteint parce que l'IA, elle, ne défend pas
+les siens (ses piques passent en carré, immobiles) : au banc d'essai, 40 m perd
+1 bataille contre 31, 15 m aussi ; à rallumer quand elle saura les défendre.")
+
+(defun defended-p (battle enemy)
+  "Vrai si des piques en bon ordre du camp d'ENEMY, pas en mêlée, sont à moins de
+*AI-CAVALRY-DEFENDED-DISTANCE* de lui."
+  (loop for other across (battle-regiments battle)
+        thereis (and (= (regiment-side other) (regiment-side enemy))
+                     (not (eq other enemy))
+                     (pike-wall-p other)
+                     (not (regiment-in-melee-p other))
+                     (< (box-gap enemy other) *ai-cavalry-defended-distance*))))
+
 (defun wing-opportunity (battle plan regiment enemy)
   (when (and (frontal-only-p enemy) (eq (target-of battle enemy) regiment))
     ;; Une infanterie qui marche sur nous n'est pas une occasion : on l'esquive.
@@ -418,6 +447,7 @@ un combat qui ne vaut pas *AI-CAVALRY-WORTH*."
     (let* ((role (regiment-role enemy))
            (engaged (regiment-in-melee-p enemy))
            (eligible (cond ((regiment-square-p enemy) nil)
+                           ((and (eq role :shooters) (defended-p battle enemy)) nil)
                            ((eq role :cavalry)
                             (or (< (point-box-distance enemy px py) *ai-wing-threat-radius*)
                                 (threatens-friends-p battle enemy (regiment-side regiment))))
@@ -518,7 +548,9 @@ l'infanterie ennemie libre en est trop près : elle ne s'y laisse pas accrocher.
                   (zerop (approach-sector regiment target (battle-soldiers battle))))
              ;; La charge se retrouve face à des piques : on l'abandonne.
              (rally))
-            (target nil)
+            ;; En approche (ni à la charge ni en mêlée : WING-FREE-P), la cible
+            ;; est revue : une occasion qui n'en est plus une est abandonnée.
+            ((and target (wing-opportunity battle plan regiment target)) nil)
             (t
              (let* ((kept (gethash index objectives))
                     (objective (and kept (aref (battle-regiments battle) kept))))

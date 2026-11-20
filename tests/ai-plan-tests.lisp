@@ -60,10 +60,11 @@ l'escarmouche, puis donne l'assaut jusqu'au contact."
              (when plan
                (let ((phase (rogue-company::plan-phase plan)))
                  (pushnew phase seen)
-                 (if (eq phase :skirmish)
-                     (if depth
-                         (when (/= depth (rogue-company::plan-depth plan)) (setf moved t))
-                         (setf depth (rogue-company::plan-depth plan)))))))
+                 ;; Pendant une même escarmouche (la ligne se rapproche entre
+                 ;; deux si l'ennemi sort de portée).
+                 (cond ((not (eq phase :skirmish)) (setf depth nil))
+                       ((null depth) (setf depth (rogue-company::plan-depth plan)))
+                       ((/= depth (rogue-company::plan-depth plan)) (setf moved t))))))
     (is (member :skirmish seen) "escarmouche")
     (is (member :assault seen) "assaut")
     (is (not moved) "la ligne ne bouge pas pendant l'escarmouche")

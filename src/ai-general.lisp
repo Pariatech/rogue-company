@@ -61,6 +61,9 @@ aient l'ennemi à portée), :SKIRMISH (la ligne attend, les tireurs font feu),
 :ASSAULT (la ligne avance jusqu'au contact) ou :ENGAGED.")
    (skirmish-tick :initform nil :accessor plan-skirmish-tick
                   :documentation "Tick du début de l'escarmouche, NIL avant.")
+   (retired :initform '() :accessor plan-retired
+            :documentation "Indices des tireurs effacés derrière la ligne à l'assaut :
+ils y restent jusqu'à une nouvelle avance.")
    (tasks :initform (make-hash-table) :accessor plan-tasks
           :documentation "Indice de régiment -> tâche, plist (:KIND … :LATERAL …).")
    (line :initform nil :accessor plan-line
@@ -251,4 +254,5 @@ ennemi en état de combattre, ou NIL sans ligne ou sans ennemi."
                      ;; Nouvelle avance, depuis là où la ligne se trouve.
                      (setf (plan-phase plan) :advance
                            (plan-skirmish-tick plan) nil
+                           (plan-retired plan) '()
                            (plan-depth plan) (line-depth plan battle)))))))))))
