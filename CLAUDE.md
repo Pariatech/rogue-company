@@ -3,7 +3,12 @@
 Jeu en Common Lisp (SBCL, raylib) modifiable à chaud par MCP.
 
 ## Démarrage
-- Le noyau du jeu est la bibliothèque **game-kit**, dépôt à part, attendue dans `../game-kit` (ou `$GAME_KIT_DIR`) : boucle, serveur MCP et outils `game_*`, file de tâches, console et pont Bun, saisie simulée, dessin sans allocation, scènes, horloge à pas fixe, générateur PCG32, banc d'essai de rendu. Son `README.md` en donne l'API et les règles ; son `CLAUDE.md` ses fichiers. Le package `rogue-company` utilise `game-kit` (`:use`) : `run-game`, `*state*`, `draw-text`, `make-rng`, `scene`… s'écrivent sans préfixe.
+- Le noyau du jeu est la bibliothèque **game-kit** (https://github.com/Pariatech/game-kit), dépôt à part, attendue dans `../game-kit` (ou `$GAME_KIT_DIR`) : boucle, serveur MCP et outils `game_*`, file de tâches, console et pont Bun, saisie simulée, dessin sans allocation, scènes, horloge à pas fixe, générateur PCG32, banc d'essai de rendu. Son `README.md` en donne l'API et les règles ; son `CLAUDE.md` ses fichiers. Le package `rogue-company` utilise `game-kit` (`:use`) : `run-game`, `*state*`, `draw-text`, `make-rng`, `scene`… s'écrivent sans préfixe.
+- Nouvelle machine : cloner les deux dépôts côte à côte.
+  ```sh
+  git clone git@github.com:Pariatech/rogue-company.git
+  git clone git@github.com:Pariatech/game-kit.git
+  ```
 - `scripts/dev.sh start|stop|restart|logs` gère le jeu dans la session tmux `rogue-company` (il appelle celui de game-kit).
 - Le jeu doit tourner avant d'utiliser les outils MCP. Sinon, reconnecter avec `/mcp`.
 - `scripts/claude.sh [arguments de claude]` (celui de game-kit) installe le pont de game-kit au besoin, lance le jeu s'il ne tourne pas, attend le serveur MCP, puis ouvre Claude Code avec le channel de la console (`claude --dangerously-load-development-channels server:game-console`). Le pont demande Bun ; `.mcp.json` le prend dans `${GAME_KIT_DIR:-../game-kit}/bridge/server.ts`.
