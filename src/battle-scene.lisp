@@ -29,7 +29,7 @@ voit l'armée brisée se débander.")
   ((battle :initform (make-demo-battle :seed *demo-seed*) :reader scene-battle)
    (orders-rng :initform (make-rng 7 99) :reader scene-orders-rng
                :documentation "Tire les ordres de R, sans toucher au générateur de la bataille.")
-   (clock :initform (make-fixed-clock) :reader scene-clock)
+   (clock :initform (make-fixed-clock :tick-rate +ticks-per-second+) :reader scene-clock)
    (camera :initform (make-camera) :reader scene-camera)
    (command :initform (make-instance 'player-command) :reader scene-command
             :documentation "Sélection et ordres du joueur (command.lisp).")

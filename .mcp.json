@@ -12,10 +12,12 @@
       "command": "bun",
       "args": [
         "run",
-        "bridge/server.ts"
+        "${GAME_KIT_DIR:-../game-kit}/bridge/server.ts"
       ],
       "env": {
-        "LISP_GAME_MCP_TOKEN": "${LISP_GAME_MCP_TOKEN}"
+        "LISP_GAME_MCP_TOKEN": "${LISP_GAME_MCP_TOKEN}",
+        "GAME_NAME": "rogue-company",
+        "GAME_MCP_SERVER": "rogue-company"
       }
     }
   }

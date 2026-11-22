@@ -2,20 +2,12 @@
   :description "Jeu en Common Lisp (SBCL, raylib) modifiable à chaud par MCP."
   :author "Gabriel Pariat"
   :license "MIT"
-  :depends-on (#:cl-raylib #:hunchentoot #:yason #:sb-concurrency #:sb-md5 #:sb-sprof)
+  :depends-on (#:game-kit #:cl-raylib #:yason #:sb-md5)
   :serial t
   :pathname "src"
   :in-order-to ((asdf:test-op (asdf:test-op #:rogue-company/tests)))
   :components ((:file "package")
-               (:file "mcp-server")
-               (:file "jobs")
-               (:file "input")
-               (:file "draw")
-               (:file "engine")
-               (:file "mcp-tools")
-               (:file "console")
-               (:file "rng")
-               (:file "fixed-clock")
+               (:file "ticks")
                (:file "stats")
                (:file "equipment")
                (:file "items")
@@ -25,7 +17,6 @@
                (:file "spatial-grid")
                (:file "terrain")
                (:file "collision")
-               (:file "scene")
                (:file "main-menu")
                (:file "battle")
                (:file "deaths")
@@ -56,17 +47,13 @@
                (:file "replay")
                (:file "ai-view")
                (:file "battle-scene")
-               (:file "game")
-               (:file "bench")))
+               (:file "game")))
 
 (asdf:defsystem #:rogue-company/tests
   :depends-on (#:rogue-company #:fiveam)
   :pathname "tests"
   :serial t
-  :components ((:file "jobs-tests")
-               (:file "reload-tests")
-               (:file "rng-tests")
-               (:file "fixed-clock-tests")
+  :components ((:file "package")
                (:file "formation-tests")
                (:file "battle-tests")
                (:file "collision-tests")
@@ -80,11 +67,10 @@
                (:file "ai-tests")
                (:file "ai-plan-tests")
                (:file "victory-tests")
-               (:file "replay-tests")
-               (:file "text-tests"))
+               (:file "replay-tests"))
   :perform (asdf:test-op (o c)
              (when (member nil (mapcar (lambda (suite)
                                        (uiop:symbol-call :fiveam :run!
                                                          (uiop:find-symbol* suite :rogue-company/tests)))
-                                     '(:jobs :reload :rng :fixed-clock :formation :battle :collision :terrain :combat :flanks :stances :equipment :charge :command :ai :ai-plan :victory :replay :text)))
+                                     '(:formation :battle :collision :terrain :combat :flanks :stances :equipment :charge :command :ai :ai-plan :victory :replay)))
                (error "Des tests ont échoué."))))

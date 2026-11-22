@@ -1,23 +1,13 @@
 (in-package #:rogue-company)
 
-;;; Points d'entrée appelés par la boucle de engine.lisp, et l'état du jeu.
-;;; UPDATE et DRAW délèguent à la scène courante (voir scene.lisp).
+;;; L'état du jeu et son lancement. La boucle, UPDATE et DRAW viennent de
+;;; game-kit : son GAME-STATE délègue à la scène courante (main-menu.lisp au
+;;; départ).
 ;;;
-;;; DEFVAR pour que *STATE* survive au rechargement ; GAME-STATE est une classe
-;;; pour que l'instance existante suive les changements de sa définition.
+;;; DEFVAR pour que *STATE* survive au rechargement.
 
-(defun make-game-state ()
-  (let ((state (make-instance 'game-state)))
-    (scene-enter (current-scene state))
-    state))
+(defvar *state* (make-game-state 'main-menu))
 
-(defun update (state dt)
-  (scene-update (current-scene state) dt))
-
-(defun draw (state)
-  (scene-draw (current-scene state)))
-
-(defmethod game-snapshot ((state game-state))
-  (ht "scene" (scene-snapshot (current-scene state))))
-
-(defvar *state* (make-game-state))
+(defun main ()
+  "Ouvre la fenêtre du jeu, avec le serveur MCP. Thread principal (scripts/run.lisp)."
+  (run-game :title "rogue-company" :system :rogue-company))

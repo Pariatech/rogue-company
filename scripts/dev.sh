@@ -1,48 +1,8 @@
 #!/bin/sh
-# Démarre, arrête et affiche le jeu dans une session tmux.
+# Démarre, arrête et affiche le jeu dans la session tmux rogue-company.
 # Usage : scripts/dev.sh start|stop|restart|logs [lignes]
+# Le travail est fait par le dev.sh de game-kit ($GAME_KIT_DIR, sinon ../game-kit).
 set -eu
-
-SESSION=rogue-company
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-
-running() { tmux has-session -t "$SESSION" 2>/dev/null; }
-
-start() {
-  if running; then
-    echo "Déjà lancé (session tmux $SESSION)."
-    return
-  fi
-  . "$ROOT/scripts/token.sh"
-  tmux new-session -d -s "$SESSION" -c "$ROOT" -x 200 -y 50 \
-    -e "LISP_GAME_MCP_TOKEN=$LISP_GAME_MCP_TOKEN" \
-    "sbcl --dynamic-space-size 4GB --load scripts/run.lisp"
-  # Garde la console lisible si SBCL s'arrête sur une erreur.
-  tmux set-option -t "$SESSION" remain-on-exit on >/dev/null
-  echo "Lancé dans la session tmux $SESSION. Console : scripts/dev.sh logs"
-}
-
-stop() {
-  if running; then
-    tmux kill-session -t "$SESSION"
-    echo "Arrêté."
-  else
-    echo "Pas lancé."
-  fi
-}
-
-logs() {
-  if running; then
-    tmux capture-pane -p -t "$SESSION" -S "-${1:-100}"
-  else
-    echo "Pas lancé."
-  fi
-}
-
-case "${1:-}" in
-  start) start ;;
-  stop) stop ;;
-  restart) stop; start ;;
-  logs) logs "${2:-100}" ;;
-  *) echo "Usage : $0 start|stop|restart|logs [lignes]" >&2; exit 2 ;;
-esac
+GAME_KIT_DIR=${GAME_KIT_DIR:-$ROOT/../game-kit}
+APP_ROOT=$ROOT GAME_KIT_SESSION=rogue-company exec "$GAME_KIT_DIR/scripts/dev.sh" "$@"
