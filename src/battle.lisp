@@ -166,7 +166,7 @@ et s'ajoutent ici au fil des étapes :
              ;; avec les cibles et la grille du tick précédent.
              (loosen-formation battle regiment))
     (loop for regiment across regiments
-          do (move-regiment regiment soldiers))
+          do (move-regiment regiment soldiers (battle-terrain battle)))
     ;; Cavaliers lancés : ils percent et renversent (penetration.lisp).
     (drive-charges battle)
     (rebuild-grid (battle-grid battle) soldiers)

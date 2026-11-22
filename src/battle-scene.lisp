@@ -195,6 +195,8 @@ d'avant."
            (setf *draw-tally* (not *draw-tally*)))
          (when (key-pressed-p :key-i)
            (setf *draw-ai-plan* (not *draw-ai-plan*)))
+         (when (key-pressed-p :key-m)
+           (setf *topographic-mode* (not *topographic-mode*)))
          (when (and (scene-player-p scene) (not (end-screen-p scene)))
            (update-command (scene-command scene) (scene-battle scene) (scene-camera scene)))
          (update-camera (scene-camera scene) dt)
@@ -231,6 +233,7 @@ d'avant."
 (defmethod scene-draw ((scene battle-scene))
   (clear-background :black)
   (draw-terrain (scene-battle scene) (scene-camera scene))
+  (draw-grass (scene-battle scene) (scene-camera scene))
   (draw-soldiers (scene-battle scene) (clock-alpha (scene-clock scene)) (scene-camera scene))
   (draw-battle-hud scene)
   (draw-ai-plan (scene-battle scene) (scene-camera scene))
@@ -238,6 +241,7 @@ d'avant."
   ;; En pause, ou Espace tenu : les ordres en cours, fantômes et trajets.
   (draw-command (scene-command scene) (scene-battle scene) (scene-camera scene)
                 (or (battle-paused-p scene) (key-down-p :key-space)))
+  (draw-altitude (scene-battle scene) (scene-camera scene))
   (draw-replay-banner scene)
   (when (end-screen-p scene)
     (draw-end-screen scene))
@@ -245,11 +249,11 @@ d'avant."
 
 (defgeneric help-text (scene)
   (:method ((scene battle-scene))
-    "Clic gauche : choisir   Clic droit : ordre (glisser : orientation, Ctrl : en ligne)   T : halte   E : exercice   P : posture   Espace : pause (tenu : coup d'œil)   + / - : vitesse   C : charge   Tab : tableau   I : plan de l'IA   Flèches, ZQSD, clic milieu : caméra   Échap : menu")
+    "Clic gauche : choisir   Clic droit : ordre (glisser : orientation, Ctrl : en ligne)   T : halte   E : exercice   P : posture   Espace : pause (tenu : coup d'œil)   + / - : vitesse   C : charge   Tab : tableau   I : plan de l'IA   M : relief   Flèches, ZQSD, clic milieu : caméra   Échap : menu")
   (:method ((scene ai-vs-ai-scene))
-    "IA contre IA : Espace : pause (tenu : coup d'œil)   + / - : vitesse   Tab : tableau   I : plan de l'IA   Flèches, ZQSD, clic milieu : caméra   Échap : menu")
+    "IA contre IA : Espace : pause (tenu : coup d'œil)   + / - : vitesse   Tab : tableau   I : plan de l'IA   M : relief   Flèches, ZQSD, clic milieu : caméra   Échap : menu")
   (:method ((scene replay-scene))
-    "Revoir : Espace : pause (tenu : coup d'œil)   + / - : vitesse   Tab : tableau   I : plan de l'IA   Flèches, ZQSD, clic milieu : caméra   Échap : menu"))
+    "Revoir : Espace : pause (tenu : coup d'œil)   + / - : vitesse   Tab : tableau   I : plan de l'IA   M : relief   Flèches, ZQSD, clic milieu : caméra   Échap : menu"))
 
 (defgeneric draw-replay-banner (scene)
   (:documentation "En haut au centre, pour un replay : ce qu'on regarde, et s'il

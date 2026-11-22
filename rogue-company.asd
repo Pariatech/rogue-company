@@ -42,6 +42,7 @@
                (:file "camera")
                (:file "sprites")
                (:file "terrain-view")
+               (:file "vegetation-view")
                (:file "battle-view")
                (:file "soldier-parts")
                (:file "blood-view")

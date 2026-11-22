@@ -163,7 +163,7 @@ doublant la capacité pour que des ajouts successifs restent bon marché."
         (t angle)))
 
 (defun move-toward-slots (soldiers start end step front turn-step hold-distance
-                          &optional (square-depth 0) (square-files 1))
+                          &optional (square-depth 0) (square-files 1) terrain)
   "Avance les soldats de START à END d'au plus STEP mètres vers leur emplacement,
 et les tourne d'au plus TURN-STEP radians : vers leur destination s'ils en sont
 loin, vers FRONT, l'orientation de la formation, s'ils en sont près. Un soldat
@@ -171,7 +171,8 @@ dont la cible est à moins de HOLD-DISTANCE (de bord à bord) ne bouge plus : il
 se tourne vers elle. Un soldat étourdi (STUN) ne bouge pas ; son compte baisse
 d'un tick. Avec SQUARE-DEPTH (rangs du carré, 0 hors du carré) et SQUARE-FILES,
 le front de chacun est le côté du carré le plus proche de sa place
-(SQUARE-OUTWARD)."
+(SQUARE-OUTWARD). Sur TERRAIN, le pas de chacun suit la pente dans le sens de
+sa marche (SLOPE-SPEED-FACTOR, terrain.lisp)."
   (declare (optimize (speed 3) (safety 1))
            (type fixnum start end square-depth square-files)
            (type single-float step front turn-step hold-distance))
@@ -232,12 +233,18 @@ le front de chacun est le côté du carré le plus proche de sa place
                                                (declare (type single-float ox oy))
                                                (atan oy ox)))
                                             (t front)))
+                       (let ((step (if (and terrain (plusp distance))
+                                       (* step (the single-float
+                                                    (slope-speed-factor terrain (aref xs i) (aref ys i)
+                                                                        dx dy distance)))
+                                       step)))
+                         (declare (type single-float step))
                        (if (<= distance step)
                            (setf (aref xs i) (aref slot-xs i)
                                  (aref ys i) (aref slot-ys i))
                            (let ((ratio (/ step distance)))
                              (incf (aref xs i) (* dx ratio))
-                             (incf (aref ys i) (* dy ratio))))))))))))
+                             (incf (aref ys i) (* dy ratio)))))))))))))
 
 (defun slot-distance (soldiers i)
   (let ((dx (- (aref (soldiers-slot-x soldiers) i) (aref (soldiers-x soldiers) i)))

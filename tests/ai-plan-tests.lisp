@@ -30,10 +30,11 @@ espadonniers aux flancs, hallebardiers en réserve, cavalerie aux ailes."
 
 (test line-advances-aligned
   "Contre une armée qui attend, la ligne de l'IA avance alignée (ses piques à
-moins de 6 m de la même profondeur) jusqu'à s'engager."
+moins de 6 m de la même profondeur) jusqu'à s'engager, au pas du plus lent
+quand une colline en ralentit un."
   (let ((b (rogue-company::make-ai-battle))
         (spread 0f0))
-    (loop repeat (* 30 150)
+    (loop repeat (* 30 180)
           for plan = (ai-plan-of b)
           until (and plan (eq :engaged (rogue-company::plan-phase plan)))
           do (rogue-company::battle-tick b)
@@ -53,7 +54,7 @@ moins de 6 m de la même profondeur) jusqu'à s'engager."
 l'escarmouche, puis donne l'assaut jusqu'au contact."
   (let ((b (rogue-company::make-ai-battle))
         (seen '()) (depth nil) (moved nil))
-    (loop repeat (* 30 150)
+    (loop repeat (* 30 180)
           for plan = (ai-plan-of b)
           until (and plan (eq :engaged (rogue-company::plan-phase plan)))
           do (rogue-company::battle-tick b)

@@ -357,6 +357,35 @@ garderait son ordre et repartirait à la poursuite en reprenant la ligne."
     (when (and target (fighting-p target) (not (catchable-p regiment target)))
       (command-halt battle (list regiment)))))
 
+(defparameter *ai-line-lead* 2f0
+  "Avance qu'un régiment de la ligne peut prendre sur le plus en retard, en
+mètres, avant de l'attendre (une pente ralentit celui qui la monte).")
+
+(defun line-laggard-depth (plan battle)
+  "Profondeur du régiment libre de la ligne le plus en retard, ou NIL."
+  (let ((soldiers (battle-soldiers battle)))
+    (let ((depths (loop for k in (plan-line plan)
+                        for regiment = (aref (battle-regiments battle) k)
+                        when (and (ai-free-p regiment) (fighting-p regiment)
+                                  (not (regiment-square-p regiment)))
+                          collect (nth-value 1 (regiment-coordinates plan regiment soldiers)))))
+      (and depths (reduce #'min depths)))))
+
+(defun keep-pace (battle plan regiment)
+  "Envoie REGIMENT de la ligne à sa place, ou l'arrête où il est s'il a plus de
+*AI-LINE-LEAD* d'avance sur le plus en retard : la ligne marche au pas du plus
+lent, même quand une pente le ralentit."
+  (let ((laggard (line-laggard-depth plan battle)))
+    (multiple-value-bind (cx cy) (regiment-centroid regiment (battle-soldiers battle))
+      (multiple-value-bind (lateral depth) (plan-coordinates plan cx cy)
+        (declare (ignore lateral))
+        (multiple-value-bind (x y facing) (task-destination plan regiment)
+          (declare (ignore x y))
+          (if (and laggard (> depth (+ laggard *ai-line-lead*))
+                   (not (regiment-square-p regiment)))
+              (ai-move regiment cx cy facing)
+              (go-to-place plan regiment)))))))
+
 (defun run-line (commander battle plan regiment task)
   (drop-lost-target battle regiment)
   (if (eq (plan-phase plan) :engaged)
@@ -365,7 +394,7 @@ garderait son ordre et repartirait à la poursuite en reprenant la ligne."
           (if enemy
               (ai-attack commander battle regiment enemy)
               (go-to-place plan regiment))))
-      (go-to-place plan regiment)))
+      (keep-pace battle plan regiment)))
 
 (defun line-caught-up-p (plan battle regiment)
   "Vrai si la ligne est arrivée à hauteur des tireurs REGIMENT."

@@ -9,8 +9,9 @@
 ;;; la bataille : le même terrain revient avec elle, sans toucher aux tirages de
 ;;; la simulation.
 ;;;
-;;; Pour l'instant le relief ne se voit qu'au dessin (terrain-view.lisp) : ni le
-;;; mouvement, ni le tir, ni le moral ne le lisent encore.
+;;; Le relief se voit au dessin (terrain-view.lisp) et change la marche des
+;;; soldats (SLOPE-SPEED-FACTOR, lu par MOVE-TOWARD-SLOTS) ; ni les charges, ni
+;;; le tir, ni le moral ne le lisent encore.
 
 (defparameter *terrain-cell* 2f0 "Écart entre deux points de la carte d'élévation, en mètres.")
 
@@ -107,3 +108,50 @@ allongée en crête ; les collines voisines s'additionnent."
   (let ((d *terrain-cell*))
     (values (/ (- (terrain-height terrain (+ x d) y) (terrain-height terrain (- x d) y)) (* 2 d))
             (/ (- (terrain-height terrain x (+ y d)) (terrain-height terrain x (- y d))) (* 2 d)))))
+
+;;; Pente et marche : un soldat qui monte ralentit, qui descend une pente douce
+;;; va un peu plus vite, une pente raide le ralentit dans les deux sens.
+
+(defparameter *slope-steepness* 3.5f0
+  "Sévérité de la pente sur la marche (fonction de Tobler : 3,5).")
+
+(defparameter *slope-min-speed* 0.3f0
+  "Facteur de vitesse le plus bas, sur la pente la plus raide.")
+
+(defun terrain-gradient (terrain x y)
+  "Pente du sol en X, Y : dh/dx et dh/dy, dérivées de l'interpolation dans la
+case du point. Sans allocation, pour le déplacement des soldats."
+  (declare (optimize (speed 3) (safety 0)) (type terrain terrain) (type single-float x y))
+  (let* ((points (terrain-points terrain))
+         (cell *terrain-cell*)
+         (half (* 0.5f0 (the single-float (terrain-size terrain))))
+         (last (float (- points 2) 1f0))
+         (gx (max 0f0 (min last (/ (+ x half) cell))))
+         (gy (max 0f0 (min last (/ (+ y half) cell))))
+         (i (floor gx)) (j (floor gy))
+         (fx (- gx i)) (fy (- gy j))
+         (heights (terrain-heights terrain))
+         (k (+ i (the fixnum (* j points)))))
+    (declare (type fixnum points i j k) (type single-float cell half last gx gy fx fy)
+             (type float-array heights))
+    (let ((h00 (aref heights k)) (h10 (aref heights (1+ k)))
+          (h01 (aref heights (+ k points))) (h11 (aref heights (+ k points 1))))
+      (values (/ (+ (* (- 1f0 fy) (- h10 h00)) (* fy (- h11 h01))) cell)
+              (/ (+ (* (- 1f0 fx) (- h01 h00)) (* fx (- h11 h10))) cell)))))
+
+(defun slope-speed-factor (terrain x y dx dy distance)
+  "Facteur de la vitesse d'un soldat en X, Y qui marche de DX, DY (sur
+DISTANCE, non nulle) : 1 à plat, selon la pente dans le sens de la marche (la
+fonction de Tobler ramenée à 1 sur le plat : un peu plus vite sur une descente
+douce, plus lent en montée ou sur une descente raide), jamais sous
+*SLOPE-MIN-SPEED*."
+  (declare (optimize (speed 3) (safety 0)) (type single-float x y dx dy distance))
+  (if (null terrain)
+      1f0
+      (multiple-value-bind (hx hy) (terrain-gradient terrain x y)
+        (declare (type single-float hx hy))
+        (let ((grade (/ (+ (* hx dx) (* hy dy)) distance))
+              (k *slope-steepness*))
+          (declare (type single-float grade k))
+          (max (the single-float *slope-min-speed*)
+               (exp (* (- k) (- (abs (+ grade 0.05f0)) 0.05f0))))))))

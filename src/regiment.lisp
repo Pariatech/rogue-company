@@ -385,8 +385,9 @@ pendant une contremarche."
           ;; de placer la formation.
           (unless ordered (keep-front regiment depth)))))))
 
-(defun move-regiment (regiment soldiers)
-  "Avance les soldats de REGIMENT vers leur emplacement, au pas de marche."
+(defun move-regiment (regiment soldiers &optional terrain)
+  "Avance les soldats de REGIMENT vers leur emplacement, au pas de marche,
+ralenti ou hâté par la pente de TERRAIN."
   (let ((stats (regiment-stats regiment)))
     (move-toward-slots soldiers (regiment-start regiment) (regiment-end regiment)
                        ;; Un régiment débandé court, et qui le poursuit ou se
@@ -408,7 +409,8 @@ pendant une contremarche."
                        ;; En carré, chacun fait face au côté le plus proche.
                        (if (regiment-square-p regiment) (max 1 (regiment-depth regiment)) 0)
                        (formation-files (regiment-formation regiment)
-                                        (max 1 (regiment-alive regiment))))))
+                                        (max 1 (regiment-alive regiment)))
+                       terrain)))
 
 ;;; Inspection
 
